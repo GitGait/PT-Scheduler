@@ -1,4 +1,4 @@
-import { OptimizeResponse } from "../types";
+import type { OptimizeResponse } from "../types";
 import { fetchJsonWithTimeout } from "./request";
 import { optimizeResponseSchema, parseWithSchema } from "../utils/validation";
 
@@ -29,4 +29,3 @@ export async function optimizeRoute(
 
   return parseWithSchema(optimizeResponseSchema, payload, "optimizeRoute");
 }
-

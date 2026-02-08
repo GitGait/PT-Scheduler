@@ -1,0 +1,2 @@
+id,fullName,nicknames,phone,alternateContacts,address,lat,lng,status,notes
+patient-001,"Doe, Jane","Jane, Janie","555-123-4567","Mary|555-111-2222|Daughter; John|555-333-4444|Spouse","123 Main St, Springfield, IL",39.7817,-89.6501,active,"Prefers morning visits"

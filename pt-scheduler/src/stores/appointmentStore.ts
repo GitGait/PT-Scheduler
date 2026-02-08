@@ -1,0 +1,192 @@
+import { create } from "zustand";
+import type { Appointment, AppointmentStatus } from "../types";
+import { appointmentDB, syncQueueDB } from "../db/operations";
+import { useSyncStore } from "./syncStore";
+
+interface AppointmentState {
+    appointments: Appointment[];
+    selectedDate: string; // YYYY-MM-DD
+    loading: boolean;
+    error: string | null;
+}
+
+interface AppointmentActions {
+    loadByDate: (date: string) => Promise<void>;
+    loadByRange: (startDate: string, endDate: string) => Promise<void>;
+    loadByPatient: (patientId: string) => Promise<void>;
+    setSelectedDate: (date: string) => void;
+    create: (appt: Omit<Appointment, "id" | "createdAt" | "updatedAt">) => Promise<string>;
+    update: (id: string, changes: Partial<Omit<Appointment, "id" | "createdAt">>) => Promise<void>;
+    delete: (id: string) => Promise<void>;
+    markComplete: (id: string) => Promise<void>;
+    clearError: () => void;
+}
+
+// Helper to get today's date as ISO string
+const today = () => new Date().toISOString().split("T")[0];
+
+function hasCalendarSyncConfigured(): boolean {
+    const calendarId = useSyncStore.getState().calendarId;
+    return Boolean(calendarId.trim());
+}
+
+async function enqueueAppointmentSync(
+    type: "create" | "update" | "delete",
+    entityId: string,
+    calendarEventId?: string
+): Promise<void> {
+    if (!hasCalendarSyncConfigured()) {
+        return;
+    }
+
+    await syncQueueDB.add({
+        type,
+        entity: "appointment",
+        data: {
+            entityId,
+            ...(calendarEventId ? { calendarEventId } : {}),
+        },
+    });
+
+    await useSyncStore.getState().refreshPendingCount();
+}
+
+export const useAppointmentStore = create<AppointmentState & AppointmentActions>((set, get) => ({
+    appointments: [],
+    selectedDate: today(),
+    loading: false,
+    error: null,
+
+    loadByDate: async (date: string) => {
+        set({ loading: true, error: null, selectedDate: date });
+        try {
+            const appointments = await appointmentDB.byDate(date);
+            set({ appointments, loading: false });
+        } catch (err) {
+            set({
+                error: err instanceof Error ? err.message : "Failed to load appointments",
+                loading: false,
+            });
+        }
+    },
+
+    loadByRange: async (startDate: string, endDate: string) => {
+        set({ loading: true, error: null });
+        try {
+            const appointments = await appointmentDB.byRange(startDate, endDate);
+            set({ appointments, loading: false });
+        } catch (err) {
+            set({
+                error: err instanceof Error ? err.message : "Failed to load appointments",
+                loading: false,
+            });
+        }
+    },
+
+    loadByPatient: async (patientId: string) => {
+        set({ loading: true, error: null });
+        try {
+            const appointments = await appointmentDB.byPatient(patientId);
+            set({ appointments, loading: false });
+        } catch (err) {
+            set({
+                error: err instanceof Error ? err.message : "Failed to load appointments",
+                loading: false,
+            });
+        }
+    },
+
+    setSelectedDate: (date: string) => {
+        set({ selectedDate: date });
+    },
+
+    create: async (appt) => {
+        set({ loading: true, error: null });
+        try {
+            const id = await appointmentDB.create(appt);
+            await enqueueAppointmentSync("create", id);
+
+            if (hasCalendarSyncConfigured()) {
+                await appointmentDB.update(id, { syncStatus: "pending" });
+            }
+
+            const newAppt = await appointmentDB.get(id);
+            const appointmentToStore =
+                newAppt ??
+                ({
+                    ...appt,
+                    id,
+                    syncStatus: hasCalendarSyncConfigured() ? "pending" : appt.syncStatus,
+                    createdAt: new Date(),
+                    updatedAt: new Date(),
+                } as Appointment);
+
+            set((state) => ({
+                appointments: [...state.appointments, appointmentToStore],
+            }));
+            return id;
+        } catch (err) {
+            set({
+                error: err instanceof Error ? err.message : "Failed to create appointment",
+            });
+            throw err;
+        } finally {
+            set({ loading: false });
+        }
+    },
+
+    update: async (id, changes) => {
+        set({ error: null });
+        const shouldSync = hasCalendarSyncConfigured();
+        const previous = get().appointments.find((a) => a.id === id);
+        const optimisticUpdatedAt = new Date();
+        set((state) => ({
+            appointments: state.appointments.map((a) =>
+                a.id === id
+                    ? {
+                          ...a,
+                          ...changes,
+                          syncStatus: shouldSync ? "pending" : a.syncStatus,
+                          updatedAt: optimisticUpdatedAt,
+                      }
+                    : a
+            ),
+        }));
+
+        try {
+            await appointmentDB.update(id, {
+                ...changes,
+                ...(shouldSync ? { syncStatus: "pending" as const } : {}),
+            });
+            await enqueueAppointmentSync("update", id);
+        } catch (err) {
+            set((state) => ({
+                error: err instanceof Error ? err.message : "Failed to update appointment",
+                appointments: previous
+                    ? state.appointments.map((a) => (a.id === id ? previous : a))
+                    : state.appointments,
+            }));
+        }
+    },
+
+    delete: async (id) => {
+        set({ error: null });
+        try {
+            const appointment = await appointmentDB.get(id);
+            await appointmentDB.delete(id);
+            await enqueueAppointmentSync("delete", id, appointment?.calendarEventId);
+            set((state) => ({
+                appointments: state.appointments.filter((a) => a.id !== id),
+            }));
+        } catch (err) {
+            set({ error: err instanceof Error ? err.message : "Failed to delete appointment" });
+        }
+    },
+
+    markComplete: async (id: string) => {
+        const { update } = get();
+        await update(id, { status: "completed" as AppointmentStatus });
+    },
+
+    clearError: () => set({ error: null }),
+}));

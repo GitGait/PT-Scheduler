@@ -1,35 +1,74 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { useMemo, useState } from "react";
+import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { ErrorBoundary } from "./components/ui/ErrorBoundary";
+import { Sidebar } from "./components/ui/Sidebar";
+import { TopNav } from "./components/ui/TopNav";
+import { useSync } from "./hooks/useSync";
+import { useSyncStore } from "./stores";
+import {
+  SchedulePage,
+  PatientsPage,
+  ScanPage,
+  RoutePage,
+  SettingsPage,
+  PatientDetailPage,
+} from "./pages";
+import "./index.css";
 
-function App() {
-  const [count, setCount] = useState(0)
+function AppContent() {
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const location = useLocation();
+
+  // Only show sidebar on schedule page
+  const showSidebar = location.pathname === "/";
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
+    <div className="min-h-screen bg-white flex flex-col">
+      <TopNav
+        onMenuClick={() => setSidebarOpen(!sidebarOpen)}
+        showMenuButton={showSidebar}
+      />
+      <div className="flex flex-1 overflow-hidden">
+        {showSidebar && (
+          <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+        )}
+        <main className={`flex-1 overflow-auto ${showSidebar && sidebarOpen ? '' : ''}`}>
+          <Routes>
+            <Route path="/" element={<SchedulePage sidebarOpen={sidebarOpen} />} />
+            <Route path="/patients" element={<PatientsPage />} />
+            <Route path="/patients/:id" element={<PatientDetailPage />} />
+            <Route path="/scan" element={<ScanPage />} />
+            <Route path="/route" element={<RoutePage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Routes>
+        </main>
       </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    </div>
+  );
 }
 
-export default App
+function App() {
+  const { spreadsheetId, calendarId } = useSyncStore();
+  const syncConfig = useMemo(
+    () =>
+      spreadsheetId || calendarId
+        ? {
+            spreadsheetId: spreadsheetId || undefined,
+            calendarId: calendarId || undefined,
+          }
+        : null,
+    [spreadsheetId, calendarId]
+  );
+
+  useSync(syncConfig);
+
+  return (
+    <ErrorBoundary>
+      <BrowserRouter>
+        <AppContent />
+      </BrowserRouter>
+    </ErrorBoundary>
+  );
+}
+
+export default App;

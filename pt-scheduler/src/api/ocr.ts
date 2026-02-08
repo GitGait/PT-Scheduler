@@ -1,4 +1,4 @@
-import { OCRResponse } from "../types";
+import type { OCRResponse } from "../types";
 import { fetchJsonWithTimeout } from "./request";
 import { ocrResponseSchema, parseWithSchema } from "../utils/validation";
 import { prepareImageForOCR, validateImageSize } from "../utils/image";
@@ -33,4 +33,3 @@ export async function processScreenshotFile(file: File): Promise<OCRResponse> {
   const base64 = await prepareImageForOCR(file);
   return processScreenshot(base64);
 }
-

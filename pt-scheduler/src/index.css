@@ -1,3 +1,312 @@
+/* Google Sans-like Typography - must be first */
+@import url('https://fonts.googleapis.com/css2?family=Google+Sans:wght@400;500;700&family=Roboto:wght@400;500&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Google Calendar-inspired Light Theme */
+:root {
+  --color-primary: #1a73e8;
+  --color-primary-hover: #1557b0;
+  --color-primary-light: #e8f0fe;
+  --color-border: #dadce0;
+  --color-border-light: #e8eaed;
+  --color-text-primary: #202124;
+  --color-text-secondary: #5f6368;
+  --color-text-tertiary: #70757a;
+  --color-surface: #ffffff;
+  --color-surface-hover: #f1f3f4;
+  --color-background: #ffffff;
+  --color-sidebar-bg: #ffffff;
+  --color-event-blue: #039be5;
+  --color-event-green: #33b679;
+  --color-event-purple: #8e24aa;
+  --color-event-red: #d93025;
+
+  color-scheme: light;
+}
+
+body {
+  font-family: 'Google Sans', 'Roboto', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Safe area padding for iOS */
+.safe-area-pb {
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+
+/* Custom Scrollbar - Google Style */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #dadce0;
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #bdc1c6;
+}
+
+/* Focus visible for accessibility */
+:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-primary);
+}
+
+/* Minimum touch target */
+button, a, input[type="checkbox"], input[type="radio"] {
+  min-height: 36px;
+  min-width: 36px;
+}
+
+/* Google Calendar Grid Styles */
+.calendar-grid {
+  border-collapse: collapse;
+}
+
+.calendar-grid-line {
+  border-color: var(--color-border-light);
+}
+
+/* Time axis styling */
+.time-axis {
+  color: var(--color-text-tertiary);
+  font-size: 10px;
+  font-weight: 400;
+}
+
+/* Day header styling */
+.day-header {
+  color: var(--color-text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.day-number {
+  font-size: 24px;
+  font-weight: 400;
+  color: var(--color-text-secondary);
+  line-height: 1;
+}
+
+.day-number.today {
+  background-color: var(--color-primary);
+  color: white;
+  border-radius: 50%;
+  width: 46px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Event chip styling */
+.event-chip {
+  background-color: var(--color-event-blue);
+  color: white;
+  border-radius: 4px;
+  font-size: 12px;
+  padding: 2px 8px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Mini calendar styles */
+.mini-calendar {
+  font-size: 12px;
+}
+
+.mini-calendar-day {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background-color 0.1s;
+}
+
+.mini-calendar-day:hover {
+  background-color: var(--color-surface-hover);
+}
+
+.mini-calendar-day.selected {
+  background-color: var(--color-primary-light);
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.mini-calendar-day.today {
+  background-color: var(--color-primary);
+  color: white;
+  font-weight: 500;
+}
+
+/* Google-style button */
+.btn-google {
+  height: 36px;
+  padding: 0 24px;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.btn-google-primary {
+  background-color: var(--color-primary);
+  color: white;
+  border: none;
+  box-shadow: 0 1px 2px 0 rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15);
+}
+
+.btn-google-primary:hover {
+  background-color: var(--color-primary-hover);
+  box-shadow: 0 1px 3px 0 rgba(60,64,67,.3), 0 4px 8px 3px rgba(60,64,67,.15);
+}
+
+.btn-google-secondary {
+  background-color: transparent;
+  color: var(--color-primary);
+  border: 1px solid var(--color-border);
+}
+
+.btn-google-secondary:hover {
+  background-color: var(--color-primary-light);
+  border-color: var(--color-primary-light);
+}
+
+/* Create button - FAB style */
+.btn-create {
+  height: 48px;
+  padding: 0 24px 0 12px;
+  border-radius: 24px;
+  font-size: 14px;
+  font-weight: 500;
+  background-color: white;
+  color: var(--color-text-primary);
+  border: none;
+  box-shadow: 0 1px 2px 0 rgba(60,64,67,.3), 0 1px 3px 1px rgba(60,64,67,.15);
+  transition: box-shadow 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-create:hover {
+  box-shadow: 0 1px 3px 0 rgba(60,64,67,.3), 0 4px 8px 3px rgba(60,64,67,.15);
+}
+
+/* Input styling */
+.input-google {
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 4px;
+  font-size: 14px;
+  color: var(--color-text-primary);
+  background-color: white;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.input-google:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary);
+}
+
+/* Sidebar transition */
+.sidebar {
+  transition: width 0.2s ease, margin-left 0.2s ease;
+}
+
+/* Current time indicator */
+.current-time-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background-color: #ea4335;
+  z-index: 15;
+}
+
+.current-time-line::before {
+  content: '';
+  position: absolute;
+  left: -5px;
+  top: -4px;
+  width: 10px;
+  height: 10px;
+  background-color: #ea4335;
+  border-radius: 50%;
+}
+
+/* Card styling for Google look */
+.card-google {
+  background-color: white;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 16px;
+}
+
+/* Dropdown menu styling */
+.dropdown-google {
+  background-color: white;
+  border-radius: 4px;
+  box-shadow: 0 1px 2px 0 rgba(60,64,67,.3), 0 2px 6px 2px rgba(60,64,67,.15);
+  border: none;
+}
+
+/* Checkbox styling */
+.checkbox-google {
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--color-text-tertiary);
+  border-radius: 2px;
+  transition: all 0.1s;
+}
+
+.checkbox-google:checked {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+}
+
+/* Animation for smooth transitions */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideIn {
+  from { transform: translateY(-10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.2s ease;
+}
+
+.animate-slide-in {
+  animation: slideIn 0.2s ease;
+}
