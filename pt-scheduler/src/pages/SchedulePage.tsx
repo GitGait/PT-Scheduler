@@ -1274,40 +1274,68 @@ export function SchedulePage({ sidebarOpen = true }: SchedulePageProps) {
                                                                     {minutesToTimeString(startMinutes)} - {displayDuration}min
                                                                 </div>
                                                             )}
-                                                            {heightPx >= 60 && legInfo?.miles != null && (
-                                                                <div className="text-[10px] opacity-80 truncate">
+                                                            {/* Phone - clickable */}
+                                                            {heightPx >= 56 && patient?.phone && (
+                                                                <a
+                                                                    href={buildPhoneHref(patient.phone)!}
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    className="text-[10px] opacity-90 truncate flex items-center gap-1 hover:opacity-100 hover:underline"
+                                                                >
+                                                                    <Phone className="w-3 h-3 flex-shrink-0" />
+                                                                    {patient.phone}
+                                                                </a>
+                                                            )}
+                                                            {/* Address - clickable */}
+                                                            {heightPx >= 72 && patient?.address && (
+                                                                <a
+                                                                    href={buildMapsHref(patient.address)!}
+                                                                    target="_blank"
+                                                                    rel="noopener noreferrer"
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    className="text-[10px] opacity-90 truncate flex items-center gap-1 hover:opacity-100 hover:underline"
+                                                                >
+                                                                    <MapPin className="w-3 h-3 flex-shrink-0" />
+                                                                    {patient.address.split(',')[0]}
+                                                                </a>
+                                                            )}
+                                                            {/* Drive distance */}
+                                                            {heightPx >= 88 && legInfo?.miles != null && (
+                                                                <div className="text-[10px] opacity-80 truncate flex items-center gap-1">
+                                                                    <Car className="w-3 h-3 flex-shrink-0" />
                                                                     {legInfo.fromHome ? 'Home' : 'Prev'}: {legInfo.miles.toFixed(1)}mi
                                                                 </div>
                                                             )}
                                                         </div>
 
-                                                        {/* Quick action buttons - visible on hover/focus */}
-                                                        <div className="absolute bottom-1 left-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity">
-                                                            {buildPhoneHref(patient?.phone) && (
-                                                                <a
-                                                                    href={buildPhoneHref(patient?.phone)!}
-                                                                    onClick={(e) => e.stopPropagation()}
-                                                                    className="flex-1 flex items-center justify-center gap-1 py-1 bg-black/30 hover:bg-black/50 rounded text-[10px] transition-colors"
-                                                                    aria-label={`Call ${patient?.fullName}`}
-                                                                >
-                                                                    <Phone className="w-3 h-3" />
-                                                                    <span className="hidden sm:inline">Call</span>
-                                                                </a>
-                                                            )}
-                                                            {buildMapsHref(patient?.address) && (
-                                                                <a
-                                                                    href={buildMapsHref(patient?.address)!}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    onClick={(e) => e.stopPropagation()}
-                                                                    className="flex-1 flex items-center justify-center gap-1 py-1 bg-black/30 hover:bg-black/50 rounded text-[10px] transition-colors"
-                                                                    aria-label={`Navigate to ${patient?.fullName}`}
-                                                                >
-                                                                    <Navigation className="w-3 h-3" />
-                                                                    <span className="hidden sm:inline">Nav</span>
-                                                                </a>
-                                                            )}
-                                                        </div>
+                                                        {/* Quick action buttons - always visible at bottom when chip is tall enough */}
+                                                        {heightPx >= 100 && (patient?.phone || patient?.address) && (
+                                                            <div className="absolute bottom-1 left-1 right-1 flex gap-1">
+                                                                {buildPhoneHref(patient?.phone) && (
+                                                                    <a
+                                                                        href={buildPhoneHref(patient?.phone)!}
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                        className="flex-1 flex items-center justify-center gap-1 py-1 bg-black/30 hover:bg-black/50 rounded text-[10px] transition-colors"
+                                                                        aria-label={`Call ${patient?.fullName}`}
+                                                                    >
+                                                                        <Phone className="w-3 h-3" />
+                                                                        Call
+                                                                    </a>
+                                                                )}
+                                                                {buildMapsHref(patient?.address) && (
+                                                                    <a
+                                                                        href={buildMapsHref(patient?.address)!}
+                                                                        target="_blank"
+                                                                        rel="noopener noreferrer"
+                                                                        onClick={(e) => e.stopPropagation()}
+                                                                        className="flex-1 flex items-center justify-center gap-1 py-1 bg-black/30 hover:bg-black/50 rounded text-[10px] transition-colors"
+                                                                        aria-label={`Navigate to ${patient?.fullName}`}
+                                                                    >
+                                                                        <Navigation className="w-3 h-3" />
+                                                                        Navigate
+                                                                    </a>
+                                                                )}
+                                                            </div>
+                                                        )}
 
                                                         {/* Delete button */}
                                                         <button
