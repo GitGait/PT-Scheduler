@@ -1,0 +1,101 @@
+// =============================================================================
+// Re-export API response types from validation.ts (single source of truth)
+// =============================================================================
+
+export type {
+  ExtractedAppointment,
+  OCRResponse,
+  OptimizeStop,
+  OptimizeResponse,
+  GeocodeResponse,
+  AIMatchResponse,
+  AlternateContact,
+  ExtractPatientResponse
+} from "../utils/validation";
+
+// =============================================================================
+// Domain Types (Patient, Appointment, etc.)
+// =============================================================================
+
+export type PatientStatus = "active" | "discharged" | "evaluation";
+
+export interface Patient {
+  id: string;
+  fullName: string;
+  nicknames: string[];
+  phone: string;
+  alternateContacts: import("../utils/validation").AlternateContact[];
+  address: string;
+  lat?: number;
+  lng?: number;
+  email?: string;
+  status: PatientStatus;
+  frequencyPerWeek?: number;
+  insuranceInfo?: string;
+  referralSource?: string;
+  notes: string;
+  sheetsRowIndex?: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export type AppointmentStatus = "scheduled" | "completed" | "cancelled" | "no-show";
+export type SyncStatus = "local" | "pending" | "synced" | "error";
+
+export interface Appointment {
+  id: string;
+  patientId: string;
+  date: string;
+  startTime: string;
+  duration: number;
+  status: AppointmentStatus;
+  syncStatus: SyncStatus;
+  calendarEventId?: string;
+  notes?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface RecurringBlock {
+  id: string;
+  patientId: string;
+  dayOfWeek: number;
+  startTime: string;
+  duration: number;
+  effectiveFrom: string;
+  effectiveUntil?: string;
+}
+
+export interface CalendarEvent {
+  id: string;
+  appointmentId: string;
+  googleEventId: string;
+  calendarId: string;
+  lastSyncedAt: Date;
+}
+
+// =============================================================================
+// Sync Queue Types
+// =============================================================================
+
+export type SyncAction = "create" | "update" | "delete";
+export type SyncEntity = "appointment" | "calendarEvent" | "patient";
+export type SyncQueueStatus =
+  | "pending"
+  | "processing"
+  | "failed"
+  | "conflict"
+  | "synced";
+
+export interface SyncQueueItem {
+  id?: number;
+  type: SyncAction;
+  entity: SyncEntity;
+  data: Record<string, unknown>;
+  timestamp: Date;
+  retryCount: number;
+  status: SyncQueueStatus;
+  lastError?: string;
+  nextRetryAt?: Date;
+  idempotencyKey?: string;
+}
