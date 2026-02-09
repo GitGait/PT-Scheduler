@@ -1011,7 +1011,7 @@ export function SchedulePage() {
             .slice()
             .sort((a, b) => a.startTime.localeCompare(b.startTime));
 
-        if (dayAppointments.length < 2) {
+        if (dayAppointments.length === 0) {
             return;
         }
 
@@ -1075,6 +1075,8 @@ export function SchedulePage() {
                 nextStartMinutes = snappedStartMinutes + appointment.duration;
             }
 
+            // Reload appointments to ensure UI reflects the changes
+            await loadByRange(weekStart, weekEnd);
             setSelectedDate(date);
         } catch (err) {
             setAutoArrangeError(
