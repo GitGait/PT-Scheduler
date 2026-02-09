@@ -67,10 +67,16 @@ body {
   box-shadow: 0 0 0 2px var(--color-primary);
 }
 
-/* Minimum touch target */
-button, a, input[type="checkbox"], input[type="radio"] {
+/* Minimum touch target - exclude small action buttons */
+button:not(.btn-sm), a:not(.btn-sm), input[type="checkbox"], input[type="radio"] {
   min-height: 36px;
   min-width: 36px;
+}
+
+/* Small buttons override */
+.btn-sm {
+  min-height: unset;
+  min-width: unset;
 }
 
 /* Google Calendar Grid Styles */

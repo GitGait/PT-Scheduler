@@ -1,7 +1,7 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { buildMatchPrompt } from "./_prompts";
-import { requireEnv } from "./_env";
-import { cors, requirePost } from "./_cors";
+import { buildMatchPrompt } from "./_prompts.js";
+import { requireEnv } from "./_env.js";
+import { cors, requirePost } from "./_cors.js";
 
 interface MatchRequest {
     ocrName: string;

@@ -3,6 +3,10 @@ import { useParams, useNavigate } from "react-router-dom";
 import { usePatientStore } from "../stores";
 import { Card, CardHeader } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
+import {
+    parseAlternateContactsField,
+    serializeAlternateContactsField,
+} from "../api/sheets";
 import type { Patient, PatientStatus } from "../types";
 import { Phone, MapPin, Navigation, Edit2, X, Trash2 } from "lucide-react";
 
@@ -10,6 +14,7 @@ interface EditFormData {
     fullName: string;
     nicknames: string;
     phone: string;
+    alternateContacts: string;
     address: string;
     notes: string;
     status: PatientStatus;
@@ -37,6 +42,7 @@ export function PatientDetailPage() {
                 fullName: found.fullName,
                 nicknames: found.nicknames.join(", "),
                 phone: found.phone,
+                alternateContacts: serializeAlternateContactsField(found.alternateContacts),
                 address: found.address,
                 notes: found.notes,
                 status: found.status,
@@ -68,6 +74,7 @@ export function PatientDetailPage() {
             fullName: patient.fullName,
             nicknames: patient.nicknames.join(", "),
             phone: patient.phone,
+            alternateContacts: serializeAlternateContactsField(patient.alternateContacts),
             address: patient.address,
             notes: patient.notes,
             status: patient.status,
@@ -104,6 +111,7 @@ export function PatientDetailPage() {
                     .map((n) => n.trim())
                     .filter(Boolean),
                 phone: formData.phone.trim(),
+                alternateContacts: parseAlternateContactsField(formData.alternateContacts),
                 address: formData.address.trim(),
                 notes: formData.notes.trim(),
                 status: formData.status,
@@ -197,6 +205,21 @@ export function PatientDetailPage() {
                             onChange={(e) => handleInputChange("phone", e.target.value)}
                             className="w-full input-google"
                         />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-[#5f6368] mb-1">
+                            Alternate Contacts
+                        </label>
+                        <textarea
+                            value={formData.alternateContacts}
+                            onChange={(e) => handleInputChange("alternateContacts", e.target.value)}
+                            className="w-full input-google resize-y py-2 min-h-[72px]"
+                            placeholder="Name|Phone|Relationship; Name|Phone"
+                        />
+                        <p className="text-xs text-[#5f6368] mt-1">
+                            Format: Name|Phone|Relationship; Name|Phone
+                        </p>
                     </div>
 
                     <div>

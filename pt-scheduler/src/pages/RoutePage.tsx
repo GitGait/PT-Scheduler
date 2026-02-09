@@ -17,16 +17,14 @@ import {
     Home,
 } from "lucide-react";
 
-const HOME_BASE_ADDRESS = "2580 South Velvet Falls Way, Meridian, Boise, ID";
-const HOME_BASE_FALLBACK_COORDINATES = { lat: 43.5813465, lng: -116.3774964 };
-const EARTH_RADIUS_MILES = 3958.8;
-const AVERAGE_DRIVE_SPEED_MPH = 30;
-
-const toIsoDate = (date: Date): string => date.toISOString().split("T")[0];
-
-const todayIso = (): string => toIsoDate(new Date());
-
-const parseIsoDate = (date: string): Date => new Date(`${date}T12:00:00`);
+import {
+    getHomeBase,
+    calculateMilesBetweenCoordinates,
+    estimateDriveMinutes,
+    toIsoDate,
+    todayIso,
+    parseLocalDate as parseIsoDate,
+} from "../utils/scheduling";
 
 const formatDate = (dateStr: string): string => {
     const date = parseIsoDate(dateStr);
@@ -45,29 +43,6 @@ const formatTime = (time: string): string => {
     return `${h12}:${minutes} ${meridiem}`;
 };
 
-const toRadians = (degrees: number): number => degrees * (Math.PI / 180);
-
-const calculateMilesBetweenCoordinates = (
-    from: { lat: number; lng: number },
-    to: { lat: number; lng: number }
-): number => {
-    const deltaLat = toRadians(to.lat - from.lat);
-    const deltaLng = toRadians(to.lng - from.lng);
-    const fromLat = toRadians(from.lat);
-    const toLat = toRadians(to.lat);
-
-    const a =
-        Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
-        Math.cos(fromLat) * Math.cos(toLat) * Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return EARTH_RADIUS_MILES * c;
-};
-
-const estimateDriveMinutes = (miles: number): number => {
-    if (miles <= 0) return 0;
-    return Math.max(1, Math.round((miles / AVERAGE_DRIVE_SPEED_MPH) * 60));
-};
-
 interface RouteStop {
     appointment: Appointment;
     patient: Patient | null;
@@ -82,9 +57,11 @@ export function RoutePage() {
     const [selectedDate, setSelectedDate] = useState(todayIso);
     const [isOptimizing, setIsOptimizing] = useState(false);
     const [routeStops, setRouteStops] = useState<RouteStop[]>([]);
-    const [homeCoordinates, setHomeCoordinates] = useState<{ lat: number; lng: number }>(
-        HOME_BASE_FALLBACK_COORDINATES
-    );
+    const homeBase = getHomeBase();
+    const homeBaseAddress = homeBase.address || "Home Base (not configured)";
+    const [homeCoordinates, setHomeCoordinates] = useState<{ lat: number; lng: number }>(() => {
+        return { lat: homeBase.lat, lng: homeBase.lng };
+    });
     const [resolvedCoordinates, setResolvedCoordinates] = useState<
         Record<string, { lat: number; lng: number }>
     >({});
@@ -114,17 +91,30 @@ export function RoutePage() {
         void loadByRange(selectedDate, selectedDate);
     }, [loadByRange, selectedDate]);
 
-    // Geocode home base
+    // Geocode home base if not already configured
     useEffect(() => {
         let cancelled = false;
         const loadHome = async () => {
-            try {
-                const result = await geocodeAddress(HOME_BASE_ADDRESS);
-                if (!cancelled && Number.isFinite(result.lat) && Number.isFinite(result.lng)) {
-                    setHomeCoordinates({ lat: result.lat, lng: result.lng });
+            const homeBase = getHomeBase();
+
+            // If we have valid coordinates, use them
+            if (homeBase.lat !== 0 && homeBase.lng !== 0) {
+                if (!cancelled) {
+                    setHomeCoordinates({ lat: homeBase.lat, lng: homeBase.lng });
                 }
-            } catch {
-                // Use fallback
+                return;
+            }
+
+            // Try to geocode if we have an address
+            if (homeBase.address) {
+                try {
+                    const result = await geocodeAddress(homeBase.address);
+                    if (!cancelled && Number.isFinite(result.lat) && Number.isFinite(result.lng)) {
+                        setHomeCoordinates({ lat: result.lat, lng: result.lng });
+                    }
+                } catch {
+                    // Keep existing coordinates
+                }
             }
         };
         void loadHome();
@@ -375,7 +365,7 @@ export function RoutePage() {
                     </div>
                     <div className="flex-1">
                         <p className="font-medium text-[#202124]">Start: Home Base</p>
-                        <p className="text-sm text-[#5f6368]">{HOME_BASE_ADDRESS}</p>
+                        <p className="text-sm text-[#5f6368]">{homeBaseAddress}</p>
                     </div>
                 </div>
             </Card>

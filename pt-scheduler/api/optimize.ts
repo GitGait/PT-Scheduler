@@ -7,14 +7,14 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { cors, requirePost } from "./_cors";
-import { requireEnv } from "./_env";
+import { cors, requirePost } from "./_cors.js";
+import { requireEnv } from "./_env.js";
 import {
     optimizeRequestSchema,
     optimizeResponseSchema,
     validateBody,
     validateResponse
-} from "./_validation";
+} from "./_validation.js";
 
 const GOOGLE_TIMEOUT_MS = 30_000;
 

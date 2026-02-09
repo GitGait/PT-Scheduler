@@ -5,7 +5,11 @@
 import { useEffect, useCallback, useRef, useState } from "react";
 import { useSyncStore, usePatientStore } from "../stores";
 import { isSignedIn, getAccessToken } from "../api/auth";
-import { fetchPatientsFromSheet, upsertPatientToSheet } from "../api/sheets";
+import {
+    deletePatientsFromSheetByIds,
+    fetchPatientsFromSheet,
+    syncPatientToSheetByStatus,
+} from "../api/sheets";
 import {
     createCalendarEvent,
     updateCalendarEvent,
@@ -13,6 +17,7 @@ import {
     listCalendarEvents,
 } from "../api/calendar";
 import { db } from "../db/schema";
+import { reconcilePatientsFromSheetSnapshot } from "../db/patientSheetSync";
 import { syncQueueDB } from "../db/operations";
 import type { AppointmentStatus, SyncQueueItem } from "../types";
 
@@ -49,6 +54,7 @@ export function useSync(config: SyncConfig | null) {
     const [isSyncing, setIsSyncing] = useState(false);
     const [lastSyncError, setLastSyncError] = useState<string | null>(null);
     const queueRunInFlightRef = useRef(false);
+    const calendarSyncLockRef = useRef(false);
 
     /**
      * Sync patients from Google Sheets to local database.
@@ -62,15 +68,7 @@ export function useSync(config: SyncConfig | null) {
             }
 
             const patients = await fetchPatientsFromSheet(config.spreadsheetId);
-
-            for (const patient of patients) {
-                const existing = await db.patients.get(patient.id);
-                if (!existing) {
-                    await db.patients.add(patient);
-                } else {
-                    await db.patients.update(patient.id, patient);
-                }
-            }
+            await reconcilePatientsFromSheetSnapshot(config.spreadsheetId, patients);
 
             await loadAll();
             markSheetsAutoSyncRun(config.spreadsheetId);
@@ -86,6 +84,12 @@ export function useSync(config: SyncConfig | null) {
      */
     const syncAppointmentsFromCalendar = useCallback(async () => {
         if (!config?.calendarId || !isSignedIn()) return;
+
+        // Prevent concurrent sync operations to avoid data inconsistency
+        if (calendarSyncLockRef.current) {
+            return;
+        }
+        calendarSyncLockRef.current = true;
 
         try {
             let importedAny = false;
@@ -209,12 +213,40 @@ export function useSync(config: SyncConfig | null) {
                 await loadAll();
             }
 
-            if (importedAny && typeof window !== "undefined") {
+            // Check for deleted appointments: remove local appointments whose calendar events no longer exist
+            const calendarEventIds = new Set(events.map((e) => e.googleEventId));
+            const dateMin = toLocalIsoDate(timeMin);
+            const dateMax = toLocalIsoDate(timeMax);
+
+            // Get all local appointments in the sync date range that have a calendarEventId
+            const localAppointments = await db.appointments
+                .where("date")
+                .between(dateMin, dateMax, true, true)
+                .toArray();
+
+            let deletedAny = false;
+            for (const appointment of localAppointments) {
+                // Only check appointments that were synced to calendar
+                if (!appointment.calendarEventId) {
+                    continue;
+                }
+
+                // If the calendar event no longer exists, delete the local appointment
+                if (!calendarEventIds.has(appointment.calendarEventId)) {
+                    await db.appointments.delete(appointment.id);
+                    await db.calendarEvents.where("appointmentId").equals(appointment.id).delete();
+                    deletedAny = true;
+                }
+            }
+
+            if ((importedAny || deletedAny) && typeof window !== "undefined") {
                 window.dispatchEvent(new Event(APPOINTMENTS_SYNCED_EVENT));
             }
         } catch (err) {
             console.error("Appointment sync failed:", err);
             setLastSyncError(err instanceof Error ? err.message : "Appointment sync failed");
+        } finally {
+            calendarSyncLockRef.current = false;
         }
     }, [config?.calendarId, loadAll]);
 
@@ -373,6 +405,7 @@ export function useSync(config: SyncConfig | null) {
                 return;
             }
 
+            await syncPatientsFromSheets();
             await syncAppointmentsFromCalendar();
 
             const pending = await syncQueueDB.getPendingCount();
@@ -562,8 +595,10 @@ async function processSyncItem(item: SyncQueueItem, config: SyncConfig): Promise
             if ((action === "create" || action === "update") && entityId) {
                 const patient = await db.patients.get(entityId);
                 if (patient) {
-                    await upsertPatientToSheet(config.spreadsheetId, patient);
+                    await syncPatientToSheetByStatus(config.spreadsheetId, patient);
                 }
+            } else if (action === "delete" && entityId) {
+                await deletePatientsFromSheetByIds(config.spreadsheetId, [entityId]);
             }
             break;
         }

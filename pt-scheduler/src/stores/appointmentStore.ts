@@ -2,6 +2,9 @@ import { create } from "zustand";
 import type { Appointment, AppointmentStatus } from "../types";
 import { appointmentDB, syncQueueDB } from "../db/operations";
 import { useSyncStore } from "./syncStore";
+import { deleteCalendarEvent } from "../api/calendar";
+import { isSignedIn } from "../api/auth";
+import { db } from "../db/schema";
 
 interface AppointmentState {
     appointments: Appointment[];
@@ -173,11 +176,35 @@ export const useAppointmentStore = create<AppointmentState & AppointmentActions>
         set({ error: null });
         try {
             const appointment = await appointmentDB.get(id);
-            await appointmentDB.delete(id);
-            await enqueueAppointmentSync("delete", id, appointment?.calendarEventId);
+
+            // Immediately remove from local state to provide instant feedback
             set((state) => ({
                 appointments: state.appointments.filter((a) => a.id !== id),
             }));
+
+            // Delete from local database
+            await appointmentDB.delete(id);
+
+            // Delete calendar event mapping
+            await db.calendarEvents.where("appointmentId").equals(id).delete();
+
+            // Immediately delete from Google Calendar if signed in (don't just queue it)
+            const calendarId = useSyncStore.getState().calendarId;
+            const eventId = appointment?.calendarEventId;
+
+            if (calendarId && eventId && isSignedIn()) {
+                try {
+                    await deleteCalendarEvent(calendarId, eventId);
+                    await db.calendarEvents.delete(eventId);
+                } catch (calErr) {
+                    // If calendar delete fails, queue it for retry
+                    console.warn("Immediate calendar delete failed, queuing for retry:", calErr);
+                    await enqueueAppointmentSync("delete", id, eventId);
+                }
+            } else if (calendarId && eventId) {
+                // Not signed in, queue for later
+                await enqueueAppointmentSync("delete", id, eventId);
+            }
         } catch (err) {
             set({ error: err instanceof Error ? err.message : "Failed to delete appointment" });
         }

@@ -83,7 +83,14 @@ export async function createCalendarEvent(
     });
 
     if (!response.ok) {
-        throw new Error(`Calendar API error: ${response.status}`);
+        let errorDetail = "";
+        try {
+            const errorData = await response.json();
+            errorDetail = errorData?.error?.message || JSON.stringify(errorData);
+        } catch {
+            errorDetail = response.statusText;
+        }
+        throw new Error(`Calendar API error (${response.status}): ${errorDetail}`);
     }
 
     const data = await response.json();
@@ -144,6 +151,109 @@ export async function deleteCalendarEvent(
     if (!response.ok && response.status !== 404) {
         throw new Error(`Calendar API error: ${response.status}`);
     }
+}
+
+export interface CalendarListItem {
+    id: string;
+    summary: string;
+    backgroundColor?: string;
+    primary?: boolean;
+}
+
+/**
+ * List user's calendars to verify API access.
+ */
+export async function listCalendars(): Promise<CalendarListItem[]> {
+    const token = await getAccessToken();
+    if (!token) {
+        throw new Error("Not authenticated");
+    }
+
+    const url = `${CALENDAR_API_BASE}/users/me/calendarList`;
+    const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) {
+        let errorDetail = "";
+        try {
+            const errorData = await response.json();
+            errorDetail = errorData?.error?.message || JSON.stringify(errorData);
+        } catch {
+            errorDetail = response.statusText;
+        }
+        throw new Error(`Calendar List API error (${response.status}): ${errorDetail}`);
+    }
+
+    const data = await response.json();
+    return (data.items || []).map((cal: { id?: string; summary?: string; backgroundColor?: string; primary?: boolean }) => ({
+        id: cal.id || "",
+        summary: cal.summary || "Unnamed",
+        backgroundColor: cal.backgroundColor,
+        primary: cal.primary,
+    }));
+}
+
+export interface FetchCalendarEventsResult {
+    events: Array<{
+        id: string;
+        summary: string;
+        startDateTime: string;
+        endDateTime: string;
+        location?: string;
+    }>;
+    error?: string;
+}
+
+/**
+ * Fetch events from a specific calendar (for external calendars like Personal, Holidays).
+ * Returns an object with events array and optional error message for partial failure handling.
+ */
+export async function fetchCalendarEvents(
+    calendarId: string,
+    timeMinIso: string,
+    timeMaxIso: string
+): Promise<FetchCalendarEventsResult> {
+    const token = await getAccessToken();
+    if (!token) {
+        throw new Error("Not authenticated");
+    }
+
+    const url = new URL(
+        `${CALENDAR_API_BASE}/calendars/${encodeURIComponent(calendarId)}/events`
+    );
+    url.searchParams.set("singleEvents", "true");
+    url.searchParams.set("orderBy", "startTime");
+    url.searchParams.set("maxResults", "250");
+    url.searchParams.set("timeMin", timeMinIso);
+    url.searchParams.set("timeMax", timeMaxIso);
+
+    const response = await fetch(url.toString(), {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) {
+        // Return empty events with error info for calendars we don't have access to
+        console.warn(`Failed to fetch events from calendar ${calendarId}: ${response.status}`);
+        return { events: [], error: `HTTP ${response.status}` };
+    }
+
+    const data = await response.json();
+    const items = data.items || [];
+
+    const events = items
+        .filter((item: { start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string } }) =>
+            Boolean(item.start?.dateTime || item.start?.date) && Boolean(item.end?.dateTime || item.end?.date)
+        )
+        .map((item: { id?: string; summary?: string; location?: string; start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string } }) => ({
+            id: item.id || "",
+            summary: item.summary || "",
+            startDateTime: item.start?.dateTime || `${item.start?.date}T00:00:00`,
+            endDateTime: item.end?.dateTime || `${item.end?.date}T23:59:59`,
+            location: item.location,
+        }));
+
+    return { events };
 }
 
 /**

@@ -6,13 +6,19 @@ import {
     useState,
     type DragEvent,
     type MouseEvent,
+    type TouchEvent,
 } from "react";
-import { useAppointmentStore, usePatientStore } from "../stores";
+import { useAppointmentStore, usePatientStore, useScheduleStore, useSyncStore, type ExternalCalendarEvent } from "../stores";
+import { fetchCalendarEvents } from "../api/calendar";
+import { isSignedIn } from "../api/auth";
+import { syncPatientToSheetByStatus } from "../api/sheets";
 import { Card, CardHeader } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
+import { AppointmentDetailModal } from "../components/AppointmentDetailModal";
 import { geocodeAddress } from "../api/geocode";
-import { optimizeRoute } from "../api/optimize";
+import { db } from "../db/schema";
 import type { Appointment, Patient } from "../types";
+import "leaflet/dist/leaflet.css";
 import {
     ChevronLeft,
     ChevronRight,
@@ -24,18 +30,41 @@ import {
     Navigation,
     Clock,
     Car,
+    GripVertical,
 } from "lucide-react";
 
 const SLOT_MINUTES = 15;
-const DAY_START_MINUTES = 6 * 60;
+const DAY_START_MINUTES = 7 * 60 + 30; // 7:30 AM
 const DAY_END_MINUTES = 20 * 60;
 const SLOT_HEIGHT_PX = 48;
 const MIN_DURATION_MINUTES = 15;
 const EARTH_RADIUS_MILES = 3958.8;
 const AVERAGE_DRIVE_SPEED_MPH = 30;
-const HOME_BASE_ADDRESS = "2580 South Velvet Falls Way, Meridian, Boise, ID";
-const HOME_BASE_FALLBACK_COORDINATES = { lat: 43.5813465, lng: -116.3774964 };
+import { getHomeBase } from "../utils/scheduling";
 const APPOINTMENTS_SYNCED_EVENT = "pt-scheduler:appointments-synced";
+
+interface ClearedWeekAppointmentSnapshot {
+    patientId: string;
+    date: string;
+    startTime: string;
+    duration: number;
+    status: Appointment["status"];
+    notes?: string;
+}
+
+interface ClearedWeekSnapshot {
+    weekStart: string;
+    weekEnd: string;
+    appointments: ClearedWeekAppointmentSnapshot[];
+}
+
+interface DayMapPoint {
+    id: string;
+    label: string;
+    lat: number;
+    lng: number;
+    isHome: boolean;
+}
 
 const toIsoDate = (date: Date): string => date.toISOString().split("T")[0];
 
@@ -102,32 +131,14 @@ const calculateMilesBetweenCoordinates = (
     return EARTH_RADIUS_MILES * c;
 };
 
-function orderByNearestNeighbor<T extends { lat: number; lng: number }>(
+function orderByFarthestFromHome<T extends { lat: number; lng: number }>(
     items: T[],
-    start: { lat: number; lng: number }
+    home: { lat: number; lng: number }
 ): T[] {
-    const remaining = [...items];
-    const ordered: T[] = [];
-    let current = start;
-
-    while (remaining.length > 0) {
-        let nearestIndex = 0;
-        let nearestMiles = Number.POSITIVE_INFINITY;
-
-        for (let index = 0; index < remaining.length; index += 1) {
-            const miles = calculateMilesBetweenCoordinates(current, remaining[index]);
-            if (miles < nearestMiles) {
-                nearestMiles = miles;
-                nearestIndex = index;
-            }
-        }
-
-        const [nearest] = remaining.splice(nearestIndex, 1);
-        ordered.push(nearest);
-        current = nearest;
-    }
-
-    return ordered;
+    return [...items].sort(
+        (a, b) =>
+            calculateMilesBetweenCoordinates(home, b) - calculateMilesBetweenCoordinates(home, a)
+    );
 }
 
 const estimateDriveMinutes = (miles: number): number => {
@@ -151,7 +162,7 @@ const buildPhoneHref = (rawPhone?: string): string | null => {
     return normalized ? `tel:${normalized}` : null;
 };
 
-const buildMapsHref = (rawAddress?: string): string | null => {
+const buildGoogleMapsHref = (rawAddress?: string): string | null => {
     if (!rawAddress) {
         return null;
     }
@@ -164,12 +175,87 @@ const buildMapsHref = (rawAddress?: string): string | null => {
     return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(trimmed)}`;
 };
 
-interface SchedulePageProps {
-    sidebarOpen?: boolean;
-}
+const buildAppleMapsHref = (rawAddress?: string): string | null => {
+    if (!rawAddress) {
+        return null;
+    }
 
-export function SchedulePage({ sidebarOpen = true }: SchedulePageProps) {
-    const [selectedDate, setSelectedDate] = useState(todayIso);
+    const trimmed = rawAddress.trim();
+    if (!trimmed) {
+        return null;
+    }
+
+    return `https://maps.apple.com/?q=${encodeURIComponent(trimmed)}`;
+};
+
+const buildGoogleMapsDirectionsFromCoordinatesHref = (
+    home: { lat: number; lng: number },
+    stops: Array<{ lat: number; lng: number }>
+): string | null => {
+    if (stops.length === 0) {
+        return `https://www.google.com/maps/search/?api=1&query=${home.lat},${home.lng}`;
+    }
+
+    const destination = stops[stops.length - 1];
+    const waypoints = stops.slice(0, -1).map((stop) => `${stop.lat},${stop.lng}`);
+    const url = new URL("https://www.google.com/maps/dir/");
+    url.searchParams.set("api", "1");
+    url.searchParams.set("origin", `${home.lat},${home.lng}`);
+    url.searchParams.set("destination", `${destination.lat},${destination.lng}`);
+    if (waypoints.length > 0) {
+        url.searchParams.set("waypoints", waypoints.join("|"));
+    }
+    url.searchParams.set("travelmode", "driving");
+    return url.toString();
+};
+
+const isIOS = (): boolean => {
+    if (typeof navigator === "undefined") return false;
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+};
+
+const normalizeVisitType = (value?: string): string | null => {
+    const raw = (value ?? "").trim();
+    if (!raw) {
+        return null;
+    }
+
+    const cleaned = raw
+        .replace(/^[\[\(\{<]+|[\]\)\}>]+$/g, "")
+        .replace(/^visit\s*type\s*[:\-]?\s*/i, "")
+        .replace(/[–—]/g, "-")
+        .replace(/^[\s:;\-]+|[\s:;\-]+$/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    if (!cleaned) {
+        return null;
+    }
+
+    const alphaNumeric = cleaned.match(/^([A-Za-z]{1,6})\s*[-]?\s*(\d{1,3})$/);
+    if (alphaNumeric) {
+        return `${alphaNumeric[1].toUpperCase()}${alphaNumeric[2]}`;
+    }
+
+    const keyword = cleaned.match(/^(EVAL|SOC|DC|ROC|RE[-\s]?EVAL)$/i);
+    if (keyword) {
+        return keyword[1].toUpperCase().replace(/[-\s]/g, "");
+    }
+
+    return cleaned.toUpperCase();
+};
+
+export function SchedulePage() {
+    const {
+        selectedDate,
+        setSelectedDate,
+        sidebarOpen,
+        googleCalendars,
+        enabledCalendars,
+        externalEvents,
+        setExternalEvents,
+    } = useScheduleStore();
     const [isAddOpen, setIsAddOpen] = useState(false);
     const [newPatientId, setNewPatientId] = useState("");
     const [newAppointmentDate, setNewAppointmentDate] = useState(todayIso);
@@ -189,7 +275,9 @@ export function SchedulePage({ sidebarOpen = true }: SchedulePageProps) {
         Record<string, { startMinutes: number; duration: number }>
     >({});
     const suppressNextSlotClickRef = useRef(false);
+    const suppressNextChipClickRef = useRef(false);
     const suppressClickTimerRef = useRef<number | null>(null);
+    const suppressChipClickTimerRef = useRef<number | null>(null);
     const resizeSessionRef = useRef<{
         appointmentId: string;
         startY: number;
@@ -199,21 +287,53 @@ export function SchedulePage({ sidebarOpen = true }: SchedulePageProps) {
         initialEndMinutes: number;
     } | null>(null);
     const resizeDraftRef = useRef<{ startMinutes: number; duration: number } | null>(null);
-    const [homeCoordinates, setHomeCoordinates] = useState<{ lat: number; lng: number } | null>(
-        HOME_BASE_FALLBACK_COORDINATES
-    );
+    const [homeCoordinates, setHomeCoordinates] = useState<{ lat: number; lng: number } | null>(() => {
+        const homeBase = getHomeBase();
+        return homeBase.lat !== 0 && homeBase.lng !== 0 ? { lat: homeBase.lat, lng: homeBase.lng } : null;
+    });
     const [resolvedPatientCoordinates, setResolvedPatientCoordinates] = useState<
         Record<string, { lat: number; lng: number }>
     >({});
     const patientGeocodeInFlightRef = useRef(new Set<string>());
+    const [detailAppointmentId, setDetailAppointmentId] = useState<string | null>(null);
+    const [mapsMenuAddress, setMapsMenuAddress] = useState<string | null>(null);
 
-    const { patients, loadAll } = usePatientStore();
+    // Zoom state for pinch-to-zoom on mobile
+    const [zoomScale, setZoomScale] = useState(1);
+    const zoomContainerRef = useRef<HTMLDivElement>(null);
+    const pinchStateRef = useRef<{
+        initialDistance: number;
+        initialScale: number;
+    } | null>(null);
+
+    // View mode state (day or week)
+    const [viewMode, setViewMode] = useState<'day' | 'week'>('week');
+    const [viewDropdownOpen, setViewDropdownOpen] = useState(false);
+    const [lastClearedWeekSnapshot, setLastClearedWeekSnapshot] = useState<ClearedWeekSnapshot | null>(null);
+    const [weekActionInProgress, setWeekActionInProgress] = useState(false);
+    const [weekActionMessage, setWeekActionMessage] = useState<string | null>(null);
+    const [weekActionError, setWeekActionError] = useState<string | null>(null);
+    const [isDayMapOpen, setIsDayMapOpen] = useState(false);
+    const [isDayMapLoading, setIsDayMapLoading] = useState(false);
+    const [dayMapError, setDayMapError] = useState<string | null>(null);
+    const [dayMapInfoMessage, setDayMapInfoMessage] = useState<string | null>(null);
+    const [dayMapPoints, setDayMapPoints] = useState<DayMapPoint[]>([]);
+    const dayMapContainerRef = useRef<HTMLDivElement | null>(null);
+    const dayMapInstanceRef = useRef<import("leaflet").Map | null>(null);
+    const dayMapLayerRef = useRef<import("leaflet").LayerGroup | null>(null);
+
+    const { patients, loadAll, update: updatePatient } = usePatientStore();
     const { appointments, loading, loadByRange, markComplete, create, update, delete: deleteAppointment } =
         useAppointmentStore();
 
     const weekDates = useMemo(() => getWeekDates(selectedDate), [selectedDate]);
     const weekStart = weekDates[0];
     const weekEnd = weekDates[6];
+
+    // Dates to display based on view mode
+    const displayDates = useMemo(() => {
+        return viewMode === 'day' ? [selectedDate] : weekDates;
+    }, [viewMode, selectedDate, weekDates]);
 
     const timeSlots = useMemo(() => {
         const slots: number[] = [];
@@ -250,21 +370,32 @@ export function SchedulePage({ sidebarOpen = true }: SchedulePageProps) {
         let cancelled = false;
 
         const loadHomeCoordinates = async () => {
+            const homeBase = getHomeBase();
+
+            // If we already have valid coordinates from config, use them
+            if (homeBase.lat !== 0 && homeBase.lng !== 0) {
+                if (!cancelled) {
+                    setHomeCoordinates({ lat: homeBase.lat, lng: homeBase.lng });
+                }
+                return;
+            }
+
+            // Otherwise try to geocode the address
+            if (!homeBase.address) {
+                return;
+            }
+
             try {
-                const geocoded = await geocodeAddress(HOME_BASE_ADDRESS);
+                const geocoded = await geocodeAddress(homeBase.address);
                 if (!cancelled) {
                     const hasValidCoordinates =
                         Number.isFinite(geocoded.lat) && Number.isFinite(geocoded.lng);
-                    setHomeCoordinates(
-                        hasValidCoordinates
-                            ? { lat: geocoded.lat, lng: geocoded.lng }
-                            : HOME_BASE_FALLBACK_COORDINATES
-                    );
+                    if (hasValidCoordinates) {
+                        setHomeCoordinates({ lat: geocoded.lat, lng: geocoded.lng });
+                    }
                 }
             } catch {
-                if (!cancelled) {
-                    setHomeCoordinates(HOME_BASE_FALLBACK_COORDINATES);
-                }
+                // Keep existing coordinates if geocoding fails
             }
         };
 
@@ -286,15 +417,36 @@ export function SchedulePage({ sidebarOpen = true }: SchedulePageProps) {
         }
     }, [patients, newPatientId]);
 
+    // Close view dropdown when clicking outside
+    useEffect(() => {
+        if (!viewDropdownOpen) return;
+
+        const handleClickOutside = () => {
+            setViewDropdownOpen(false);
+        };
+
+        // Delay adding listener to avoid immediate close
+        const timer = setTimeout(() => {
+            document.addEventListener('click', handleClickOutside);
+        }, 0);
+
+        return () => {
+            clearTimeout(timer);
+            document.removeEventListener('click', handleClickOutside);
+        };
+    }, [viewDropdownOpen]);
+
     // Get month/year display
     const monthYearDisplay = parseIsoDate(selectedDate).toLocaleDateString("en-US", {
         month: "long",
         year: "numeric",
     });
 
-    const navigateWeek = (weeks: number) => {
+    const navigateWeek = (direction: number) => {
         const date = parseIsoDate(selectedDate);
-        date.setDate(date.getDate() + weeks * 7);
+        // Navigate by day in day view, by week in week view
+        const daysToMove = viewMode === 'day' ? direction : direction * 7;
+        date.setDate(date.getDate() + daysToMove);
         setSelectedDate(toIsoDate(date));
     };
 
@@ -346,6 +498,29 @@ export function SchedulePage({ sidebarOpen = true }: SchedulePageProps) {
 
         return grouped;
     }, [appointments, weekDates]);
+
+    // Group external events by day
+    const externalEventsByDay = useMemo(() => {
+        const grouped: Record<string, ExternalCalendarEvent[]> = {};
+        for (const date of weekDates) {
+            grouped[date] = [];
+        }
+
+        for (const event of externalEvents) {
+            // Parse the start datetime to get the date
+            const eventDate = event.startDateTime.split("T")[0];
+            if (grouped[eventDate]) {
+                grouped[eventDate].push(event);
+            }
+        }
+
+        // Sort by start time
+        for (const date of Object.keys(grouped)) {
+            grouped[date].sort((a, b) => a.startDateTime.localeCompare(b.startDateTime));
+        }
+
+        return grouped;
+    }, [externalEvents, weekDates]);
 
     useEffect(() => {
         let cancelled = false;
@@ -513,9 +688,45 @@ export function SchedulePage({ sidebarOpen = true }: SchedulePageProps) {
 
     const getPatient = (patientId: string) => patientById.get(patientId);
 
+    const formatPatientDisplayName = (patient: Patient) => {
+        const nickname = patient.nicknames.find((value) => value.trim().length > 0);
+        if (!nickname) {
+            return patient.fullName;
+        }
+        return `${patient.fullName} "${nickname.trim()}"`;
+    };
+
     const getPatientName = (patientId: string) => {
         const patient = getPatient(patientId);
-        return patient?.fullName ?? "Unknown Patient";
+        if (!patient) {
+            return "Unknown Patient";
+        }
+        return formatPatientDisplayName(patient);
+    };
+
+    const getVisitTypeFromAppointment = (appointment: Appointment): string | null => {
+        const notes = appointment.notes ?? "";
+        if (!notes.trim()) {
+            return null;
+        }
+
+        const labeledMatch = notes.match(/(?:^|\n)\s*visit\s*type\s*[:\-]?\s*([^\n]+)\s*(?:\n|$)/i);
+        if (labeledMatch) {
+            return normalizeVisitType(labeledMatch[1]);
+        }
+
+        const bracketedMatch = notes.match(/\[\s*([A-Za-z]{1,6}\s*[-]?\s*\d{1,3}|EVAL|SOC|DC|ROC|RE[-\s]?EVAL)\s*\]/i);
+        if (bracketedMatch) {
+            return normalizeVisitType(bracketedMatch[1]);
+        }
+
+        const firstLine = notes.split(/\r?\n/)[0]?.trim() ?? "";
+        const prefixMatch = firstLine.match(/^([A-Za-z]{1,6}\s*[-]?\s*\d{1,3}|EVAL|SOC|DC|ROC|RE[-\s]?EVAL)\b/i);
+        if (prefixMatch) {
+            return normalizeVisitType(prefixMatch[1]);
+        }
+
+        return null;
     };
 
     const openAddAppointment = (prefillDate = selectedDate, prefillTime?: string) => {
@@ -687,11 +898,66 @@ export function SchedulePage({ sidebarOpen = true }: SchedulePageProps) {
         }, 0);
     };
 
+    // Pinch-to-zoom handlers for mobile
+    const getDistance = (touch1: Touch, touch2: Touch): number => {
+        const dx = touch1.clientX - touch2.clientX;
+        const dy = touch1.clientY - touch2.clientY;
+        return Math.sqrt(dx * dx + dy * dy);
+    };
+
+    const handleZoomTouchStart = useCallback((event: TouchEvent) => {
+        if (event.touches.length === 2) {
+            // Two fingers - start pinch
+            const distance = getDistance(event.touches[0], event.touches[1]);
+            pinchStateRef.current = {
+                initialDistance: distance,
+                initialScale: zoomScale,
+            };
+        }
+    }, [zoomScale]);
+
+    const handleZoomTouchMove = useCallback((event: TouchEvent) => {
+        if (event.touches.length === 2 && pinchStateRef.current) {
+            event.preventDefault();
+            const distance = getDistance(event.touches[0], event.touches[1]);
+            const scaleFactor = distance / pinchStateRef.current.initialDistance;
+            const newScale = Math.min(Math.max(pinchStateRef.current.initialScale * scaleFactor, 0.5), 2);
+            setZoomScale(newScale);
+        }
+    }, []);
+
+    const handleZoomTouchEnd = useCallback(() => {
+        pinchStateRef.current = null;
+    }, []);
+
+    const suppressNextChipClick = () => {
+        suppressNextChipClickRef.current = true;
+        if (suppressChipClickTimerRef.current) {
+            window.clearTimeout(suppressChipClickTimerRef.current);
+        }
+        suppressChipClickTimerRef.current = window.setTimeout(() => {
+            suppressNextChipClickRef.current = false;
+        }, 0);
+    };
+
     const handleAppointmentChipClick = (
         event: MouseEvent<HTMLDivElement>,
         appointmentId: string
     ) => {
         event.stopPropagation();
+        if (suppressNextChipClickRef.current || resizingAppointmentId !== null) {
+            return;
+        }
+        // Open detail modal instead of move mode
+        setDetailAppointmentId(appointmentId);
+    };
+
+    const handleAppointmentLongPress = (
+        event: MouseEvent<HTMLDivElement>,
+        appointmentId: string
+    ) => {
+        event.stopPropagation();
+        // Toggle move mode on long press / right click
         setMoveAppointmentId((current) => (current === appointmentId ? null : appointmentId));
     };
 
@@ -781,34 +1047,11 @@ export function SchedulePage({ sidebarOpen = true }: SchedulePageProps) {
                 }
             }
 
-            let optimizedWithCoordinates = withCoordinates;
-            if (withCoordinates.length >= 2) {
-                try {
-                    const routeResult = await optimizeRoute(
-                        withCoordinates.map((item) => ({
-                            id: item.appointment.id,
-                            lat: item.lat,
-                            lng: item.lng,
-                        })),
-                        homeCoordinates ?? HOME_BASE_FALLBACK_COORDINATES
-                    );
-
-                    const optimizedOrderById = new Map<string, number>(
-                        routeResult.optimizedOrder.map((stop, index) => [stop.locationId, index])
-                    );
-
-                    optimizedWithCoordinates = [...withCoordinates].sort(
-                        (a, b) =>
-                            (optimizedOrderById.get(a.appointment.id) ?? Number.MAX_SAFE_INTEGER) -
-                            (optimizedOrderById.get(b.appointment.id) ?? Number.MAX_SAFE_INTEGER)
-                    );
-                } catch {
-                    optimizedWithCoordinates = orderByNearestNeighbor(
-                        withCoordinates,
-                        homeCoordinates ?? HOME_BASE_FALLBACK_COORDINATES
-                    );
-                }
-            }
+            const homeBase = getHomeBase();
+            const optimizedWithCoordinates = orderByFarthestFromHome(
+                withCoordinates,
+                homeCoordinates ?? { lat: homeBase.lat, lng: homeBase.lng }
+            );
 
             const orderedAppointments = [
                 ...optimizedWithCoordinates.map((item) => item.appointment),
@@ -848,6 +1091,219 @@ export function SchedulePage({ sidebarOpen = true }: SchedulePageProps) {
         }
     };
 
+    const handleClearWeek = async () => {
+        const weekAppointments = (await db.appointments
+            .where("date")
+            .between(weekStart, weekEnd, true, true)
+            .toArray())
+            .slice()
+            .sort((a, b) =>
+                a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date)
+            );
+
+        if (weekAppointments.length === 0) {
+            setWeekActionError(null);
+            setWeekActionMessage("No appointments to clear for this week.");
+            return;
+        }
+
+        const confirmed = window.confirm(
+            `Clear all ${weekAppointments.length} appointment${weekAppointments.length === 1 ? "" : "s"} from ${weekStart} to ${weekEnd}?`
+        );
+        if (!confirmed) {
+            return;
+        }
+
+        setWeekActionInProgress(true);
+        setWeekActionError(null);
+        setWeekActionMessage(null);
+        setMoveAppointmentId(null);
+        setDraggingAppointmentId(null);
+        setResizingAppointmentId(null);
+        setDetailAppointmentId(null);
+        setDraftRenderById({});
+
+        try {
+            const snapshot: ClearedWeekSnapshot = {
+                weekStart,
+                weekEnd,
+                appointments: weekAppointments.map((appointment) => ({
+                    patientId: appointment.patientId,
+                    date: appointment.date,
+                    startTime: appointment.startTime,
+                    duration: appointment.duration,
+                    status: appointment.status,
+                    notes: appointment.notes,
+                })),
+            };
+
+            setLastClearedWeekSnapshot(snapshot);
+
+            let remainingAppointments = weekAppointments;
+            for (let attempt = 0; attempt < 2 && remainingAppointments.length > 0; attempt += 1) {
+                for (const appointment of remainingAppointments) {
+                    await deleteAppointment(appointment.id);
+                }
+
+                remainingAppointments = await db.appointments
+                    .where("date")
+                    .between(weekStart, weekEnd, true, true)
+                    .toArray();
+            }
+
+            await loadByRange(weekStart, weekEnd);
+
+            if (remainingAppointments.length > 0) {
+                setWeekActionError(
+                    `Cleared most appointments, but ${remainingAppointments.length} still remained. Press Clear Week again to remove them.`
+                );
+            } else {
+                setWeekActionMessage(
+                    `Cleared ${weekAppointments.length} appointment${weekAppointments.length === 1 ? "" : "s"} for this week.`
+                );
+            }
+        } catch (err) {
+            setWeekActionError(
+                err instanceof Error ? err.message : "Failed to clear appointments for this week."
+            );
+        } finally {
+            setWeekActionInProgress(false);
+        }
+    };
+
+    const handleUndoClearWeek = async () => {
+        if (!lastClearedWeekSnapshot || lastClearedWeekSnapshot.appointments.length === 0) {
+            setWeekActionError(null);
+            setWeekActionMessage("There is no cleared week to restore.");
+            return;
+        }
+
+        const count = lastClearedWeekSnapshot.appointments.length;
+        const confirmed = window.confirm(
+            `Restore ${count} appointment${count === 1 ? "" : "s"} back to ${lastClearedWeekSnapshot.weekStart} to ${lastClearedWeekSnapshot.weekEnd}?`
+        );
+        if (!confirmed) {
+            return;
+        }
+
+        setWeekActionInProgress(true);
+        setWeekActionError(null);
+        setWeekActionMessage(null);
+
+        try {
+            const orderedAppointments = [...lastClearedWeekSnapshot.appointments].sort((a, b) =>
+                a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date)
+            );
+
+            for (const appointment of orderedAppointments) {
+                await create({
+                    patientId: appointment.patientId,
+                    date: appointment.date,
+                    startTime: appointment.startTime,
+                    duration: appointment.duration,
+                    status: appointment.status,
+                    syncStatus: "local",
+                    notes: appointment.notes,
+                });
+            }
+
+            await loadByRange(lastClearedWeekSnapshot.weekStart, lastClearedWeekSnapshot.weekEnd);
+
+            setWeekActionMessage(`Restored ${count} appointment${count === 1 ? "" : "s"} to the week.`);
+            setLastClearedWeekSnapshot(null);
+        } catch (err) {
+            setWeekActionError(
+                err instanceof Error ? err.message : "Failed to restore the cleared week."
+            );
+        } finally {
+            setWeekActionInProgress(false);
+        }
+    };
+
+    const handleOpenDayMap = async () => {
+        const activeDayAppointments = selectedDayAppointments.filter(
+            (appointment) => appointment.status !== "cancelled"
+        );
+
+        if (activeDayAppointments.length === 0) {
+            setDayMapError("No appointments for this day.");
+            setDayMapInfoMessage(null);
+            setDayMapPoints([]);
+            setIsDayMapOpen(true);
+            return;
+        }
+
+        setDayMapError(null);
+        setDayMapInfoMessage(null);
+        setIsDayMapLoading(true);
+        setIsDayMapOpen(true);
+
+        try {
+            const points: DayMapPoint[] = [];
+            const homeBase = getHomeBase();
+            const home = homeCoordinates ?? { lat: homeBase.lat, lng: homeBase.lng };
+            points.push({
+                id: "home",
+                label: "Home",
+                lat: home.lat,
+                lng: home.lng,
+                isHome: true,
+            });
+
+            const seenPatientIds = new Set<string>();
+            let unresolvedCount = 0;
+
+            for (const appointment of activeDayAppointments) {
+                if (seenPatientIds.has(appointment.patientId)) {
+                    continue;
+                }
+                seenPatientIds.add(appointment.patientId);
+
+                const patient = getPatient(appointment.patientId);
+                const coords = await resolvePatientCoordinatesForRouting(appointment.patientId);
+                if (!coords) {
+                    unresolvedCount += 1;
+                    continue;
+                }
+
+                points.push({
+                    id: appointment.id,
+                    label: `${appointment.startTime} ${patient?.fullName ?? "Unknown Patient"}`,
+                    lat: coords.lat,
+                    lng: coords.lng,
+                    isHome: false,
+                });
+            }
+
+            if (points.length === 1) {
+                setDayMapError("Could not map any patient addresses for this day.");
+                setDayMapInfoMessage(null);
+                setDayMapPoints(points);
+                return;
+            }
+
+            if (unresolvedCount > 0) {
+                setDayMapInfoMessage(
+                    `${unresolvedCount} patient${unresolvedCount === 1 ? "" : "s"} could not be mapped (missing/invalid address).`
+                );
+            } else {
+                setDayMapInfoMessage(null);
+            }
+
+            setDayMapPoints(points);
+        } catch (err) {
+            setDayMapError(err instanceof Error ? err.message : "Failed to build day map.");
+            setDayMapPoints([]);
+        } finally {
+            setIsDayMapLoading(false);
+        }
+    };
+
+    const handleCloseDayMap = () => {
+        setIsDayMapOpen(false);
+        setIsDayMapLoading(false);
+    };
+
     const getRenderedStartMinutes = (appointment: Appointment): number => {
         return draftRenderById[appointment.id]?.startMinutes ?? timeStringToMinutes(appointment.startTime);
     };
@@ -857,19 +1313,26 @@ export function SchedulePage({ sidebarOpen = true }: SchedulePageProps) {
     };
 
     const handleResizeStart = (
-        event: MouseEvent<HTMLButtonElement>,
+        event: MouseEvent<HTMLButtonElement> | TouchEvent<HTMLDivElement>,
         appointment: Appointment,
         edge: "top" | "bottom"
     ) => {
         event.stopPropagation();
         event.preventDefault();
+        suppressNextChipClick();
         setMoveAppointmentId(null);
         setResizingAppointmentId(appointment.id);
         const initialStartMinutes = getRenderedStartMinutes(appointment);
         const initialDuration = getRenderedDuration(appointment);
+
+        // Get clientY from either mouse or touch event
+        const clientY = 'touches' in event
+            ? event.touches[0].clientY
+            : event.clientY;
+
         resizeSessionRef.current = {
             appointmentId: appointment.id,
-            startY: event.clientY,
+            startY: clientY,
             edge,
             initialStartMinutes,
             initialDuration,
@@ -882,12 +1345,12 @@ export function SchedulePage({ sidebarOpen = true }: SchedulePageProps) {
     };
 
     useEffect(() => {
-        const handleMouseMove = (event: globalThis.MouseEvent) => {
+        const handleMove = (clientY: number) => {
             const session = resizeSessionRef.current;
             if (!session) {
                 return;
             }
-            const deltaSlots = Math.round((event.clientY - session.startY) / SLOT_HEIGHT_PX);
+            const deltaSlots = Math.round((clientY - session.startY) / SLOT_HEIGHT_PX);
 
             let nextStartMinutes = session.initialStartMinutes;
             let nextDuration = session.initialDuration;
@@ -934,7 +1397,17 @@ export function SchedulePage({ sidebarOpen = true }: SchedulePageProps) {
             }));
         };
 
-        const handleMouseUp = () => {
+        const handleMouseMove = (event: globalThis.MouseEvent) => {
+            handleMove(event.clientY);
+        };
+
+        const handleTouchMove = (event: TouchEvent) => {
+            if (!resizeSessionRef.current) return;
+            event.preventDefault(); // Prevent scrolling while resizing
+            handleMove(event.touches[0].clientY);
+        };
+
+        const handleEnd = () => {
             const session = resizeSessionRef.current;
             if (!session) {
                 return;
@@ -962,13 +1435,20 @@ export function SchedulePage({ sidebarOpen = true }: SchedulePageProps) {
             setResizingAppointmentId(null);
             resizeSessionRef.current = null;
             resizeDraftRef.current = null;
+            suppressNextChipClick();
         };
 
         window.addEventListener("mousemove", handleMouseMove);
-        window.addEventListener("mouseup", handleMouseUp);
+        window.addEventListener("mouseup", handleEnd);
+        window.addEventListener("touchmove", handleTouchMove, { passive: false });
+        window.addEventListener("touchend", handleEnd);
+        window.addEventListener("touchcancel", handleEnd);
         return () => {
             window.removeEventListener("mousemove", handleMouseMove);
-            window.removeEventListener("mouseup", handleMouseUp);
+            window.removeEventListener("mouseup", handleEnd);
+            window.removeEventListener("touchmove", handleTouchMove);
+            window.removeEventListener("touchend", handleEnd);
+            window.removeEventListener("touchcancel", handleEnd);
         };
     }, [update]);
 
@@ -977,6 +1457,189 @@ export function SchedulePage({ sidebarOpen = true }: SchedulePageProps) {
             if (suppressClickTimerRef.current) {
                 window.clearTimeout(suppressClickTimerRef.current);
             }
+            if (suppressChipClickTimerRef.current) {
+                window.clearTimeout(suppressChipClickTimerRef.current);
+            }
+        };
+    }, []);
+
+    // Fetch external calendar events when week or enabled calendars change
+    useEffect(() => {
+        if (!isSignedIn()) {
+            setExternalEvents([]);
+            return;
+        }
+
+        let cancelled = false;
+
+        const fetchExternalEvents = async () => {
+            // Get enabled external calendars (exclude pt-appointments which is our internal calendar)
+            const enabledExternalCalendars = googleCalendars.filter(
+                (cal) => enabledCalendars[cal.id] !== false
+            );
+
+            if (enabledExternalCalendars.length === 0) {
+                setExternalEvents([]);
+                return;
+            }
+
+            // Build time range for the week
+            const timeMin = new Date(`${weekStart}T00:00:00`).toISOString();
+            const timeMax = new Date(`${weekEnd}T23:59:59`).toISOString();
+
+            const allEvents: ExternalCalendarEvent[] = [];
+
+            // Fetch events from each enabled calendar in parallel
+            const results = await Promise.allSettled(
+                enabledExternalCalendars.map(async (cal) => {
+                    try {
+                        const result = await fetchCalendarEvents(cal.id, timeMin, timeMax);
+                        if (result.error) {
+                            console.warn(`Calendar ${cal.summary} returned error: ${result.error}`);
+                        }
+                        return result.events
+                            // Filter out PT Scheduler appointments (they start with "PT: ")
+                            .filter((event) => !event.summary.startsWith("PT: "))
+                            .map((event) => ({
+                                id: event.id,
+                                calendarId: cal.id,
+                                summary: event.summary,
+                                startDateTime: event.startDateTime,
+                                endDateTime: event.endDateTime,
+                                location: event.location,
+                                backgroundColor: cal.backgroundColor,
+                            }));
+                    } catch (err) {
+                        console.warn(`Failed to fetch events from ${cal.summary}:`, err);
+                        return [];
+                    }
+                })
+            );
+
+            for (const result of results) {
+                if (result.status === "fulfilled") {
+                    allEvents.push(...result.value);
+                }
+            }
+
+            if (!cancelled) {
+                setExternalEvents(allEvents);
+            }
+        };
+
+        void fetchExternalEvents();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [weekStart, weekEnd, googleCalendars, enabledCalendars, setExternalEvents]);
+
+    const dayMapDirectionsHref = useMemo(() => {
+        const homePoint = dayMapPoints.find((point) => point.isHome);
+        if (!homePoint) {
+            return null;
+        }
+
+        const patientStops = dayMapPoints
+            .filter((point) => !point.isHome)
+            .map((point) => ({ lat: point.lat, lng: point.lng }));
+        return buildGoogleMapsDirectionsFromCoordinatesHref(
+            { lat: homePoint.lat, lng: homePoint.lng },
+            patientStops
+        );
+    }, [dayMapPoints]);
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const renderMap = async () => {
+            if (!isDayMapOpen || !dayMapContainerRef.current || dayMapPoints.length === 0) {
+                return;
+            }
+
+            const L = await import("leaflet");
+            if (cancelled || !dayMapContainerRef.current) {
+                return;
+            }
+
+            if (!dayMapInstanceRef.current) {
+                dayMapInstanceRef.current = L.map(dayMapContainerRef.current, {
+                    zoomControl: true,
+                    attributionControl: true,
+                });
+
+                L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+                    maxZoom: 19,
+                    attribution: "&copy; OpenStreetMap contributors",
+                }).addTo(dayMapInstanceRef.current);
+
+                dayMapLayerRef.current = L.layerGroup().addTo(dayMapInstanceRef.current);
+            }
+
+            const map = dayMapInstanceRef.current;
+            const layer = dayMapLayerRef.current;
+            if (!map || !layer) {
+                return;
+            }
+
+            layer.clearLayers();
+            const bounds = L.latLngBounds([]);
+
+            for (let index = 0; index < dayMapPoints.length; index += 1) {
+                const point = dayMapPoints[index];
+                const color = point.isHome ? "#d93025" : "#1a73e8";
+                const marker = L.circleMarker([point.lat, point.lng], {
+                    radius: point.isHome ? 9 : 7,
+                    color,
+                    weight: 2,
+                    fillColor: color,
+                    fillOpacity: 0.9,
+                });
+                marker.bindTooltip(
+                    point.isHome ? "Home" : `${index}. ${point.label}`,
+                    {
+                        direction: "top",
+                        offset: [0, -4],
+                    }
+                );
+                marker.addTo(layer);
+                bounds.extend([point.lat, point.lng]);
+            }
+
+            if (dayMapPoints.length > 1) {
+                const routeCoordinates = dayMapPoints.map((point) => [point.lat, point.lng]) as [
+                    number,
+                    number
+                ][];
+                L.polyline(routeCoordinates, {
+                    color: "#1a73e8",
+                    opacity: 0.55,
+                    weight: 3,
+                    dashArray: "6,6",
+                }).addTo(layer);
+            }
+
+            if (bounds.isValid()) {
+                map.fitBounds(bounds.pad(0.2), { maxZoom: 14 });
+            }
+
+            window.setTimeout(() => {
+                map.invalidateSize();
+            }, 0);
+        };
+
+        void renderMap();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [isDayMapOpen, dayMapPoints]);
+
+    useEffect(() => {
+        return () => {
+            dayMapInstanceRef.current?.remove();
+            dayMapInstanceRef.current = null;
+            dayMapLayerRef.current = null;
         };
     }, []);
 
@@ -1023,11 +1686,57 @@ export function SchedulePage({ sidebarOpen = true }: SchedulePageProps) {
                     <h1 className="text-[22px] font-normal text-[#3c4043]">{monthYearDisplay}</h1>
                 </div>
 
-                <div className="flex items-center gap-2">
-                    <button className="flex items-center gap-2 px-3 h-9 border border-[#dadce0] rounded text-sm font-medium text-[#3c4043] hover:bg-[#f1f3f4] transition-colors">
-                        <span>Week</span>
-                        <ChevronDown className="w-4 h-4" />
+                <div className="relative flex items-center gap-2">
+                    <button
+                        onClick={() => void handleOpenDayMap()}
+                        disabled={isDayMapLoading}
+                        className="px-3 h-9 border border-[#dadce0] rounded text-sm font-medium text-[#1a73e8] hover:bg-[#e8f0fe] transition-colors disabled:opacity-60"
+                    >
+                        {isDayMapLoading ? "Mapping..." : "Day Map"}
                     </button>
+                    <button
+                        onClick={() => void handleClearWeek()}
+                        disabled={weekActionInProgress}
+                        className="px-3 h-9 border border-[#f2b8b5] rounded text-sm font-medium text-[#b3261e] hover:bg-[#fce8e6] transition-colors disabled:opacity-60"
+                    >
+                        {weekActionInProgress ? "Working..." : "Clear Week"}
+                    </button>
+                    <button
+                        onClick={() => void handleUndoClearWeek()}
+                        disabled={weekActionInProgress || !lastClearedWeekSnapshot}
+                        className="px-3 h-9 border border-[#dadce0] rounded text-sm font-medium text-[#3c4043] hover:bg-[#f1f3f4] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                        Undo Clear
+                    </button>
+                    <button
+                        onClick={() => setViewDropdownOpen(!viewDropdownOpen)}
+                        className="flex items-center gap-2 px-3 h-9 border border-[#dadce0] rounded text-sm font-medium text-[#3c4043] hover:bg-[#f1f3f4] transition-colors"
+                    >
+                        <span>{viewMode === 'week' ? 'Week' : 'Day'}</span>
+                        <ChevronDown className={`w-4 h-4 transition-transform ${viewDropdownOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                    {viewDropdownOpen && (
+                        <div className="absolute top-full right-0 mt-1 bg-white border border-[#dadce0] rounded-lg shadow-lg z-50 min-w-[120px]">
+                            <button
+                                onClick={() => {
+                                    setViewMode('day');
+                                    setViewDropdownOpen(false);
+                                }}
+                                className={`w-full px-4 py-2 text-left text-sm hover:bg-[#f1f3f4] ${viewMode === 'day' ? 'text-[#1a73e8] font-medium' : 'text-[#3c4043]'}`}
+                            >
+                                Day
+                            </button>
+                            <button
+                                onClick={() => {
+                                    setViewMode('week');
+                                    setViewDropdownOpen(false);
+                                }}
+                                className={`w-full px-4 py-2 text-left text-sm hover:bg-[#f1f3f4] ${viewMode === 'week' ? 'text-[#1a73e8] font-medium' : 'text-[#3c4043]'}`}
+                            >
+                                Week
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -1040,24 +1749,49 @@ export function SchedulePage({ sidebarOpen = true }: SchedulePageProps) {
                 </div>
             )}
 
+            {weekActionMessage && (
+                <div className="px-4 py-2 bg-[#e6f4ea] border-b border-[#ceead6]">
+                    <p className="text-sm text-[#137333]">{weekActionMessage}</p>
+                </div>
+            )}
+
+            {weekActionError && (
+                <div className="px-4 py-2 bg-[#fce8e6] border-b border-[#f6c7c3]">
+                    <p className="text-sm text-[#b3261e]">{weekActionError}</p>
+                </div>
+            )}
+
             {/* Main grid area */}
-            <div className="flex-1 overflow-auto">
+            <div
+                ref={zoomContainerRef}
+                className="flex-1 overflow-auto"
+                onTouchStart={handleZoomTouchStart}
+                onTouchMove={handleZoomTouchMove}
+                onTouchEnd={handleZoomTouchEnd}
+            >
                 {loading ? (
                     <div className="h-full flex items-center justify-center">
                         <p className="text-[#5f6368]">Loading appointments...</p>
                     </div>
                 ) : (
-                    <div className="min-w-[900px]">
+                    <div
+                        className={viewMode === 'day' ? 'min-w-[300px]' : 'min-w-[900px]'}
+                        style={{
+                            transform: `scale(${zoomScale})`,
+                            transformOrigin: 'top left',
+                            width: zoomScale < 1 ? `${100 / zoomScale}%` : undefined,
+                        }}
+                    >
                         {/* Day headers */}
                         <div className="sticky top-0 z-20 bg-white border-b border-[#dadce0]">
-                            <div className="grid grid-cols-[60px_repeat(7,1fr)]">
+                            <div className={`grid ${viewMode === 'day' ? 'grid-cols-[60px_1fr]' : 'grid-cols-[60px_repeat(7,1fr)]'}`}>
                                 {/* GMT offset */}
                                 <div className="py-2 px-1 text-right">
                                     <span className="text-[10px] text-[#70757a]">GMT-07</span>
                                 </div>
 
                                 {/* Day headers */}
-                                {weekDates.map((date) => {
+                                {displayDates.map((date) => {
                                     const asDate = parseIsoDate(date);
                                     const dayLabel = asDate.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
                                     const dayNumber = asDate.getDate();
@@ -1102,7 +1836,7 @@ export function SchedulePage({ sidebarOpen = true }: SchedulePageProps) {
                         </div>
 
                         {/* Time grid */}
-                        <div className="grid grid-cols-[60px_repeat(7,1fr)]">
+                        <div className={`grid ${viewMode === 'day' ? 'grid-cols-[60px_1fr]' : 'grid-cols-[60px_repeat(7,1fr)]'}`}>
                             {/* Time axis */}
                             <div className="border-r border-[#dadce0]">
                                 {timeSlots.map((slotMinutes, slotIndex) => (
@@ -1121,7 +1855,7 @@ export function SchedulePage({ sidebarOpen = true }: SchedulePageProps) {
                             </div>
 
                             {/* Day columns */}
-                            {weekDates.map((date) => {
+                            {displayDates.map((date) => {
                                 const dayAppointments = appointmentsByDay[date] ?? [];
                                 const groupedByStartTime = dayAppointments.reduce<Record<string, Appointment[]>>(
                                     (current, appointment) => {
@@ -1196,9 +1930,9 @@ export function SchedulePage({ sidebarOpen = true }: SchedulePageProps) {
                                             />
                                         )}
 
-                                        {/* Appointments */}
+                                        {/* Appointments - only show if PT Appointments toggle is enabled */}
                                         <div className="pointer-events-none absolute inset-0">
-                                            {dayAppointments.map((appointment) => {
+                                            {enabledCalendars["pt-appointments"] !== false && dayAppointments.map((appointment) => {
                                                 const displayDuration = getRenderedDuration(appointment);
                                                 const startMinutes = getRenderedStartMinutes(appointment);
                                                 const blockStart = Math.max(startMinutes, DAY_START_MINUTES);
@@ -1238,6 +1972,11 @@ export function SchedulePage({ sidebarOpen = true }: SchedulePageProps) {
                                                     resizingAppointmentId === appointment.id;
                                                 const patient = getPatient(appointment.patientId);
                                                 const legInfo = legInfoByAppointmentId[appointment.id];
+                                                const visitType = getVisitTypeFromAppointment(appointment);
+                                                const showMilesRow = heightPx >= 46;
+                                                const showPhoneRow = heightPx >= 58;
+                                                const showAddressRow = heightPx >= 72;
+                                                const showAlternateContactRows = heightPx >= 88;
 
                                                 return (
                                                     <div
@@ -1263,109 +2002,252 @@ export function SchedulePage({ sidebarOpen = true }: SchedulePageProps) {
                                                             backgroundColor: '#039be5',
                                                             borderLeft: '4px solid #0288d1',
                                                         }}
-                                                        title={`${getPatientName(appointment.patientId)} - ${patient?.phone || 'No phone'}`}
+                                                        title={`${getPatientName(appointment.patientId)}${patient?.phone ? ` - ${patient.phone}` : ''}${patient?.address ? ` - ${patient.address}` : ''}`}
                                                     >
-                                                        <div className="p-1.5 h-full flex flex-col">
-                                                            <div className="font-medium truncate">
+                                                        {/* Drag handle on left side */}
+                                                        <div
+                                                            className="absolute left-0 top-0 bottom-0 w-4 bg-black/15 flex items-center justify-center cursor-grab active:cursor-grabbing touch-none"
+                                                        >
+                                                            <GripVertical className="w-3 h-3 text-white/60" />
+                                                        </div>
+                                                        {/* Main content area */}
+                                                        <div
+                                                            className="absolute left-4 right-1 top-0 bottom-0 overflow-hidden text-[9px] leading-tight"
+                                                            style={{
+                                                                display: 'flex',
+                                                                flexDirection: 'column',
+                                                                alignItems: 'flex-start',
+                                                                gap: '1px',
+                                                                padding: '2px 0 11px 0',
+                                                            }}
+                                                        >
+                                                            <div className="font-semibold truncate text-[11px] leading-[1.1] min-h-[12px] w-full overflow-hidden">
                                                                 {getPatientName(appointment.patientId)}
                                                             </div>
-                                                            {heightPx >= 44 && (
-                                                                <div className="text-[10px] opacity-90 truncate">
-                                                                    {minutesToTimeString(startMinutes)} - {displayDuration}min
+                                                            {visitType && (
+                                                                <div className="opacity-95 truncate min-h-[11px] w-full overflow-hidden font-medium text-[9px]">
+                                                                    [{visitType}]
                                                                 </div>
                                                             )}
-                                                            {/* Phone - clickable */}
-                                                            {heightPx >= 56 && patient?.phone && (
+                                                            <div className="opacity-90 truncate min-h-[11px] w-full overflow-hidden text-[9px]">
+                                                                {minutesToTimeString(startMinutes)} ({displayDuration}m)
+                                                            </div>
+                                                            {showMilesRow && legInfo?.miles != null && (
+                                                                <div className="inline-flex items-center gap-0.5 opacity-85 truncate min-h-[11px] max-w-full overflow-hidden text-[9px]">
+                                                                    <Car className="w-2 h-2 shrink-0" />
+                                                                    <span className="truncate">{legInfo.miles.toFixed(1)} mi</span>
+                                                                </div>
+                                                            )}
+                                                            {showPhoneRow && patient?.phone && (
                                                                 <a
                                                                     href={buildPhoneHref(patient.phone)!}
                                                                     onClick={(e) => e.stopPropagation()}
-                                                                    className="text-[10px] opacity-90 truncate flex items-center gap-1 hover:opacity-100 hover:underline"
+                                                                    onMouseDown={(e) => e.stopPropagation()}
+                                                                    onPointerDown={(e) => e.stopPropagation()}
+                                                                    className="inline-flex w-fit max-w-full items-center gap-0.5 hover:underline pointer-events-auto min-h-[11px] overflow-hidden whitespace-nowrap text-ellipsis opacity-90 text-[9px]"
+                                                                    draggable={false}
                                                                 >
-                                                                    <Phone className="w-3 h-3 flex-shrink-0" />
-                                                                    {patient.phone}
+                                                                    <Phone className="w-2 h-2 shrink-0" />
+                                                                    <span className="truncate">{patient.phone}</span>
                                                                 </a>
                                                             )}
-                                                            {/* Address - clickable */}
-                                                            {heightPx >= 72 && patient?.address && (
+                                                            {showAddressRow && patient?.address && (
                                                                 <a
-                                                                    href={buildMapsHref(patient.address)!}
+                                                                    href={buildGoogleMapsHref(patient.address)!}
                                                                     target="_blank"
                                                                     rel="noopener noreferrer"
                                                                     onClick={(e) => e.stopPropagation()}
-                                                                    className="text-[10px] opacity-90 truncate flex items-center gap-1 hover:opacity-100 hover:underline"
+                                                                    onMouseDown={(e) => e.stopPropagation()}
+                                                                    onPointerDown={(e) => e.stopPropagation()}
+                                                                    className="inline-flex w-fit max-w-full items-center gap-0.5 hover:underline pointer-events-auto min-h-[11px] overflow-hidden whitespace-nowrap text-ellipsis opacity-90 text-[9px]"
+                                                                    draggable={false}
                                                                 >
-                                                                    <MapPin className="w-3 h-3 flex-shrink-0" />
-                                                                    {patient.address.split(',')[0]}
+                                                                    <MapPin className="w-2 h-2 shrink-0" />
+                                                                    <span className="truncate">{patient.address.split(',')[0]}</span>
                                                                 </a>
                                                             )}
-                                                            {/* Drive distance */}
-                                                            {heightPx >= 88 && legInfo?.miles != null && (
-                                                                <div className="text-[10px] opacity-80 truncate flex items-center gap-1">
-                                                                    <Car className="w-3 h-3 flex-shrink-0" />
-                                                                    {legInfo.fromHome ? 'Home' : 'Prev'}: {legInfo.miles.toFixed(1)}mi
-                                                                </div>
-                                                            )}
+                                                            {showAlternateContactRows && patient?.alternateContacts?.map((contact, idx) => (
+                                                                <a
+                                                                    key={idx}
+                                                                    href={buildPhoneHref(contact.phone)!}
+                                                                    onClick={(e) => e.stopPropagation()}
+                                                                    onMouseDown={(e) => e.stopPropagation()}
+                                                                    onPointerDown={(e) => e.stopPropagation()}
+                                                                    className="inline-flex w-fit max-w-full items-center gap-0.5 hover:underline pointer-events-auto min-h-[11px] overflow-hidden whitespace-nowrap text-ellipsis opacity-80 text-[9px]"
+                                                                    draggable={false}
+                                                                >
+                                                                    <Phone className="w-2 h-2 shrink-0" />
+                                                                    <span className="truncate">{contact.firstName ? `${contact.firstName}: ` : ''}{contact.phone}</span>
+                                                                </a>
+                                                            ))}
                                                         </div>
 
-                                                        {/* Quick action buttons - always visible at bottom when chip is tall enough */}
-                                                        {heightPx >= 100 && (patient?.phone || patient?.address) && (
-                                                            <div className="absolute bottom-1 left-1 right-1 flex gap-1">
-                                                                {buildPhoneHref(patient?.phone) && (
-                                                                    <a
-                                                                        href={buildPhoneHref(patient?.phone)!}
-                                                                        onClick={(e) => e.stopPropagation()}
-                                                                        className="flex-1 flex items-center justify-center gap-1 py-1 bg-black/30 hover:bg-black/50 rounded text-[10px] transition-colors"
-                                                                        aria-label={`Call ${patient?.fullName}`}
+                                                        {/* Resize handles - positioned to not overlap action buttons */}
+                                                        {/* Top resize handle */}
+                                                        <div
+                                                            onMouseDown={(event) => {
+                                                                event.stopPropagation();
+                                                                handleResizeStart(event as unknown as MouseEvent<HTMLButtonElement>, appointment, "top");
+                                                            }}
+                                                            onTouchStart={(event) => {
+                                                                event.stopPropagation();
+                                                                handleResizeStart(event, appointment, "top");
+                                                            }}
+                                                            className="absolute left-0 top-0 h-4 cursor-ns-resize pointer-events-auto touch-none"
+                                                            style={{ right: '28px' }}
+                                                        >
+                                                            {/* Visual indicator for touch */}
+                                                            <div className="absolute inset-x-4 top-1 h-1 bg-white/30 rounded-full" />
+                                                        </div>
+                                                        {/* Bottom resize handle */}
+                                                        <div
+                                                            onMouseDown={(event) => {
+                                                                event.stopPropagation();
+                                                                handleResizeStart(event as unknown as MouseEvent<HTMLButtonElement>, appointment, "bottom");
+                                                            }}
+                                                            onTouchStart={(event) => {
+                                                                event.stopPropagation();
+                                                                handleResizeStart(event, appointment, "bottom");
+                                                            }}
+                                                            className="absolute left-0 bottom-0 h-4 cursor-ns-resize pointer-events-auto touch-none"
+                                                            style={{ right: '60px' }}
+                                                        >
+                                                            {/* Visual indicator for touch */}
+                                                            <div className="absolute inset-x-4 bottom-1 h-1 bg-white/30 rounded-full" />
+                                                        </div>
+
+                                                        {/* Delete button - top right, above resize handles */}
+                                                        <button
+                                                            type="button"
+                                                            draggable={false}
+                                                            onPointerDown={(e) => {
+                                                                e.stopPropagation();
+                                                            }}
+                                                            onMouseDown={(e) => {
+                                                                e.stopPropagation();
+                                                            }}
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                e.preventDefault();
+                                                                void handleDeleteAppointment(appointment);
+                                                            }}
+                                                            className="btn-sm absolute top-0 right-0 w-3 h-3 rounded-full bg-black/30 hover:bg-red-500 flex items-center justify-center transition-colors z-20 pointer-events-auto"
+                                                            style={{ touchAction: 'manipulation' }}
+                                                            aria-label={`Delete appointment for ${getPatientName(appointment.patientId)}`}
+                                                        >
+                                                            <X className="w-2 h-2" />
+                                                        </button>
+
+                                                        {/* Call & Navigate buttons - bottom right, above resize handles */}
+                                                        {(patient?.phone || patient?.address) && (
+                                                            <div className="absolute bottom-0 right-0 flex gap-px z-20 pointer-events-auto">
+                                                                {patient?.phone && (
+                                                                    <button
+                                                                        type="button"
+                                                                        draggable={false}
+                                                                        onPointerDown={(e) => {
+                                                                            e.stopPropagation();
+                                                                        }}
+                                                                        onMouseDown={(e) => {
+                                                                            e.stopPropagation();
+                                                                        }}
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            e.preventDefault();
+                                                                            window.location.href = buildPhoneHref(patient.phone)!;
+                                                                        }}
+                                                                        className="btn-sm w-3 h-3 flex items-center justify-center rounded-sm bg-white/25 hover:bg-white/50 transition-colors pointer-events-auto"
+                                                                        style={{ touchAction: 'manipulation' }}
+                                                                        aria-label={`Call ${patient.fullName}`}
                                                                     >
-                                                                        <Phone className="w-3 h-3" />
-                                                                        Call
-                                                                    </a>
+                                                                        <Phone className="w-2 h-2" />
+                                                                    </button>
                                                                 )}
-                                                                {buildMapsHref(patient?.address) && (
-                                                                    <a
-                                                                        href={buildMapsHref(patient?.address)!}
-                                                                        target="_blank"
-                                                                        rel="noopener noreferrer"
-                                                                        onClick={(e) => e.stopPropagation()}
-                                                                        className="flex-1 flex items-center justify-center gap-1 py-1 bg-black/30 hover:bg-black/50 rounded text-[10px] transition-colors"
-                                                                        aria-label={`Navigate to ${patient?.fullName}`}
+                                                                {patient?.address && (
+                                                                    <button
+                                                                        type="button"
+                                                                        draggable={false}
+                                                                        onPointerDown={(e) => {
+                                                                            e.stopPropagation();
+                                                                        }}
+                                                                        onMouseDown={(e) => {
+                                                                            e.stopPropagation();
+                                                                        }}
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            e.preventDefault();
+                                                                            if (isIOS()) {
+                                                                                setMapsMenuAddress(patient.address);
+                                                                            } else {
+                                                                                window.open(buildGoogleMapsHref(patient.address)!, '_blank');
+                                                                            }
+                                                                        }}
+                                                                        className="btn-sm w-3 h-3 flex items-center justify-center rounded-sm bg-white/25 hover:bg-white/50 transition-colors pointer-events-auto"
+                                                                        style={{ touchAction: 'manipulation' }}
+                                                                        aria-label={`Navigate to ${patient.fullName}`}
                                                                     >
-                                                                        <Navigation className="w-3 h-3" />
-                                                                        Navigate
-                                                                    </a>
+                                                                        <Navigation className="w-2 h-2" />
+                                                                    </button>
                                                                 )}
                                                             </div>
                                                         )}
 
-                                                        {/* Delete button */}
-                                                        <button
-                                                            type="button"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                void handleDeleteAppointment(appointment);
-                                                            }}
-                                                            className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/20 flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
-                                                        >
-                                                            <X className="w-3 h-3" />
-                                                        </button>
+                                                    </div>
+                                                );
+                                            })}
 
-                                                        {/* Resize handles */}
-                                                        <button
-                                                            type="button"
-                                                            onMouseDown={(event) =>
-                                                                handleResizeStart(event, appointment, "top")
-                                                            }
-                                                            onClick={(event) => event.stopPropagation()}
-                                                            className="absolute left-0 right-0 top-0 h-2 cursor-ns-resize"
-                                                        />
-                                                        <button
-                                                            type="button"
-                                                            onMouseDown={(event) =>
-                                                                handleResizeStart(event, appointment, "bottom")
-                                                            }
-                                                            onClick={(event) => event.stopPropagation()}
-                                                            className="absolute bottom-0 left-0 right-0 h-2 cursor-ns-resize"
-                                                        />
+                                            {/* External calendar events - only show events from enabled calendars */}
+                                            {(externalEventsByDay[date] ?? [])
+                                                .filter((event) => enabledCalendars[event.calendarId] !== false)
+                                                .map((event) => {
+                                                // Parse start/end times
+                                                const startDate = new Date(event.startDateTime);
+                                                const endDate = new Date(event.endDateTime);
+                                                const startMinutes = startDate.getHours() * 60 + startDate.getMinutes();
+                                                const endMinutes = endDate.getHours() * 60 + endDate.getMinutes();
+
+                                                // Handle all-day events or events outside visible range
+                                                const blockStart = Math.max(startMinutes, DAY_START_MINUTES);
+                                                const blockEnd = Math.min(endMinutes || DAY_END_MINUTES, DAY_END_MINUTES);
+
+                                                if (blockEnd <= blockStart) {
+                                                    return null;
+                                                }
+
+                                                const topPx = ((blockStart - DAY_START_MINUTES) / SLOT_MINUTES) * SLOT_HEIGHT_PX + 1;
+                                                const heightPx = Math.max(
+                                                    SLOT_HEIGHT_PX - 2,
+                                                    ((blockEnd - blockStart) / SLOT_MINUTES) * SLOT_HEIGHT_PX - 2
+                                                );
+
+                                                // Use calendar color or default
+                                                const bgColor = event.backgroundColor || "#33b679";
+
+                                                return (
+                                                    <div
+                                                        key={`ext-${event.id}`}
+                                                        className="absolute rounded overflow-hidden text-white text-xs opacity-80"
+                                                        style={{
+                                                            top: topPx,
+                                                            height: heightPx,
+                                                            right: "2px",
+                                                            width: "calc(40% - 2px)",
+                                                            backgroundColor: bgColor,
+                                                            borderLeft: `3px solid ${bgColor}`,
+                                                            filter: "brightness(0.9)",
+                                                        }}
+                                                        title={`${event.summary}${event.location ? ` - ${event.location}` : ''}`}
+                                                    >
+                                                        <div className="p-1 h-full flex flex-col overflow-hidden">
+                                                            <div className="font-medium truncate text-[10px]">
+                                                                {event.summary}
+                                                            </div>
+                                                            {heightPx >= 32 && (
+                                                                <div className="text-[9px] opacity-90 truncate">
+                                                                    {startDate.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 );
                                             })}
@@ -1424,10 +2306,83 @@ export function SchedulePage({ sidebarOpen = true }: SchedulePageProps) {
                 )}
             </div>
 
+            {/* Day Map Modal */}
+            {isDayMapOpen && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/35"
+                    onClick={handleCloseDayMap}
+                >
+                    <div
+                        className="bg-white rounded-lg shadow-2xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden animate-slide-in"
+                        onClick={(event) => event.stopPropagation()}
+                    >
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-[#dadce0]">
+                            <div>
+                                <h2 className="text-base font-medium text-[#202124]">Day Map</h2>
+                                <p className="text-xs text-[#5f6368]">{selectedDate}</p>
+                            </div>
+                            <button
+                                onClick={handleCloseDayMap}
+                                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#f1f3f4]"
+                                aria-label="Close day map"
+                            >
+                                <X className="w-5 h-5 text-[#5f6368]" />
+                            </button>
+                        </div>
+
+                        <div className="p-4 space-y-3">
+                            {isDayMapLoading && (
+                                <p className="text-sm text-[#5f6368]">Building map...</p>
+                            )}
+
+                            {dayMapError && (
+                                <p className="text-sm text-[#b3261e] bg-[#fce8e6] border border-[#f6c7c3] rounded px-3 py-2">
+                                    {dayMapError}
+                                </p>
+                            )}
+
+                            {dayMapInfoMessage && (
+                                <p className="text-sm text-[#1e8e3e] bg-[#e6f4ea] border border-[#ceead6] rounded px-3 py-2">
+                                    {dayMapInfoMessage}
+                                </p>
+                            )}
+
+                            <div
+                                ref={dayMapContainerRef}
+                                className="w-full h-[52vh] min-h-[320px] rounded border border-[#dadce0]"
+                            />
+                        </div>
+
+                        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-[#dadce0]">
+                            <Button
+                                variant="secondary"
+                                onClick={() => {
+                                    if (dayMapDirectionsHref) {
+                                        window.open(dayMapDirectionsHref, "_blank");
+                                    }
+                                }}
+                                disabled={!dayMapDirectionsHref || isDayMapLoading}
+                            >
+                                Open in Google Maps
+                            </Button>
+                            <Button variant="ghost" onClick={handleCloseDayMap}>
+                                Close
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Add Appointment Modal */}
             {isAddOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
-                    <div className="bg-white rounded-lg shadow-2xl w-full max-w-md mx-4 animate-slide-in">
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+                    onClick={cancelAddAppointment}
+                >
+                    <div
+                        className="bg-white rounded-lg shadow-2xl w-full max-w-md mx-4 animate-slide-in"
+                        onClick={(event) => event.stopPropagation()}
+                    >
                         <div className="flex items-center justify-between px-6 py-4 border-b border-[#dadce0]">
                             <h2 className="text-lg font-medium text-[#202124]">New Appointment</h2>
                             <button
@@ -1544,6 +2499,85 @@ export function SchedulePage({ sidebarOpen = true }: SchedulePageProps) {
                     {autoArrangeError}
                 </div>
             )}
+
+            {/* Maps Choice Menu */}
+            {mapsMenuAddress && (
+                <div
+                    className="fixed inset-0 z-50 flex items-end justify-center bg-black/30"
+                    onClick={() => setMapsMenuAddress(null)}
+                >
+                    <div
+                        className="bg-white rounded-t-xl shadow-2xl w-full max-w-md mx-4 mb-0 animate-slide-in safe-area-pb"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <div className="p-4 border-b border-[#dadce0]">
+                            <h3 className="text-center text-sm font-medium text-[#5f6368]">
+                                Open in Maps
+                            </h3>
+                        </div>
+                        <div className="p-2">
+                            <button
+                                onClick={() => {
+                                    window.open(buildAppleMapsHref(mapsMenuAddress)!, '_blank');
+                                    setMapsMenuAddress(null);
+                                }}
+                                className="w-full py-3 px-4 text-left text-[#1a73e8] hover:bg-[#f1f3f4] rounded-lg font-medium"
+                            >
+                                Apple Maps
+                            </button>
+                            <button
+                                onClick={() => {
+                                    window.open(buildGoogleMapsHref(mapsMenuAddress)!, '_blank');
+                                    setMapsMenuAddress(null);
+                                }}
+                                className="w-full py-3 px-4 text-left text-[#1a73e8] hover:bg-[#f1f3f4] rounded-lg font-medium"
+                            >
+                                Google Maps
+                            </button>
+                        </div>
+                        <div className="p-2 border-t border-[#dadce0]">
+                            <button
+                                onClick={() => setMapsMenuAddress(null)}
+                                className="w-full py-3 px-4 text-center text-[#5f6368] hover:bg-[#f1f3f4] rounded-lg font-medium"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Appointment Detail Modal */}
+            {detailAppointmentId && (() => {
+                const detailAppointment = appointments.find((apt) => apt.id === detailAppointmentId);
+                const detailPatient = detailAppointment ? patientById.get(detailAppointment.patientId) : undefined;
+
+                if (!detailAppointment) {
+                    return null;
+                }
+
+                return (
+                    <AppointmentDetailModal
+                        appointment={detailAppointment}
+                        patient={detailPatient}
+                        isOpen={true}
+                        onClose={() => setDetailAppointmentId(null)}
+                        onSavePatient={async (patientId, changes) => {
+                            await updatePatient(patientId, changes);
+                        }}
+                        onSaveAppointment={async (appointmentId, changes) => {
+                            await update(appointmentId, changes);
+                        }}
+                        onSyncToSheet={async (updatedPatient) => {
+                            // Get spreadsheet ID from sync store
+                            const { spreadsheetId } = useSyncStore.getState();
+                            if (spreadsheetId && isSignedIn()) {
+                                await syncPatientToSheetByStatus(spreadsheetId, updatedPatient);
+                            }
+                        }}
+                    />
+                );
+            })()}
         </div>
     );
 }

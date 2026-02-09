@@ -6,6 +6,7 @@ import { z } from "zod";
 
 export const extractedAppointmentSchema = z.object({
   rawName: z.string().min(1),
+  visitType: z.string().optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD format"),
   time: z.string().regex(/^\d{2}:\d{2}$/, "Must be HH:mm format"),
   duration: z.number().int().min(15).max(240),
@@ -55,6 +56,25 @@ export const extractPatientResponseSchema = z.object({
   notes: z.string().default("")
 });
 
+export const csvColumnMappingSchema = z.object({
+  id: z.string().nullable(),
+  fullName: z.string().nullable(),
+  nicknames: z.string().nullable(),
+  phone: z.string().nullable(),
+  alternateContacts: z.string().nullable(),
+  address: z.string().nullable(),
+  lat: z.string().nullable(),
+  lng: z.string().nullable(),
+  status: z.string().nullable(),
+  notes: z.string().nullable(),
+  email: z.string().nullable()
+});
+
+export const csvMappingResponseSchema = z.object({
+  mapping: csvColumnMappingSchema,
+  confidence: z.record(z.string(), z.number().min(0).max(1)).optional()
+});
+
 // =============================================================================
 // Inferred Types (derived from schemas - never define these separately!)
 // =============================================================================
@@ -67,6 +87,8 @@ export type GeocodeResponse = z.infer<typeof geocodeResponseSchema>;
 export type AIMatchResponse = z.infer<typeof aiMatchResponseSchema>;
 export type AlternateContact = z.infer<typeof alternateContactSchema>;
 export type ExtractPatientResponse = z.infer<typeof extractPatientResponseSchema>;
+export type CSVColumnMapping = z.infer<typeof csvColumnMappingSchema>;
+export type CSVMappingResponse = z.infer<typeof csvMappingResponseSchema>;
 
 // =============================================================================
 // Request Validation Schemas (for serverless endpoints)
@@ -113,12 +135,18 @@ export const extractPatientRequestSchema = z.object({
   referralText: z.string().min(10, "Referral text is too short")
 });
 
+export const csvMappingRequestSchema = z.object({
+  headers: z.array(z.string().min(1)).min(1, "At least one CSV header is required"),
+  sampleRows: z.array(z.array(z.string())).max(25).default([])
+});
+
 // Request types
 export type OCRRequest = z.infer<typeof ocrRequestSchema>;
 export type OptimizeRequest = z.infer<typeof optimizeRequestSchema>;
 export type GeocodeRequest = z.infer<typeof geocodeRequestSchema>;
 export type MatchPatientRequest = z.infer<typeof matchPatientRequestSchema>;
 export type ExtractPatientRequest = z.infer<typeof extractPatientRequestSchema>;
+export type CSVMappingRequest = z.infer<typeof csvMappingRequestSchema>;
 
 // =============================================================================
 // Parsing Helper
@@ -138,4 +166,3 @@ export function parseWithSchema<T>(
   }
   return result.data;
 }
-

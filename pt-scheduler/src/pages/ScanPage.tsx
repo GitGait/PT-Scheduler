@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/Button";
 import { Card, CardHeader } from "../components/ui/Card";
 import { processScreenshotFile } from "../api/ocr";
+import { geocodeAddress } from "../api/geocode";
 import { matchPatient, type MatchCandidate, type MatchTier } from "../utils/matching";
 import { usePatientStore, useAppointmentStore } from "../stores";
 import type { ExtractedAppointment, Patient } from "../types";
@@ -26,10 +27,115 @@ interface OCRResult extends ExtractedAppointment {
     isMatching: boolean;
 }
 
+import { getHomeBase } from "../utils/scheduling";
+const EARTH_RADIUS_MILES = 3958.8;
+const SLOT_MINUTES = 15;
+
+function toRadians(degrees: number): number {
+    return degrees * (Math.PI / 180);
+}
+
+function calculateMilesBetweenCoordinates(
+    from: { lat: number; lng: number },
+    to: { lat: number; lng: number }
+): number {
+    const deltaLat = toRadians(to.lat - from.lat);
+    const deltaLng = toRadians(to.lng - from.lng);
+    const fromLat = toRadians(from.lat);
+    const toLat = toRadians(to.lat);
+
+    const a =
+        Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
+        Math.cos(fromLat) * Math.cos(toLat) * Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return EARTH_RADIUS_MILES * c;
+}
+
+function timeStringToMinutes(time: string): number {
+    const [hours, minutes] = time.split(":").map((value) => Number(value));
+    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
+        return 0;
+    }
+    return hours * 60 + minutes;
+}
+
+function minutesToTimeString(totalMinutes: number): string {
+    const bounded = Math.max(0, Math.min(23 * 60 + 59, totalMinutes));
+    const hours = Math.floor(bounded / 60);
+    const minutes = bounded % 60;
+    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+}
+
+function normalizeVisitType(value?: string): string | undefined {
+    const raw = (value ?? "").trim();
+    if (!raw) {
+        return undefined;
+    }
+
+    const cleaned = raw
+        .replace(/^[\[\(\{<]+|[\]\)\}>]+$/g, "")
+        .replace(/^visit\s*type\s*[:\-]?\s*/i, "")
+        .replace(/[–—]/g, "-")
+        .replace(/^[\s:;\-]+|[\s:;\-]+$/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    if (!cleaned) {
+        return undefined;
+    }
+
+    const alphaNumeric = cleaned.match(/^([A-Za-z]{1,6})\s*[-]?\s*(\d{1,3})$/);
+    if (alphaNumeric) {
+        return `${alphaNumeric[1].toUpperCase()}${alphaNumeric[2]}`;
+    }
+
+    const keyword = cleaned.match(/^(EVAL|SOC|DC|ROC|RE[-\s]?EVAL)$/i);
+    if (keyword) {
+        return keyword[1].toUpperCase().replace(/[-\s]/g, "");
+    }
+
+    return cleaned.toUpperCase();
+}
+
+const VISIT_TYPE_PREFIX_REGEX =
+    /^([A-Za-z]{1,6}\s*[-]?\s*\d{1,3}|EVAL|SOC|DC|ROC|RE[-\s]?EVAL)\s*(?:[-:–—]\s*|\s+)(.+)$/i;
+
+function parseVisitTypeAndName(input: {
+    rawName: string;
+    visitType?: string;
+}): { rawName: string; visitType?: string } {
+    const nameValue = (input.rawName ?? "").replace(/\s+/g, " ").trim();
+    const visitTypeValue = normalizeVisitType(input.visitType);
+
+    if (visitTypeValue) {
+        const withoutVisitType = nameValue
+            .replace(
+                /^([A-Za-z]{1,6}\s*[-]?\s*\d{1,3}|EVAL|SOC|DC|ROC|RE[-\s]?EVAL)\s*(?:[-:–—]\s*)?/i,
+                ""
+            )
+            .trim();
+        return {
+            rawName: withoutVisitType || nameValue,
+            visitType: visitTypeValue,
+        };
+    }
+
+    const match = nameValue.match(VISIT_TYPE_PREFIX_REGEX);
+    if (match) {
+        const normalizedVisitType = normalizeVisitType(match[1]);
+        return {
+            rawName: match[2].trim() || nameValue,
+            visitType: normalizedVisitType,
+        };
+    }
+
+    return { rawName: nameValue };
+}
+
 export function ScanPage() {
     const navigate = useNavigate();
     const { patients, loadAll: loadPatients } = usePatientStore();
-    const { create: createAppointment } = useAppointmentStore();
+    const { create: createAppointment, update: updateAppointment } = useAppointmentStore();
 
     const [isDragging, setIsDragging] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
@@ -37,6 +143,7 @@ export function ScanPage() {
     const [error, setError] = useState<string | null>(null);
     const [isImporting, setIsImporting] = useState(false);
     const [importSuccess, setImportSuccess] = useState<number | null>(null);
+    const [importRouteMessage, setImportRouteMessage] = useState<string | null>(null);
 
     useEffect(() => {
         loadPatients();
@@ -47,6 +154,186 @@ export function ScanPage() {
         fullName: p.fullName,
         nicknames: p.nicknames,
     }));
+
+    const resolveHomeCoordinates = useCallback(async () => {
+        const homeBase = getHomeBase();
+
+        // Use stored coordinates if available
+        if (homeBase.lat !== 0 && homeBase.lng !== 0) {
+            return { lat: homeBase.lat, lng: homeBase.lng };
+        }
+
+        // Try to geocode if we have an address
+        if (homeBase.address) {
+            try {
+                const result = await geocodeAddress(homeBase.address);
+                if (Number.isFinite(result.lat) && Number.isFinite(result.lng)) {
+                    return { lat: result.lat, lng: result.lng };
+                }
+            } catch {
+                // Fall back to stored coordinates.
+            }
+        }
+
+        return { lat: homeBase.lat, lng: homeBase.lng };
+    }, []);
+
+    const resolvePatientCoordinates = useCallback(
+        async (
+            patient: Patient,
+            cache: Map<string, { lat: number; lng: number } | null>
+        ): Promise<{ lat: number; lng: number } | null> => {
+            const cached = cache.get(patient.id);
+            if (cached !== undefined) {
+                return cached;
+            }
+
+            if (patient.lat !== undefined && patient.lng !== undefined) {
+                const coords = { lat: patient.lat, lng: patient.lng };
+                cache.set(patient.id, coords);
+                return coords;
+            }
+
+            if (!patient.address?.trim()) {
+                cache.set(patient.id, null);
+                return null;
+            }
+
+            try {
+                const result = await geocodeAddress(patient.address);
+                if (Number.isFinite(result.lat) && Number.isFinite(result.lng)) {
+                    const coords = { lat: result.lat, lng: result.lng };
+                    cache.set(patient.id, coords);
+                    return coords;
+                }
+            } catch {
+                // Leave as unresolved.
+            }
+
+            cache.set(patient.id, null);
+            return null;
+        },
+        []
+    );
+
+    const optimizeImportedAppointments = useCallback(
+        async (
+            importedAppointments: Array<{
+                appointmentId: string;
+                patientId: string;
+                date: string;
+                startTime: string;
+                duration: number;
+            }>
+        ): Promise<{ optimizedDays: number; unresolvedStops: number }> => {
+            if (importedAppointments.length < 2) {
+                return { optimizedDays: 0, unresolvedStops: 0 };
+            }
+
+            const homeCoords = await resolveHomeCoordinates();
+            const byDate = new Map<
+                string,
+                Array<{
+                    appointmentId: string;
+                    patientId: string;
+                    date: string;
+                    startTime: string;
+                    duration: number;
+                }>
+            >();
+
+            for (const item of importedAppointments) {
+                const existing = byDate.get(item.date) ?? [];
+                existing.push(item);
+                byDate.set(item.date, existing);
+            }
+
+            let optimizedDays = 0;
+            let unresolvedStops = 0;
+            const patientById = new Map(patients.map((patient) => [patient.id, patient]));
+            const coordinateCache = new Map<string, { lat: number; lng: number } | null>();
+
+            for (const [date, dayItems] of byDate.entries()) {
+                if (dayItems.length < 2) {
+                    continue;
+                }
+
+                const dayStartMinutes = Math.min(
+                    ...dayItems.map((item) => timeStringToMinutes(item.startTime))
+                );
+
+                const withDistance: Array<{
+                    item: (typeof dayItems)[number];
+                    distance: number;
+                }> = [];
+                const withoutDistance: typeof dayItems = [];
+
+                for (const item of dayItems) {
+                    const patient = patientById.get(item.patientId);
+                    if (!patient) {
+                        withoutDistance.push(item);
+                        unresolvedStops += 1;
+                        continue;
+                    }
+
+                    const coords = await resolvePatientCoordinates(patient, coordinateCache);
+                    if (!coords) {
+                        withoutDistance.push(item);
+                        unresolvedStops += 1;
+                        continue;
+                    }
+
+                    withDistance.push({
+                        item,
+                        distance: calculateMilesBetweenCoordinates(homeCoords, coords),
+                    });
+                }
+
+                const orderedWithDistance = [...withDistance].sort((a, b) => {
+                    if (b.distance !== a.distance) {
+                        return b.distance - a.distance;
+                    }
+                    return a.item.startTime.localeCompare(b.item.startTime);
+                });
+                const orderedWithoutDistance = [...withoutDistance].sort((a, b) =>
+                    a.startTime.localeCompare(b.startTime)
+                );
+                const ordered = [
+                    ...orderedWithDistance.map((entry) => entry.item),
+                    ...orderedWithoutDistance,
+                ];
+
+                let nextStartMinutes =
+                    Math.max(0, Math.round(dayStartMinutes / SLOT_MINUTES) * SLOT_MINUTES);
+                let changedAny = false;
+
+                for (const item of ordered) {
+                    const snappedStartMinutes = Math.max(
+                        0,
+                        Math.round(nextStartMinutes / SLOT_MINUTES) * SLOT_MINUTES
+                    );
+                    const nextStartTime = minutesToTimeString(snappedStartMinutes);
+
+                    if (item.startTime !== nextStartTime) {
+                        await updateAppointment(item.appointmentId, {
+                            date,
+                            startTime: nextStartTime,
+                        });
+                        changedAny = true;
+                    }
+
+                    nextStartMinutes = snappedStartMinutes + item.duration;
+                }
+
+                if (changedAny) {
+                    optimizedDays += 1;
+                }
+            }
+
+            return { optimizedDays, unresolvedStops };
+        },
+        [patients, resolveHomeCoordinates, resolvePatientCoordinates, updateAppointment]
+    );
 
     const runMatchingForResult = useCallback(
         async (result: OCRResult, index: number) => {
@@ -106,17 +393,27 @@ export function ScanPage() {
             setError(null);
             setResults([]);
             setImportSuccess(null);
+            setImportRouteMessage(null);
 
             try {
                 const response = await processScreenshotFile(file);
-                const newResults: OCRResult[] = response.appointments.map((apt) => ({
-                    ...apt,
-                    tier: "manual" as MatchTier,
-                    confidence: 0,
-                    confirmed: false,
-                    alternatives: [],
-                    isMatching: true,
-                }));
+                const newResults: OCRResult[] = response.appointments.map((apt) => {
+                    const normalized = parseVisitTypeAndName({
+                        rawName: apt.rawName,
+                        visitType: apt.visitType,
+                    });
+
+                    return {
+                        ...apt,
+                        rawName: normalized.rawName,
+                        visitType: normalized.visitType,
+                        tier: "manual" as MatchTier,
+                        confidence: 0,
+                        confirmed: false,
+                        alternatives: [],
+                        isMatching: true,
+                    };
+                });
 
                 setResults(newResults);
 
@@ -196,16 +493,72 @@ export function ScanPage() {
         setError(null);
 
         try {
+            const importedAppointments: Array<{
+                appointmentId: string;
+                patientId: string;
+                date: string;
+                startTime: string;
+                duration: number;
+            }> = [];
+
             for (const result of confirmedResults) {
-                await createAppointment({
+                const normalizedImport = parseVisitTypeAndName({
+                    rawName: result.rawName,
+                    visitType: result.visitType,
+                });
+                const visitType = normalizedImport.visitType;
+                const notesWithVisitType = [
+                    visitType ? `Visit Type: ${visitType}` : "",
+                    result.notes ?? "",
+                ]
+                    .filter(Boolean)
+                    .join("\n")
+                    .trim();
+
+                const appointmentId = await createAppointment({
                     patientId: result.matchedPatientId!,
                     date: result.date,
                     startTime: result.time,
                     duration: result.duration,
                     status: "scheduled",
                     syncStatus: "local",
-                    notes: result.notes,
+                    notes: notesWithVisitType || undefined,
                 });
+
+                importedAppointments.push({
+                    appointmentId,
+                    patientId: result.matchedPatientId!,
+                    date: result.date,
+                    startTime: result.time,
+                    duration: result.duration,
+                });
+            }
+
+            const optimization = await optimizeImportedAppointments(importedAppointments);
+            if (optimization.optimizedDays > 0) {
+                const messageParts = [
+                    `Auto-optimized ${optimization.optimizedDays} day${
+                        optimization.optimizedDays === 1 ? "" : "s"
+                    } by starting with farthest patients and routing back toward home.`,
+                ];
+                if (optimization.unresolvedStops > 0) {
+                    messageParts.push(
+                        `${optimization.unresolvedStops} stop${
+                            optimization.unresolvedStops === 1 ? "" : "s"
+                        } kept original relative order (missing coordinates).`
+                    );
+                }
+                setImportRouteMessage(messageParts.join(" "));
+            } else if (optimization.unresolvedStops > 0) {
+                setImportRouteMessage(
+                    `Could not fully optimize route order for ${optimization.unresolvedStops} stop${
+                        optimization.unresolvedStops === 1 ? "" : "s"
+                    } due to missing coordinates.`
+                );
+            } else {
+                setImportRouteMessage(
+                    "Imported appointments kept their original order for each day."
+                );
             }
 
             setImportSuccess(confirmedResults.length);
@@ -316,6 +669,9 @@ export function ScanPage() {
                             Successfully imported {importSuccess} appointment{importSuccess !== 1 ? "s" : ""}!
                         </span>
                     </div>
+                    {importRouteMessage && (
+                        <p className="text-sm mb-2 text-[#196d33]">{importRouteMessage}</p>
+                    )}
                     <Button
                         variant="primary"
                         size="sm"
@@ -357,6 +713,11 @@ export function ScanPage() {
                                     <p className="text-sm text-[#5f6368] mt-1">
                                         {result.date} at {result.time} ({result.duration} min)
                                     </p>
+                                    {result.visitType && (
+                                        <p className="text-sm text-[#5f6368] mt-1">
+                                            Visit type: <span className="font-medium">{result.visitType}</span>
+                                        </p>
+                                    )}
                                     {result.notes && (
                                         <p className="text-sm text-[#5f6368] mt-1 italic">
                                             {result.notes}

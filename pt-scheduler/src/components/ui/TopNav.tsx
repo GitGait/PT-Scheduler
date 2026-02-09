@@ -37,14 +37,6 @@ export function TopNav({ onMenuClick, showMenuButton = true }: TopNavProps) {
             <Menu className="w-6 h-6 text-[#5f6368]" />
           </button>
         )}
-        <div className="flex items-center gap-2 ml-1">
-          <div className="w-10 h-10 flex items-center justify-center">
-            <Calendar className="w-6 h-6 text-[#1a73e8]" />
-          </div>
-          <span className="text-[22px] text-[#5f6368] font-normal hidden sm:block">
-            PT Scheduler
-          </span>
-        </div>
       </div>
 
       {/* Center navigation */}

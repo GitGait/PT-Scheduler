@@ -52,6 +52,8 @@ Extract every appointment you can identify.
 
 Rules:
 - Extract patient name exactly as shown (do not correct spelling).
+- If a visit type/code appears before the name (examples: "PT11", "PT 11", "EVAL"), extract it as visitType.
+- For rows like "PT33 - LAST, FIRST", set visitType to "PT33" and rawName to "LAST, FIRST" (without the code prefix).
 - Extract date in YYYY-MM-DD format.
 - Extract start time in HH:mm (24-hour) format.
 - Estimate duration in minutes. Default to 60 if not shown.
@@ -63,6 +65,7 @@ Response format (strict JSON):
   "appointments": [
     {
       "rawName": "string",
+      "visitType": "string",
       "date": "YYYY-MM-DD",
       "time": "HH:mm",
       "duration": number,
@@ -108,5 +111,51 @@ Response format (strict JSON):
 }`,
 
     user: `Extract patient information from this referral:\n\n${referralText}`
+  };
+}
+
+// ---------------------------------------------------------------------------
+// CSV column mapping prompt
+// ---------------------------------------------------------------------------
+
+export function buildCsvMappingPrompt(
+  headers: string[],
+  sampleRows: string[][]
+): { system: string; user: string } {
+  const headerList = headers.map((header, index) => `${index + 1}. ${header}`).join("\n");
+  const samples = sampleRows
+    .slice(0, 20)
+    .map((row, rowIndex) => {
+      const pairs = headers.map((header, index) => `${header}: ${row[index] ?? ""}`).join(" | ");
+      return `Row ${rowIndex + 1}: ${pairs}`;
+    })
+    .join("\n");
+
+  return {
+    system: `You map source CSV columns to a target patient schema for a PT scheduling app.
+Map each target field to exactly one source header name or null if unavailable.
+Prefer high-confidence practical mappings based on headers and sample data.
+Do not invent headers that are not in the provided list.
+Return ONLY strict JSON with this shape:
+{
+  "mapping": {
+    "id": string | null,
+    "fullName": string | null,
+    "nicknames": string | null,
+    "phone": string | null,
+    "alternateContacts": string | null,
+    "address": string | null,
+    "lat": string | null,
+    "lng": string | null,
+    "status": string | null,
+    "notes": string | null,
+    "email": string | null
+  },
+  "confidence": {
+    "<targetField>": number between 0 and 1
+  }
+}`,
+    user: `Source headers:\n${headerList}\n\nSample rows:\n${samples || "(none)"}
+\nDetermine the best mapping.`,
   };
 }

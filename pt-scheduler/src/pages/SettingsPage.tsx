@@ -2,9 +2,11 @@ import { useEffect, useMemo, useState } from "react";
 import { usePatientStore, useSyncStore } from "../stores";
 import { Card, CardHeader } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
-import { initAuth, isSignedIn, signIn, signOut, tryRestoreSignIn } from "../api/auth";
+import { initAuth, isSignedIn, signIn, signOut, tryRestoreSignIn, getAccessToken } from "../api/auth";
 import { fetchPatientsFromSheet } from "../api/sheets";
-import { patientDB } from "../db/operations";
+import { createCalendarEvent, listCalendars } from "../api/calendar";
+import { reconcilePatientsFromSheetSnapshot } from "../db/patientSheetSync";
+import { db } from "../db/schema";
 import { env } from "../utils/env";
 
 function normalizeSpreadsheetId(input: string): string {
@@ -36,6 +38,9 @@ export function SettingsPage() {
     const [signedIn, setSignedIn] = useState(isSignedIn());
 
     const [importing, setImporting] = useState(false);
+    const [syncingCalendar, setSyncingCalendar] = useState(false);
+    const [testingCalendar, setTestingCalendar] = useState(false);
+    const [availableCalendars, setAvailableCalendars] = useState<Array<{ id: string; summary: string }> | null>(null);
 
     const hasClientId = useMemo(() => Boolean(env.googleClientId), []);
 
@@ -198,20 +203,163 @@ export function SettingsPage() {
 
         try {
             const patients = await fetchPatientsFromSheet(nextSpreadsheetId);
-            for (const patient of patients) {
-                await patientDB.upsert(patient);
-            }
+            const syncResult = await reconcilePatientsFromSheetSnapshot(
+                nextSpreadsheetId,
+                patients
+            );
 
             await loadAll();
-            setStatusMessage(
-                patients.length === 0
-                    ? "No patient rows were found in the sheet."
-                    : `Imported ${patients.length} patient${patients.length === 1 ? "" : "s"}.`
-            );
+
+            if (syncResult.upserted === 0 && syncResult.deleted === 0) {
+                setStatusMessage("No patient rows were found in the sheet.");
+            } else {
+                const parts = [
+                    `Imported/updated ${syncResult.upserted} patient${
+                        syncResult.upserted === 1 ? "" : "s"
+                    }.`,
+                ];
+                if (syncResult.deleted > 0) {
+                    parts.push(
+                        `Removed ${syncResult.deleted} patient${
+                            syncResult.deleted === 1 ? "" : "s"
+                        } deleted in Google Sheets.`
+                    );
+                }
+                setStatusMessage(parts.join(" "));
+            }
         } catch (err) {
             setStatusError(err instanceof Error ? err.message : "Patient import failed.");
         } finally {
             setImporting(false);
+        }
+    };
+
+    const handleTestCalendarAccess = async () => {
+        if (!signedIn) {
+            setStatusError("Sign in to Google first.");
+            return;
+        }
+
+        setTestingCalendar(true);
+        setStatusError(null);
+        setStatusMessage(null);
+        setAvailableCalendars(null);
+
+        try {
+            const calendars = await listCalendars();
+            setAvailableCalendars(calendars);
+            if (calendars.length === 0) {
+                setStatusMessage("No calendars found. This is unusual.");
+            } else {
+                setStatusMessage(`Found ${calendars.length} calendar(s). See list below.`);
+            }
+        } catch (err) {
+            setStatusError(err instanceof Error ? err.message : "Failed to list calendars.");
+        } finally {
+            setTestingCalendar(false);
+        }
+    };
+
+    const handleSyncAppointmentsToCalendar = async () => {
+        const nextCalendarId = calendarInput.trim() || calendarId;
+
+        if (!signedIn) {
+            setStatusError("Sign in to Google before syncing appointments.");
+            setStatusMessage(null);
+            return;
+        }
+
+        if (!nextCalendarId) {
+            setStatusError("Calendar ID is required. Enter 'primary' or your calendar ID.");
+            setStatusMessage(null);
+            return;
+        }
+
+        const token = await getAccessToken();
+        if (!token) {
+            setStatusError("Not authenticated. Please sign in again.");
+            setStatusMessage(null);
+            return;
+        }
+
+        setSyncingCalendar(true);
+        setStatusError(null);
+        setStatusMessage(null);
+
+        try {
+            // Get all appointments from local database
+            const appointments = await db.appointments.toArray();
+            const patients = await db.patients.toArray();
+            const patientMap = new Map(patients.map(p => [p.id, p]));
+
+            let created = 0;
+            let skipped = 0;
+            const errors: string[] = [];
+
+            for (const appointment of appointments) {
+                // Check if already has a calendar event
+                const existingMapping = await db.calendarEvents
+                    .where("appointmentId")
+                    .equals(appointment.id)
+                    .first();
+
+                if (appointment.calendarEventId || existingMapping?.googleEventId) {
+                    skipped++;
+                    continue;
+                }
+
+                const patient = patientMap.get(appointment.patientId);
+                const patientName = patient?.fullName ?? "Unknown";
+                const address = patient?.address;
+                const patientPhone = patient?.phone;
+
+                try {
+                    const eventId = await createCalendarEvent(
+                        nextCalendarId,
+                        appointment,
+                        patientName,
+                        address,
+                        patientPhone
+                    );
+
+                    // Update local appointment with calendar event ID
+                    await db.appointments.update(appointment.id, {
+                        calendarEventId: eventId,
+                        syncStatus: "synced",
+                        updatedAt: new Date(),
+                    });
+
+                    // Store mapping
+                    await db.calendarEvents.put({
+                        id: eventId,
+                        appointmentId: appointment.id,
+                        googleEventId: eventId,
+                        calendarId: nextCalendarId,
+                        lastSyncedAt: new Date(),
+                    });
+
+                    created++;
+                } catch (err) {
+                    const msg = err instanceof Error ? err.message : "Unknown error";
+                    errors.push(`${patientName}: ${msg}`);
+                }
+            }
+
+            if (errors.length > 0) {
+                setStatusError(`Errors: ${errors.slice(0, 3).join("; ")}${errors.length > 3 ? ` (+${errors.length - 3} more)` : ""}`);
+            }
+
+            if (created > 0 || skipped > 0) {
+                setStatusMessage(
+                    `Synced ${created} appointment${created !== 1 ? "s" : ""} to Google Calendar. ${skipped} already synced.`
+                );
+            } else if (appointments.length === 0) {
+                setStatusMessage("No appointments to sync.");
+            }
+        } catch (err) {
+            setStatusError(err instanceof Error ? err.message : "Calendar sync failed.");
+        } finally {
+            setSyncingCalendar(false);
         }
     };
 
@@ -324,6 +472,48 @@ export function SettingsPage() {
                 >
                     {importing ? "Importing..." : "Import Patients Now"}
                 </Button>
+            </Card>
+
+            <Card className="mb-4">
+                <CardHeader title="Calendar Sync" subtitle="Push all local appointments to Google Calendar" />
+                <p className="text-sm text-[#5f6368] mb-3">
+                    This will create calendar events for all appointments that haven't been synced yet.
+                    Other devices can then pull these from Google Calendar.
+                </p>
+                <div className="flex gap-2 flex-wrap">
+                    <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => void handleTestCalendarAccess()}
+                        disabled={testingCalendar || !signedIn}
+                    >
+                        {testingCalendar ? "Testing..." : "Test Calendar Access"}
+                    </Button>
+                    <Button
+                        size="sm"
+                        variant="primary"
+                        onClick={() => void handleSyncAppointmentsToCalendar()}
+                        disabled={syncingCalendar || !signedIn}
+                    >
+                        {syncingCalendar ? "Syncing..." : "Sync Appointments to Calendar"}
+                    </Button>
+                </div>
+                {availableCalendars && availableCalendars.length > 0 && (
+                    <div className="mt-3 p-3 bg-[#f1f3f4] rounded text-sm">
+                        <p className="font-medium mb-2">Your calendars:</p>
+                        <ul className="space-y-1">
+                            {availableCalendars.map((cal) => (
+                                <li key={cal.id} className="flex justify-between">
+                                    <span>{cal.summary}</span>
+                                    <code className="text-xs bg-white px-1 rounded">{cal.id}</code>
+                                </li>
+                            ))}
+                        </ul>
+                        <p className="mt-2 text-[#5f6368]">
+                            Use one of these IDs in the Calendar ID field above.
+                        </p>
+                    </div>
+                )}
             </Card>
 
             <Card className="mb-4">

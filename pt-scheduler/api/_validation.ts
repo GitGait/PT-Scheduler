@@ -19,9 +19,10 @@ export {
   matchPatientRequestSchema,
   aiMatchResponseSchema,
   extractPatientRequestSchema,
-  extractPatientResponseSchema
-} from "../src/utils/validation";
-
+  extractPatientResponseSchema,
+  csvMappingRequestSchema,
+  csvMappingResponseSchema
+} from "../src/utils/validation.js";
 /**
  * Validate request body against a Zod schema.
  * Returns the validated data or sends a 400 error and returns null.

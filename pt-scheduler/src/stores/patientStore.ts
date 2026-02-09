@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { Patient, PatientStatus } from "../types";
-import { patientDB } from "../db/operations";
+import { patientDB, syncQueueDB } from "../db/operations";
+import { useSyncStore } from "./syncStore";
 
 interface PatientState {
     patients: Patient[];
@@ -19,6 +20,27 @@ interface PatientActions {
     reactivate: (id: string) => Promise<void>;
     delete: (id: string) => Promise<void>;
     clearError: () => void;
+}
+
+function hasSpreadsheetSyncConfigured(): boolean {
+    const spreadsheetId = useSyncStore.getState().spreadsheetId;
+    return Boolean(spreadsheetId.trim());
+}
+
+async function enqueuePatientSync(
+    type: "create" | "update" | "delete",
+    entityId: string
+): Promise<void> {
+    if (!hasSpreadsheetSyncConfigured()) {
+        return;
+    }
+
+    await syncQueueDB.add({
+        type,
+        entity: "patient",
+        data: { entityId },
+    });
+    await useSyncStore.getState().refreshPendingCount();
 }
 
 export const usePatientStore = create<PatientState & PatientActions>((set, get) => ({
@@ -87,6 +109,7 @@ export const usePatientStore = create<PatientState & PatientActions>((set, get) 
         set({ error: null });
         try {
             await patientDB.update(id, changes);
+            await enqueuePatientSync("update", id);
             const updatedPatient = await patientDB.get(id);
             if (updatedPatient) {
                 set((state) => ({
@@ -105,6 +128,7 @@ export const usePatientStore = create<PatientState & PatientActions>((set, get) 
         set({ error: null });
         try {
             await patientDB.discharge(id);
+            await enqueuePatientSync("update", id);
             set((state) => ({
                 patients: state.patients.map((p) =>
                     p.id === id ? { ...p, status: "discharged" as PatientStatus, updatedAt: new Date() } : p
@@ -119,6 +143,7 @@ export const usePatientStore = create<PatientState & PatientActions>((set, get) 
         set({ error: null });
         try {
             await patientDB.reactivate(id);
+            await enqueuePatientSync("update", id);
             set((state) => ({
                 patients: state.patients.map((p) =>
                     p.id === id ? { ...p, status: "active" as PatientStatus, updatedAt: new Date() } : p
@@ -133,6 +158,7 @@ export const usePatientStore = create<PatientState & PatientActions>((set, get) 
         set({ error: null });
         try {
             await patientDB.delete(id);
+            await enqueuePatientSync("delete", id);
             set((state) => ({
                 patients: state.patients.filter((p) => p.id !== id),
             }));

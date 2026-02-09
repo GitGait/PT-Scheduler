@@ -1,0 +1,244 @@
+import { useState, useEffect } from "react";
+import { X, Phone, MapPin, Clock, FileText, Save, Loader2 } from "lucide-react";
+import { Button } from "./ui/Button";
+import type { Appointment, Patient } from "../types";
+
+interface AppointmentDetailModalProps {
+    appointment: Appointment;
+    patient: Patient | undefined;
+    isOpen: boolean;
+    onClose: () => void;
+    onSavePatient: (patientId: string, changes: Partial<Patient>) => Promise<void>;
+    onSaveAppointment: (appointmentId: string, changes: Partial<Appointment>) => Promise<void>;
+    onSyncToSheet?: (patient: Patient) => Promise<void>;
+}
+
+export function AppointmentDetailModal({
+    appointment,
+    patient,
+    isOpen,
+    onClose,
+    onSavePatient,
+    onSaveAppointment,
+    onSyncToSheet,
+}: AppointmentDetailModalProps) {
+    const [phone, setPhone] = useState("");
+    const [address, setAddress] = useState("");
+    const [notes, setNotes] = useState("");
+    const [isSaving, setIsSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+    // Initialize form values when modal opens or patient/appointment changes
+    useEffect(() => {
+        if (patient) {
+            setPhone(patient.phone || "");
+            setAddress(patient.address || "");
+        }
+        setNotes(appointment.notes || "");
+        setError(null);
+        setSuccessMessage(null);
+    }, [patient, appointment, isOpen]);
+
+    if (!isOpen) {
+        return null;
+    }
+
+    const handleSave = async () => {
+        if (!patient) {
+            setError("Patient not found");
+            return;
+        }
+
+        setIsSaving(true);
+        setError(null);
+        setSuccessMessage(null);
+
+        try {
+            // Check if patient data changed
+            const patientChanged = phone !== patient.phone || address !== patient.address;
+            const appointmentChanged = notes !== (appointment.notes || "");
+
+            if (patientChanged) {
+                // Update patient locally
+                await onSavePatient(patient.id, {
+                    phone,
+                    address,
+                });
+
+                // Sync to Google Sheets if available
+                if (onSyncToSheet) {
+                    const updatedPatient: Patient = {
+                        ...patient,
+                        phone,
+                        address,
+                    };
+                    await onSyncToSheet(updatedPatient);
+                }
+            }
+
+            if (appointmentChanged) {
+                // Update appointment
+                await onSaveAppointment(appointment.id, {
+                    notes: notes || undefined,
+                });
+            }
+
+            if (patientChanged || appointmentChanged) {
+                setSuccessMessage("Changes saved successfully!");
+                setTimeout(() => {
+                    onClose();
+                }, 1000);
+            } else {
+                onClose();
+            }
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Failed to save changes");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const formatTime = (time: string) => {
+        const [hours, minutes] = time.split(":");
+        const hour = parseInt(hours, 10);
+        const ampm = hour >= 12 ? "PM" : "AM";
+        const hour12 = ((hour + 11) % 12) + 1;
+        return `${hour12}:${minutes} ${ampm}`;
+    };
+
+    const formatDate = (dateStr: string) => {
+        const date = new Date(`${dateStr}T12:00:00`);
+        return date.toLocaleDateString("en-US", {
+            weekday: "long",
+            month: "long",
+            day: "numeric",
+            year: "numeric",
+        });
+    };
+
+    return (
+        <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
+            onClick={onClose}
+        >
+            <div
+                className="bg-white rounded-lg shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto animate-slide-in"
+                onClick={(event) => event.stopPropagation()}
+            >
+                {/* Header */}
+                <div className="flex items-center justify-between px-6 py-4 border-b border-[#dadce0] sticky top-0 bg-white">
+                    <h2 className="text-lg font-medium text-[#202124]">
+                        Appointment Details
+                    </h2>
+                    <button
+                        onClick={onClose}
+                        className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#f1f3f4]"
+                    >
+                        <X className="w-5 h-5 text-[#5f6368]" />
+                    </button>
+                </div>
+
+                {/* Content */}
+                <div className="p-6 space-y-6">
+                    {/* Patient Name */}
+                    <div>
+                        <h3 className="text-xl font-medium text-[#202124]">
+                            {patient?.fullName || "Unknown Patient"}
+                        </h3>
+                        <p className="text-sm text-[#5f6368] mt-1">
+                            <Clock className="w-4 h-4 inline mr-1" />
+                            {formatDate(appointment.date)} at {formatTime(appointment.startTime)}
+                            {" "}({appointment.duration} min)
+                        </p>
+                    </div>
+
+                    {/* Phone */}
+                    <div>
+                        <label className="flex items-center gap-2 text-sm font-medium text-[#5f6368] mb-2">
+                            <Phone className="w-4 h-4" />
+                            Phone Number
+                        </label>
+                        <input
+                            type="tel"
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value)}
+                            placeholder="Enter phone number"
+                            className="w-full input-google"
+                        />
+                    </div>
+
+                    {/* Address */}
+                    <div>
+                        <label className="flex items-center gap-2 text-sm font-medium text-[#5f6368] mb-2">
+                            <MapPin className="w-4 h-4" />
+                            Address
+                        </label>
+                        <input
+                            type="text"
+                            value={address}
+                            onChange={(e) => setAddress(e.target.value)}
+                            placeholder="Enter address"
+                            className="w-full input-google"
+                        />
+                    </div>
+
+                    {/* Notes */}
+                    <div>
+                        <label className="flex items-center gap-2 text-sm font-medium text-[#5f6368] mb-2">
+                            <FileText className="w-4 h-4" />
+                            Appointment Notes
+                        </label>
+                        <textarea
+                            value={notes}
+                            onChange={(e) => setNotes(e.target.value)}
+                            placeholder="Add notes for this appointment..."
+                            rows={4}
+                            className="w-full input-google resize-none"
+                            style={{ height: "auto", minHeight: "100px" }}
+                        />
+                    </div>
+
+                    {/* Error message */}
+                    {error && (
+                        <p className="text-sm text-[#d93025] bg-red-50 p-3 rounded">
+                            {error}
+                        </p>
+                    )}
+
+                    {/* Success message */}
+                    {successMessage && (
+                        <p className="text-sm text-green-700 bg-green-50 p-3 rounded">
+                            {successMessage}
+                        </p>
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div className="flex justify-end gap-2 px-6 py-4 border-t border-[#dadce0] sticky bottom-0 bg-white">
+                    <Button variant="ghost" onClick={onClose} disabled={isSaving}>
+                        Cancel
+                    </Button>
+                    <Button
+                        variant="primary"
+                        onClick={handleSave}
+                        disabled={isSaving}
+                        className="flex items-center gap-2"
+                    >
+                        {isSaving ? (
+                            <>
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                                Saving...
+                            </>
+                        ) : (
+                            <>
+                                <Save className="w-4 h-4" />
+                                Save Changes
+                            </>
+                        )}
+                    </Button>
+                </div>
+            </div>
+        </div>
+    );
+}

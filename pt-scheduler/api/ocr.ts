@@ -7,15 +7,15 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { cors, requirePost } from "./_cors";
-import { requireEnv } from "./_env";
-import { buildOCRPrompt } from "./_prompts";
+import { cors, requirePost } from "./_cors.js";
+import { requireEnv } from "./_env.js";
+import { buildOCRPrompt } from "./_prompts.js";
 import {
   ocrRequestSchema,
   ocrResponseSchema,
   validateBody,
   validateResponse
-} from "./_validation";
+} from "./_validation.js";
 
 const OPENAI_TIMEOUT_MS = 55_000; // Just under Vercel's 60s limit
 

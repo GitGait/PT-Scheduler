@@ -1,10 +1,10 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { Sidebar } from "./components/ui/Sidebar";
 import { TopNav } from "./components/ui/TopNav";
 import { useSync } from "./hooks/useSync";
-import { useSyncStore } from "./stores";
+import { useSyncStore, useScheduleStore } from "./stores";
 import {
   SchedulePage,
   PatientsPage,
@@ -16,25 +16,33 @@ import {
 import "./index.css";
 
 function AppContent() {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const { sidebarOpen, toggleSidebar, setSidebarOpen, selectedDate, setSelectedDate } = useScheduleStore();
   const location = useLocation();
 
   // Only show sidebar on schedule page
   const showSidebar = location.pathname === "/";
 
+  // Convert ISO date string to Date object for Sidebar
+  const selectedDateObj = new Date(selectedDate + "T12:00:00");
+
   return (
     <div className="min-h-screen bg-white flex flex-col">
       <TopNav
-        onMenuClick={() => setSidebarOpen(!sidebarOpen)}
+        onMenuClick={toggleSidebar}
         showMenuButton={showSidebar}
       />
       <div className="flex flex-1 overflow-hidden">
         {showSidebar && (
-          <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+          <Sidebar
+            isOpen={sidebarOpen}
+            onClose={() => setSidebarOpen(false)}
+            selectedDate={selectedDateObj}
+            onDateSelect={(date) => setSelectedDate(date)}
+          />
         )}
         <main className={`flex-1 overflow-auto ${showSidebar && sidebarOpen ? '' : ''}`}>
           <Routes>
-            <Route path="/" element={<SchedulePage sidebarOpen={sidebarOpen} />} />
+            <Route path="/" element={<SchedulePage />} />
             <Route path="/patients" element={<PatientsPage />} />
             <Route path="/patients/:id" element={<PatientDetailPage />} />
             <Route path="/scan" element={<ScanPage />} />

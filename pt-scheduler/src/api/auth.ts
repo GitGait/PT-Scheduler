@@ -5,7 +5,7 @@
 
 const SCOPES = [
     "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/calendar.events",
+    "https://www.googleapis.com/auth/calendar",
 ].join(" ");
 
 const TOKEN_STORAGE_KEY = "ptScheduler.googleAuthToken";

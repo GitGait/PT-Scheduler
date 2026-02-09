@@ -7,15 +7,15 @@
  */
 
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { cors, requirePost } from "./_cors";
-import { requireEnv } from "./_env";
-import { buildExtractPatientPrompt } from "./_prompts";
+import { cors, requirePost } from "./_cors.js";
+import { requireEnv } from "./_env.js";
+import { buildExtractPatientPrompt } from "./_prompts.js";
 import {
     extractPatientRequestSchema,
     extractPatientResponseSchema,
     validateBody,
     validateResponse
-} from "./_validation";
+} from "./_validation.js";
 
 const OPENAI_TIMEOUT_MS = 30_000;
 

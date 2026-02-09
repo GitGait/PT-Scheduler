@@ -8,9 +8,20 @@ import type { Patient } from "../types";
 const SHEETS_API_BASE = "https://sheets.googleapis.com/v4/spreadsheets";
 const ALT_CONTACT_ENTRY_SEPARATOR = ";";
 const ALT_CONTACT_PART_SEPARATOR = "|";
+const PATIENTS_SHEET_TITLE = "Patients";
+const DISCHARGE_SHEET_TITLE = "Discharge";
 
 interface SheetValues {
     values: string[][];
+}
+
+interface SpreadsheetMetadata {
+    sheets?: Array<{
+        properties?: {
+            sheetId?: number;
+            title?: string;
+        };
+    }>;
 }
 
 type AlternateContact = Patient["alternateContacts"][number];
@@ -86,43 +97,64 @@ export function serializeAlternateContactsField(contacts: AlternateContact[]): s
  */
 export async function fetchPatientsFromSheet(
     spreadsheetId: string,
-    range = "Patients!A:J"
+    range = `${PATIENTS_SHEET_TITLE}!A:J`
 ): Promise<Patient[]> {
     const token = await getAccessToken();
     if (!token) {
         throw new Error("Not authenticated");
     }
 
-    const url = `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(range)}`;
-    const response = await fetch(url, {
-        headers: { Authorization: `Bearer ${token}` },
-    });
+    const allPatients = new Map<string, Patient>();
 
-    if (!response.ok) {
-        const fallback = `Sheets API error (${response.status})`;
-        throw new Error(await getSheetsErrorMessage(response, fallback));
-    }
-
-    const data: SheetValues = await response.json();
-    const rows = data.values || [];
-
-    if (rows.length < 2) {
-        return []; // No data rows
-    }
-
-    // First row is headers
-    const headers = rows[0];
-    const patients: Patient[] = [];
-
-    for (let i = 1; i < rows.length; i++) {
-        const row = rows[i];
-        const patient = parsePatientRow(headers, row);
-        if (patient) {
-            patients.push(patient);
+    const loadTabPatients = async (
+        sheetTitle: string,
+        forcedStatus?: Patient["status"]
+    ): Promise<void> => {
+        const rows = await fetchPatientSheetRows(spreadsheetId, token, sheetTitle, false);
+        if (rows.length < 2) {
+            return;
         }
+
+        const headers = rows[0];
+        for (let i = 1; i < rows.length; i++) {
+            const row = rows[i];
+            const patient = parsePatientRow(headers, row, forcedStatus);
+            if (!patient) {
+                continue;
+            }
+
+            const existing = allPatients.get(patient.id);
+            if (!existing) {
+                allPatients.set(patient.id, patient);
+                continue;
+            }
+
+            // If duplicate appears across tabs, prefer discharged record.
+            if (patient.status === "discharged" && existing.status !== "discharged") {
+                allPatients.set(patient.id, patient);
+            }
+        }
+    };
+
+    if (range !== `${PATIENTS_SHEET_TITLE}!A:J`) {
+        const rows = await fetchPatientSheetRows(spreadsheetId, token, range, false);
+        if (rows.length < 2) {
+            return [];
+        }
+        const headers = rows[0];
+        for (let i = 1; i < rows.length; i++) {
+            const patient = parsePatientRow(headers, rows[i]);
+            if (patient) {
+                allPatients.set(patient.id, patient);
+            }
+        }
+        return [...allPatients.values()];
     }
 
-    return patients;
+    await loadTabPatients(PATIENTS_SHEET_TITLE);
+    await loadTabPatients(DISCHARGE_SHEET_TITLE, "discharged");
+
+    return [...allPatients.values()];
 }
 
 /**
@@ -132,47 +164,119 @@ export async function upsertPatientToSheet(
     spreadsheetId: string,
     patient: Patient
 ): Promise<void> {
+    await syncPatientToSheetByStatus(spreadsheetId, patient);
+}
+
+/**
+ * Update a patient row in the Patients sheet by finding and updating the existing row.
+ */
+export async function updatePatientInSheet(
+    spreadsheetId: string,
+    patient: Patient
+): Promise<void> {
+    await syncPatientToSheetByStatus(spreadsheetId, patient);
+}
+
+/**
+ * Upsert patient into status-appropriate tab and remove from the opposite tab.
+ */
+export async function syncPatientToSheetByStatus(
+    spreadsheetId: string,
+    patient: Patient
+): Promise<void> {
     const token = await getAccessToken();
     if (!token) {
         throw new Error("Not authenticated");
     }
 
-    // Append the patient as a new row
-    // In a real implementation, you'd search for existing row by ID first
-    const url = `${SHEETS_API_BASE}/${spreadsheetId}/values/Patients!A:J:append?valueInputOption=USER_ENTERED`;
+    const targetTitle =
+        patient.status === "discharged" ? DISCHARGE_SHEET_TITLE : PATIENTS_SHEET_TITLE;
+    const otherTitle =
+        targetTitle === PATIENTS_SHEET_TITLE ? DISCHARGE_SHEET_TITLE : PATIENTS_SHEET_TITLE;
 
-    const values = [[
-        patient.id,
-        patient.fullName,
-        patient.nicknames.join(", "),
-        patient.phone,
-        serializeAlternateContactsField(patient.alternateContacts),
-        patient.address,
-        patient.lat?.toString() || "",
-        patient.lng?.toString() || "",
-        patient.status,
-        patient.notes || "",
-    ]];
+    await upsertPatientToNamedSheet(spreadsheetId, token, targetTitle, patient);
+    await deletePatientRowsByIdsInSheet(spreadsheetId, token, otherTitle, [patient.id]);
+}
 
-    const response = await fetch(url, {
-        method: "POST",
-        headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ values }),
-    });
-
-    if (!response.ok) {
-        const fallback = `Sheets API error (${response.status})`;
-        throw new Error(await getSheetsErrorMessage(response, fallback));
+/**
+ * Delete all rows in Patients sheet whose ID column matches any of the provided patient IDs.
+ * Returns number of rows removed.
+ */
+export async function deletePatientsFromSheetByIds(
+    spreadsheetId: string,
+    patientIds: string[]
+): Promise<number> {
+    const normalizedIds = new Set(
+        patientIds.map((id) => id.trim()).filter(Boolean)
+    );
+    if (normalizedIds.size === 0) {
+        return 0;
     }
+
+    const token = await getAccessToken();
+    if (!token) {
+        throw new Error("Not authenticated");
+    }
+
+    const idList = [...normalizedIds];
+    const removedFromPatients = await deletePatientRowsByIdsInSheet(
+        spreadsheetId,
+        token,
+        PATIENTS_SHEET_TITLE,
+        idList
+    );
+    const removedFromDischarge = await deletePatientRowsByIdsInSheet(
+        spreadsheetId,
+        token,
+        DISCHARGE_SHEET_TITLE,
+        idList
+    );
+    return removedFromPatients + removedFromDischarge;
+}
+
+/**
+ * Remove duplicate rows from Patients sheet using ID/name/phone/address keys.
+ * Returns number of rows removed.
+ */
+export async function removeDuplicatePatientRowsInSheet(
+    spreadsheetId: string
+): Promise<number> {
+    const token = await getAccessToken();
+    if (!token) {
+        throw new Error("Not authenticated");
+    }
+
+    const inPatients = await removeDuplicateRowsInSinglePatientSheet(
+        spreadsheetId,
+        token,
+        PATIENTS_SHEET_TITLE
+    );
+    const inDischarge = await removeDuplicateRowsInSinglePatientSheet(
+        spreadsheetId,
+        token,
+        DISCHARGE_SHEET_TITLE
+    );
+
+    // If same ID exists in both tabs, keep discharged copy and remove active-tab copy.
+    const dischargeIds = await getPatientIdsInSheet(spreadsheetId, token, DISCHARGE_SHEET_TITLE);
+    const removedFromPatients = await deletePatientRowsByIdsInSheet(
+        spreadsheetId,
+        token,
+        PATIENTS_SHEET_TITLE,
+        [...dischargeIds]
+    );
+
+    return inPatients + inDischarge + removedFromPatients;
 }
 
 /**
  * Parse a spreadsheet row into a Patient object.
  */
-function parsePatientRow(headers: string[], row: string[]): Patient | null {
+function parsePatientRow(
+    headers: string[],
+    row: string[],
+    forcedStatus?: Patient["status"]
+): Patient | null {
     const getValue = (header: string) => {
         const index = headers.findIndex((h) => h.toLowerCase() === header.toLowerCase());
         return index >= 0 ? row[index] || "" : "";
@@ -180,6 +284,7 @@ function parsePatientRow(headers: string[], row: string[]): Patient | null {
 
     const id = getValue("id");
     const fullName = getValue("fullName") || getValue("name");
+    const parsedStatus = ((getValue("status") as Patient["status"]) || "active");
 
     if (!id || !fullName) {
         return null;
@@ -197,9 +302,477 @@ function parsePatientRow(headers: string[], row: string[]): Patient | null {
         lat: parseFloat(getValue("lat")) || undefined,
         lng: parseFloat(getValue("lng")) || undefined,
         email: getValue("email") || undefined,
-        status: (getValue("status") as Patient["status"]) || "active",
+        status: forcedStatus ?? parsedStatus,
         notes: getValue("notes"),
         createdAt: new Date(),
         updatedAt: new Date(),
     };
+}
+
+function normalizeHeader(value: string): string {
+    return value.replace(/\uFEFF/g, "").trim().toLowerCase();
+}
+
+function findHeaderIndex(headers: string[], aliases: string[]): number {
+    const normalizedAliases = aliases.map((alias) => alias.toLowerCase());
+    return headers.findIndex((header) => normalizedAliases.includes(normalizeHeader(header)));
+}
+
+function normalizeNameForDedup(value: string): string {
+    const tokens = value
+        .toLowerCase()
+        .replace(/[^a-z\s]/g, " ")
+        .split(/\s+/)
+        .filter(Boolean);
+
+    if (tokens.length === 0) {
+        return "";
+    }
+    if (tokens.length === 1) {
+        return tokens[0];
+    }
+    return `${tokens[0]} ${tokens[tokens.length - 1]}`;
+}
+
+function normalizePhoneForDedup(value: string): string {
+    const digits = value.replace(/\D/g, "");
+    if (digits.length === 11 && digits.startsWith("1")) {
+        return digits.slice(1);
+    }
+    return digits;
+}
+
+function normalizeAddressForDedup(value: string): string {
+    return value
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+}
+
+function buildSheetPatientDedupKeys(input: {
+    id: string;
+    fullName: string;
+    phone: string;
+    address: string;
+}): string[] {
+    const keys: string[] = [];
+    const id = input.id.trim();
+    const name = normalizeNameForDedup(input.fullName);
+    const phone = normalizePhoneForDedup(input.phone);
+    const address = normalizeAddressForDedup(input.address);
+
+    if (id) {
+        keys.push(`id:${id}`);
+    }
+    if (name && phone) {
+        keys.push(`name_phone:${name}|${phone}`);
+    }
+    if (name && address) {
+        keys.push(`name_address:${name}|${address}`);
+    }
+    if (name && (!phone || !address)) {
+        keys.push(`name_partial:${name}`);
+    }
+    if (name && !phone && !address) {
+        keys.push(`name_only:${name}`);
+    }
+
+    return keys;
+}
+
+const DEFAULT_PATIENT_HEADERS = [
+    "id",
+    "fullName",
+    "nicknames",
+    "phone",
+    "alternateContacts",
+    "address",
+    "lat",
+    "lng",
+    "status",
+    "notes",
+];
+
+async function upsertPatientToNamedSheet(
+    spreadsheetId: string,
+    token: string,
+    sheetTitle: string,
+    patient: Patient
+): Promise<void> {
+    await ensurePatientSheetExists(spreadsheetId, token, sheetTitle);
+    let rows = await fetchPatientSheetRows(spreadsheetId, token, sheetTitle, true);
+    if (rows.length === 0) {
+        await ensurePatientSheetHeaders(spreadsheetId, token, sheetTitle);
+        rows = await fetchPatientSheetRows(spreadsheetId, token, sheetTitle, true);
+    }
+
+    const headers = rows[0] ?? DEFAULT_PATIENT_HEADERS;
+    let idIndex = findHeaderIndex(headers, ["id"]);
+    if (idIndex < 0) {
+        await ensurePatientSheetHeaders(spreadsheetId, token, sheetTitle);
+        rows = await fetchPatientSheetRows(spreadsheetId, token, sheetTitle, true);
+        idIndex = findHeaderIndex(rows[0] ?? DEFAULT_PATIENT_HEADERS, ["id"]);
+        if (idIndex < 0) {
+            throw new Error(`ID column not found in ${sheetTitle} sheet`);
+        }
+    }
+
+    const effectiveHeaders = rows[0] ?? DEFAULT_PATIENT_HEADERS;
+    const rowValues = buildPatientRowForHeaders(effectiveHeaders, patient);
+
+    let rowIndex = -1;
+    for (let i = 1; i < rows.length; i++) {
+        if ((rows[i][idIndex] ?? "").trim() === patient.id) {
+            rowIndex = i + 1;
+            break;
+        }
+    }
+
+    if (rowIndex >= 0) {
+        const endCol = toColumnLetter(Math.max(effectiveHeaders.length, DEFAULT_PATIENT_HEADERS.length));
+        const updateUrl = `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(
+            `${sheetTitle}!A${rowIndex}:${endCol}${rowIndex}`
+        )}?valueInputOption=USER_ENTERED`;
+        const updateResponse = await fetch(updateUrl, {
+            method: "PUT",
+            headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ values: [rowValues] }),
+        });
+        if (!updateResponse.ok) {
+            const fallback = `Sheets API error (${updateResponse.status})`;
+            throw new Error(await getSheetsErrorMessage(updateResponse, fallback));
+        }
+        return;
+    }
+
+    const appendUrl = `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(
+        `${sheetTitle}!A:${toColumnLetter(Math.max(effectiveHeaders.length, DEFAULT_PATIENT_HEADERS.length))}`
+    )}:append?valueInputOption=USER_ENTERED`;
+    const appendResponse = await fetch(appendUrl, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ values: [rowValues] }),
+    });
+    if (!appendResponse.ok) {
+        const fallback = `Sheets API error (${appendResponse.status})`;
+        throw new Error(await getSheetsErrorMessage(appendResponse, fallback));
+    }
+}
+
+async function deletePatientRowsByIdsInSheet(
+    spreadsheetId: string,
+    token: string,
+    sheetTitle: string,
+    patientIds: string[]
+): Promise<number> {
+    const normalizedIds = new Set(patientIds.map((id) => id.trim()).filter(Boolean));
+    if (normalizedIds.size === 0) {
+        return 0;
+    }
+
+    const rows = await fetchPatientSheetRows(spreadsheetId, token, sheetTitle, false);
+    if (rows.length < 2) {
+        return 0;
+    }
+
+    const headers = rows[0];
+    const idIndex = findHeaderIndex(headers, ["id"]);
+    if (idIndex < 0) {
+        return 0;
+    }
+
+    const rowIndicesToDelete: number[] = [];
+    for (let i = 1; i < rows.length; i++) {
+        const patientId = (rows[i][idIndex] ?? "").trim();
+        if (patientId && normalizedIds.has(patientId)) {
+            rowIndicesToDelete.push(i + 1);
+        }
+    }
+
+    try {
+        await deletePatientSheetRows(spreadsheetId, token, sheetTitle, rowIndicesToDelete);
+    } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        console.error(`Failed to delete ${rowIndicesToDelete.length} rows from ${sheetTitle}:`, err);
+        throw new Error(`Failed to delete rows from ${sheetTitle}: ${message}. Some rows may have been deleted.`);
+    }
+
+    return rowIndicesToDelete.length;
+}
+
+async function removeDuplicateRowsInSinglePatientSheet(
+    spreadsheetId: string,
+    token: string,
+    sheetTitle: string
+): Promise<number> {
+    const rows = await fetchPatientSheetRows(spreadsheetId, token, sheetTitle, false);
+    if (rows.length < 2) {
+        return 0;
+    }
+
+    const headers = rows[0];
+    const idIndex = findHeaderIndex(headers, ["id"]);
+    const nameIndex = findHeaderIndex(headers, ["fullname", "name"]);
+    const phoneIndex = findHeaderIndex(headers, ["phone", "phonenumber"]);
+    const addressIndex = findHeaderIndex(headers, ["address", "homeaddress", "streetaddress"]);
+
+    const seenKeys = new Set<string>();
+    const rowIndicesToDelete: number[] = [];
+
+    for (let i = 1; i < rows.length; i++) {
+        const row = rows[i];
+        const keys = buildSheetPatientDedupKeys({
+            id: idIndex >= 0 ? row[idIndex] ?? "" : "",
+            fullName: nameIndex >= 0 ? row[nameIndex] ?? "" : "",
+            phone: phoneIndex >= 0 ? row[phoneIndex] ?? "" : "",
+            address: addressIndex >= 0 ? row[addressIndex] ?? "" : "",
+        });
+        if (keys.length === 0) {
+            continue;
+        }
+
+        const isDuplicate = keys.some((key) => seenKeys.has(key));
+        if (isDuplicate) {
+            rowIndicesToDelete.push(i + 1);
+            continue;
+        }
+
+        for (const key of keys) {
+            seenKeys.add(key);
+        }
+    }
+
+    await deletePatientSheetRows(spreadsheetId, token, sheetTitle, rowIndicesToDelete);
+    return rowIndicesToDelete.length;
+}
+
+async function getPatientIdsInSheet(
+    spreadsheetId: string,
+    token: string,
+    sheetTitle: string
+): Promise<Set<string>> {
+    const rows = await fetchPatientSheetRows(spreadsheetId, token, sheetTitle, false);
+    if (rows.length < 2) {
+        return new Set<string>();
+    }
+
+    const headers = rows[0];
+    const idIndex = findHeaderIndex(headers, ["id"]);
+    if (idIndex < 0) {
+        return new Set<string>();
+    }
+
+    const ids = new Set<string>();
+    for (let i = 1; i < rows.length; i++) {
+        const id = (rows[i][idIndex] ?? "").trim();
+        if (id) {
+            ids.add(id);
+        }
+    }
+    return ids;
+}
+
+function buildPatientRowForHeaders(headers: string[], patient: Patient): string[] {
+    const normalizedHeaders = headers.length > 0 ? headers : DEFAULT_PATIENT_HEADERS;
+    const row = new Array(normalizedHeaders.length).fill("");
+
+    const setCell = (aliases: string[], value: string) => {
+        const index = findHeaderIndex(normalizedHeaders, aliases);
+        if (index >= 0) {
+            row[index] = value;
+        }
+    };
+
+    setCell(["id"], patient.id);
+    setCell(["fullname", "name"], patient.fullName);
+    setCell(["nicknames"], patient.nicknames.join(", "));
+    setCell(["phone", "phonenumber"], patient.phone);
+    setCell(["alternatecontacts", "alternatecontact"], serializeAlternateContactsField(patient.alternateContacts));
+    setCell(["address"], patient.address);
+    setCell(["lat", "latitude"], patient.lat?.toString() || "");
+    setCell(["lng", "longitude", "long"], patient.lng?.toString() || "");
+    setCell(["status"], patient.status);
+    setCell(["notes"], patient.notes || "");
+    setCell(["email"], patient.email || "");
+
+    return row;
+}
+
+async function ensurePatientSheetExists(
+    spreadsheetId: string,
+    token: string,
+    sheetTitle: string
+): Promise<void> {
+    await getSheetIdByTitle(spreadsheetId, token, sheetTitle, true);
+}
+
+async function ensurePatientSheetHeaders(
+    spreadsheetId: string,
+    token: string,
+    sheetTitle: string
+): Promise<void> {
+    const rows = await fetchPatientSheetRows(spreadsheetId, token, sheetTitle, false);
+    if (rows.length > 0 && rows[0].some((cell) => cell.trim() !== "")) {
+        return;
+    }
+
+    const writeUrl = `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(
+        `${sheetTitle}!A1:${toColumnLetter(DEFAULT_PATIENT_HEADERS.length)}1`
+    )}?valueInputOption=USER_ENTERED`;
+    const response = await fetch(writeUrl, {
+        method: "PUT",
+        headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ values: [DEFAULT_PATIENT_HEADERS] }),
+    });
+
+    if (!response.ok) {
+        const fallback = `Sheets API error (${response.status})`;
+        throw new Error(await getSheetsErrorMessage(response, fallback));
+    }
+}
+
+async function fetchPatientSheetRows(
+    spreadsheetId: string,
+    token: string,
+    sheetOrRange: string,
+    throwIfMissing = true
+): Promise<string[][]> {
+    const range = sheetOrRange.includes("!") ? sheetOrRange : `${sheetOrRange}!A:J`;
+    const fetchUrl = `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(range)}`;
+    const response = await fetch(fetchUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) {
+        if (!throwIfMissing && (response.status === 400 || response.status === 404)) {
+            return [];
+        }
+        const fallback = `Sheets API error (${response.status})`;
+        throw new Error(await getSheetsErrorMessage(response, fallback));
+    }
+
+    const payload = (await response.json()) as SheetValues;
+    return payload.values || [];
+}
+
+async function getSheetIdByTitle(
+    spreadsheetId: string,
+    token: string,
+    sheetTitle: string,
+    createIfMissing = false
+): Promise<number | null> {
+    const metadata = await fetchSpreadsheetMetadata(spreadsheetId, token);
+    const existing = metadata.sheets?.find((sheet) => sheet.properties?.title === sheetTitle);
+    const existingId = existing?.properties?.sheetId;
+    if (typeof existingId === "number") {
+        return existingId;
+    }
+
+    if (!createIfMissing) {
+        return null;
+    }
+
+    const response = await fetch(`${SHEETS_API_BASE}/${spreadsheetId}:batchUpdate`, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            requests: [{ addSheet: { properties: { title: sheetTitle } } }],
+        }),
+    });
+    if (!response.ok) {
+        const fallback = `Sheets API error (${response.status})`;
+        throw new Error(await getSheetsErrorMessage(response, fallback));
+    }
+
+    const refreshed = await fetchSpreadsheetMetadata(spreadsheetId, token);
+    const created = refreshed.sheets?.find((sheet) => sheet.properties?.title === sheetTitle);
+    const createdId = created?.properties?.sheetId;
+    if (typeof createdId !== "number") {
+        throw new Error(`Failed to create ${sheetTitle} sheet`);
+    }
+    return createdId;
+}
+
+async function fetchSpreadsheetMetadata(
+    spreadsheetId: string,
+    token: string
+): Promise<SpreadsheetMetadata> {
+    const metadataUrl = `${SHEETS_API_BASE}/${spreadsheetId}?fields=sheets.properties(sheetId,title)`;
+    const response = await fetch(metadataUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) {
+        const fallback = `Sheets API error (${response.status})`;
+        throw new Error(await getSheetsErrorMessage(response, fallback));
+    }
+
+    return (await response.json()) as SpreadsheetMetadata;
+}
+
+async function deletePatientSheetRows(
+    spreadsheetId: string,
+    token: string,
+    sheetTitle: string,
+    rowIndices1Based: number[]
+): Promise<void> {
+    if (rowIndices1Based.length === 0) {
+        return;
+    }
+
+    const sheetId = await getSheetIdByTitle(spreadsheetId, token, sheetTitle, false);
+    if (sheetId === null) {
+        return;
+    }
+
+    const requests = [...rowIndices1Based]
+        .sort((a, b) => b - a)
+        .map((rowIndex) => ({
+            deleteDimension: {
+                range: {
+                    sheetId,
+                    dimension: "ROWS",
+                    startIndex: rowIndex - 1,
+                    endIndex: rowIndex,
+                },
+            },
+        }));
+
+    const response = await fetch(`${SHEETS_API_BASE}/${spreadsheetId}:batchUpdate`, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ requests }),
+    });
+
+    if (!response.ok) {
+        const fallback = `Sheets API error (${response.status})`;
+        throw new Error(await getSheetsErrorMessage(response, fallback));
+    }
+}
+
+function toColumnLetter(index1Based: number): string {
+    let n = Math.max(1, index1Based);
+    let result = "";
+    while (n > 0) {
+        const rem = (n - 1) % 26;
+        result = String.fromCharCode(65 + rem) + result;
+        n = Math.floor((n - 1) / 26);
+    }
+    return result;
 }
