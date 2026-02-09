@@ -1057,22 +1057,22 @@ export function SchedulePage() {
                 ...withoutCoordinates,
             ];
 
-            let nextStartMinutes = dayStartMinutes;
+            // Start at 9:00 AM (540 minutes from midnight)
+            let nextStartMinutes = 540;
             for (const appointment of orderedAppointments) {
-                const snappedStartMinutes = Math.max(
-                    DAY_START_MINUTES,
-                    Math.round(nextStartMinutes / SLOT_MINUTES) * SLOT_MINUTES
-                );
-                const nextStartTime = minutesToTimeString(snappedStartMinutes);
+                // Snap to 15-minute slots
+                const snappedMinutes = Math.round(nextStartMinutes / 15) * 15;
+                const hours = Math.floor(snappedMinutes / 60);
+                const mins = snappedMinutes % 60;
+                const nextStartTime = `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
 
-                if (appointment.date !== date || appointment.startTime !== nextStartTime) {
-                    await update(appointment.id, {
-                        date,
-                        startTime: nextStartTime,
-                    });
-                }
+                // Always update to force the new time
+                await update(appointment.id, {
+                    date,
+                    startTime: nextStartTime,
+                });
 
-                nextStartMinutes = snappedStartMinutes + appointment.duration;
+                nextStartMinutes = snappedMinutes + appointment.duration;
             }
 
             // Reload appointments to ensure UI reflects the changes
