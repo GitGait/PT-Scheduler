@@ -1022,10 +1022,9 @@ export function SchedulePage() {
         }));
 
         try {
-            const dayStartMinutes = Math.max(
-                DAY_START_MINUTES,
-                Math.min(...dayAppointments.map((appointment) => timeStringToMinutes(appointment.startTime)))
-            );
+            // Start optimized routes at 9:00 AM
+            const OPTIMIZE_START_MINUTES = 9 * 60;
+            const dayStartMinutes = OPTIMIZE_START_MINUTES;
 
             const withCoordinates: Array<{
                 appointment: Appointment;

@@ -258,9 +258,9 @@ export function ScanPage() {
                     continue;
                 }
 
-                const dayStartMinutes = Math.min(
-                    ...dayItems.map((item) => timeStringToMinutes(item.startTime))
-                );
+                // Start optimized routes at 9:00 AM
+                const OPTIMIZE_START_MINUTES = 9 * 60;
+                const dayStartMinutes = OPTIMIZE_START_MINUTES;
 
                 const withDistance: Array<{
                     item: (typeof dayItems)[number];
