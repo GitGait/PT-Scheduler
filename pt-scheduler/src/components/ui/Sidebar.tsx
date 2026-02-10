@@ -259,11 +259,11 @@ function MiniCalendar({ selectedDate, onDateSelect }: MiniCalendarProps) {
       </div>
 
       {/* Week day headers */}
-      <div className="grid grid-cols-7 mb-1">
+      <div className="grid grid-cols-7">
         {weekDays.map((day, index) => (
           <div
             key={index}
-            className="w-8 h-8 flex items-center justify-center text-xs font-medium text-[#70757a]"
+            className="h-7 flex items-center justify-center text-[11px] font-medium text-[#70757a]"
           >
             {day}
           </div>
@@ -271,7 +271,7 @@ function MiniCalendar({ selectedDate, onDateSelect }: MiniCalendarProps) {
       </div>
 
       {/* Calendar days */}
-      <div className="space-y-0.5">
+      <div>
         {weeks.map((week, weekIndex) => (
           <div key={weekIndex} className="grid grid-cols-7">
             {week.map((day, dayIndex) => {
@@ -283,17 +283,21 @@ function MiniCalendar({ selectedDate, onDateSelect }: MiniCalendarProps) {
                 <button
                   key={dayIndex}
                   onClick={() => onDateSelect?.(day)}
-                  className={`w-8 h-8 flex items-center justify-center text-xs rounded-full transition-colors ${
-                    !isCurrentMonth
-                      ? "text-[#70757a]"
-                      : isTodayDate
-                      ? "bg-[#1a73e8] text-white font-medium"
-                      : isSelected
-                      ? "bg-[#e8f0fe] text-[#1a73e8] font-medium"
-                      : "text-[#3c4043] hover:bg-[#f1f3f4]"
-                  }`}
+                  className="h-7 flex items-center justify-center"
                 >
-                  {format(day, "d")}
+                  <span
+                    className={`w-6 h-6 flex items-center justify-center text-[11px] rounded-full transition-colors ${
+                      !isCurrentMonth
+                        ? "text-[#70757a]"
+                        : isTodayDate
+                        ? "bg-[#1a73e8] text-white font-medium"
+                        : isSelected
+                        ? "bg-[#e8f0fe] text-[#1a73e8] font-medium"
+                        : "text-[#3c4043] hover:bg-[#f1f3f4]"
+                    }`}
+                  >
+                    {format(day, "d")}
+                  </span>
                 </button>
               );
             })}
