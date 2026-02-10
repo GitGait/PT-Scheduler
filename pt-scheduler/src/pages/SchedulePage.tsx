@@ -1994,9 +1994,9 @@ export function SchedulePage() {
                                             </span>
                                             <button
                                                 onClick={() => setSelectedDate(date)}
-                                                className={`w-5 h-5 flex items-center justify-center rounded-full text-xs font-medium transition-all ${
+                                                className={`w-4 h-4 flex items-center justify-center rounded-full text-[10px] font-medium transition-all ${
                                                     isToday
-                                                        ? 'bg-[#1a73e8] text-white shadow-sm'
+                                                        ? 'bg-[#1a73e8] text-white'
                                                         : isSelected
                                                         ? 'bg-[#e8f0fe] text-[#1a73e8]'
                                                         : 'text-[#3c4043] hover:bg-[#f1f3f4]'

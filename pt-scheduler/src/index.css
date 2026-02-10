@@ -109,7 +109,7 @@ button:not(.btn-sm), a:not(.btn-sm), input[type="checkbox"], input[type="radio"]
 }
 
 .day-number {
-  font-size: 16px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--color-text-secondary);
   line-height: 1;
@@ -119,8 +119,8 @@ button:not(.btn-sm), a:not(.btn-sm), input[type="checkbox"], input[type="radio"]
   background-color: var(--color-primary);
   color: white;
   border-radius: 50%;
-  width: 32px;
-  height: 32px;
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
