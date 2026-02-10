@@ -5,9 +5,14 @@ import { Button } from "../components/ui/Button";
 import { initAuth, isSignedIn, signIn, signOut, tryRestoreSignIn, getAccessToken } from "../api/auth";
 import { fetchPatientsFromSheet } from "../api/sheets";
 import { createCalendarEvent, listCalendars } from "../api/calendar";
+import { geocodeAddress } from "../api/geocode";
 import { reconcilePatientsFromSheetSnapshot } from "../db/patientSheetSync";
 import { db } from "../db/schema";
 import { env } from "../utils/env";
+import { getHomeBase, setHomeBase } from "../utils/scheduling";
+
+// Event for notifying other components of auth state changes
+export const AUTH_STATE_CHANGED_EVENT = "pt-scheduler:auth-state-changed";
 
 function normalizeSpreadsheetId(input: string): string {
     const trimmed = input.trim();
@@ -41,6 +46,12 @@ export function SettingsPage() {
     const [syncingCalendar, setSyncingCalendar] = useState(false);
     const [testingCalendar, setTestingCalendar] = useState(false);
     const [availableCalendars, setAvailableCalendars] = useState<Array<{ id: string; summary: string }> | null>(null);
+
+    // Home base configuration
+    const [homeAddressInput, setHomeAddressInput] = useState(() => getHomeBase().address);
+    const [homeBaseStatus, setHomeBaseStatus] = useState<string | null>(null);
+    const [homeBaseError, setHomeBaseError] = useState<string | null>(null);
+    const [savingHomeBase, setSavingHomeBase] = useState(false);
 
     const hasClientId = useMemo(() => Boolean(env.googleClientId), []);
 
@@ -168,6 +179,8 @@ export function SettingsPage() {
             await signIn();
             setSignedIn(true);
             setStatusMessage("Connected to Google.");
+            // Notify other components (like TopNav) of auth state change
+            window.dispatchEvent(new Event(AUTH_STATE_CHANGED_EVENT));
         } catch (err) {
             setStatusError(err instanceof Error ? err.message : "Google sign-in failed.");
         } finally {
@@ -180,6 +193,45 @@ export function SettingsPage() {
         setSignedIn(false);
         setStatusError(null);
         setStatusMessage("Signed out of Google.");
+        // Notify other components of auth state change
+        window.dispatchEvent(new Event(AUTH_STATE_CHANGED_EVENT));
+    };
+
+    const handleSaveHomeBase = async () => {
+        const address = homeAddressInput.trim();
+        if (!address) {
+            setHomeBaseError("Please enter your home address.");
+            setHomeBaseStatus(null);
+            return;
+        }
+
+        setSavingHomeBase(true);
+        setHomeBaseError(null);
+        setHomeBaseStatus(null);
+
+        try {
+            // Geocode the address to get coordinates
+            const result = await geocodeAddress(address);
+
+            if (!Number.isFinite(result.lat) || !Number.isFinite(result.lng)) {
+                setHomeBaseError("Could not find coordinates for this address.");
+                return;
+            }
+
+            // Save to localStorage
+            setHomeBase({
+                address: result.formattedAddress || address,
+                lat: result.lat,
+                lng: result.lng,
+            });
+
+            setHomeAddressInput(result.formattedAddress || address);
+            setHomeBaseStatus(`Home base saved. Coordinates: ${result.lat.toFixed(4)}, ${result.lng.toFixed(4)}`);
+        } catch (err) {
+            setHomeBaseError(err instanceof Error ? err.message : "Failed to geocode address.");
+        } finally {
+            setSavingHomeBase(false);
+        }
     };
 
     const handleImportPatients = async () => {
@@ -375,6 +427,39 @@ export function SettingsPage() {
                         aria-hidden="true"
                     />
                     <span className="text-[#3c4043]">{isOnline ? "Online" : "Offline"}</span>
+                </div>
+            </Card>
+
+            <Card className="mb-4">
+                <CardHeader title="Home Base Address" subtitle="Your starting location for route calculations" />
+                <div className="space-y-3">
+                    <div>
+                        <label htmlFor="home-address" className="mb-1 block text-sm text-[#5f6368]">
+                            Home Address
+                        </label>
+                        <input
+                            id="home-address"
+                            type="text"
+                            value={homeAddressInput}
+                            onChange={(e) => setHomeAddressInput(e.target.value)}
+                            className="w-full input-google"
+                            placeholder="123 Main St, City, State ZIP"
+                        />
+                    </div>
+                    <Button
+                        size="sm"
+                        variant="primary"
+                        onClick={() => void handleSaveHomeBase()}
+                        disabled={savingHomeBase}
+                    >
+                        {savingHomeBase ? "Saving..." : "Save Home Base"}
+                    </Button>
+                    {homeBaseStatus && (
+                        <p className="text-sm text-[#1e8e3e]">{homeBaseStatus}</p>
+                    )}
+                    {homeBaseError && (
+                        <p className="text-sm text-[#d93025]">{homeBaseError}</p>
+                    )}
                 </div>
             </Card>
 

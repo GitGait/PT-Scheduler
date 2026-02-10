@@ -11,6 +11,7 @@ import {
   Search,
 } from "lucide-react";
 import { isSignedIn, signIn, tryRestoreSignIn } from "../../api/auth";
+import { AUTH_STATE_CHANGED_EVENT } from "../../pages/SettingsPage";
 
 interface TopNavProps {
   onMenuClick: () => void;
@@ -49,9 +50,16 @@ export function TopNav({ onMenuClick, showMenuButton = true }: TopNavProps) {
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
 
+    // Listen for auth state changes from Settings page
+    const handleAuthStateChange = () => {
+      checkStatus();
+    };
+    window.addEventListener(AUTH_STATE_CHANGED_EVENT, handleAuthStateChange);
+
     return () => {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
+      window.removeEventListener(AUTH_STATE_CHANGED_EVENT, handleAuthStateChange);
     };
   }, []);
 
