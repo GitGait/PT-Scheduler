@@ -43,7 +43,7 @@ export interface Patient {
 
 export type AppointmentStatus = "scheduled" | "completed" | "cancelled" | "no-show";
 export type SyncStatus = "local" | "pending" | "synced" | "error";
-export type VisitType = "PT00" | "PT01" | "PT02" | "PT11" | "PT18" | "PT19" | null;
+export type VisitType = "PT00" | "PT01" | "PT02" | "PT11" | "PT18" | "PT19" | "PT33" | null;
 
 export interface Appointment {
   id: string;

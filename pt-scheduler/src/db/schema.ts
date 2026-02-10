@@ -69,7 +69,7 @@ export class PTSchedulerDB extends Dexie {
 }
 
 // Valid visit type codes
-const VALID_VISIT_TYPES = new Set(["PT00", "PT01", "PT02", "PT11", "PT18", "PT19"]);
+const VALID_VISIT_TYPES = new Set(["PT00", "PT01", "PT02", "PT11", "PT18", "PT19", "PT33"]);
 
 /**
  * Extract visit type from notes field during migration.

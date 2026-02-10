@@ -45,10 +45,16 @@ export const VISIT_TYPE_CONFIGS: VisitTypeConfig[] = [
         gradient: "linear-gradient(135deg, #039be5 0%, #0288d1 100%)",
     },
     {
-        code: null,
-        label: "Unspecified",
+        code: "PT33",
+        label: "PT Reassessment",
         bg: "#607d8b",
         gradient: "linear-gradient(135deg, #607d8b 0%, #455a64 100%)",
+    },
+    {
+        code: null,
+        label: "Unspecified",
+        bg: "#78909c",
+        gradient: "linear-gradient(135deg, #78909c 0%, #546e7a 100%)",
     },
 ];
 
