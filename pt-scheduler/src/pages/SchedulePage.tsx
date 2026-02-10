@@ -1857,28 +1857,33 @@ export function SchedulePage() {
                     <h1 className="text-sm sm:text-base font-semibold text-[#202124] ml-1">{monthYearDisplay}</h1>
                 </div>
 
-                <div className="relative flex items-center gap-1">
+                <div className="relative flex items-center gap-1.5">
                     <button
                         onClick={() => void handleOpenDayMap()}
                         disabled={isDayMapLoading}
-                        className="hidden sm:flex px-2.5 h-7 bg-[#e8f0fe] rounded-md text-xs font-medium text-[#1a73e8] hover:bg-[#d2e3fc] active:bg-[#c5d9f9] transition-all disabled:opacity-50"
+                        className="hidden sm:flex items-center gap-1.5 px-3 h-8 bg-white border border-[#dadce0] rounded-full text-xs font-medium text-[#3c4043] hover:bg-[#f8f9fa] hover:border-[#1a73e8] hover:text-[#1a73e8] active:bg-[#e8f0fe] transition-all disabled:opacity-50 shadow-sm"
                     >
-                        {isDayMapLoading ? "..." : "Map"}
+                        <Navigation className="w-3.5 h-3.5" />
+                        {isDayMapLoading ? "Loading..." : "Map Day"}
                     </button>
                     <button
                         onClick={() => void handleClearWeek()}
                         disabled={weekActionInProgress}
-                        className="hidden sm:flex px-2.5 h-7 bg-[#fce8e6] rounded-md text-xs font-medium text-[#c5221f] hover:bg-[#f9d7d5] active:bg-[#f5c6c3] transition-all disabled:opacity-50"
+                        className="hidden sm:flex items-center gap-1.5 px-3 h-8 bg-white border border-[#dadce0] rounded-full text-xs font-medium text-[#3c4043] hover:bg-[#fce8e6] hover:border-[#ea4335] hover:text-[#c5221f] active:bg-[#f5c6c3] transition-all disabled:opacity-50 shadow-sm"
                     >
-                        {weekActionInProgress ? "..." : "Clear"}
+                        <X className="w-3.5 h-3.5" />
+                        {weekActionInProgress ? "Working..." : "Clear Week"}
                     </button>
-                    <button
-                        onClick={() => void handleUndoClearWeek()}
-                        disabled={weekActionInProgress || !lastClearedWeekSnapshot}
-                        className="hidden sm:flex px-2.5 h-7 bg-[#f8f9fa] rounded-md text-xs font-medium text-[#5f6368] hover:bg-[#e8eaed] active:bg-[#dadce0] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
-                    >
-                        Undo
-                    </button>
+                    {lastClearedWeekSnapshot && (
+                        <button
+                            onClick={() => void handleUndoClearWeek()}
+                            disabled={weekActionInProgress}
+                            className="hidden sm:flex items-center gap-1.5 px-3 h-8 bg-[#e8f0fe] border border-[#1a73e8] rounded-full text-xs font-medium text-[#1a73e8] hover:bg-[#d2e3fc] active:bg-[#c5d9f9] transition-all disabled:opacity-50 shadow-sm"
+                        >
+                            <Clock className="w-3.5 h-3.5" />
+                            Undo
+                        </button>
+                    )}
                     <button
                         onClick={() => setViewDropdownOpen(!viewDropdownOpen)}
                         className="flex items-center gap-0.5 px-2 h-7 bg-[#f8f9fa] border border-[#dadce0] rounded-md text-xs font-medium text-[#3c4043] hover:bg-[#e8eaed] active:bg-[#dadce0] transition-all"
