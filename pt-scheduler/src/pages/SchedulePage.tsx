@@ -1987,14 +1987,14 @@ export function SchedulePage() {
                                     return (
                                         <div
                                             key={`header-${date}`}
-                                            className="flex flex-col items-center py-1 border-l border-[#e8eaed] first:border-l-0"
+                                            className="flex flex-col items-center py-2 border-l border-[#e8eaed] first:border-l-0"
                                         >
-                                            <span className={`text-[9px] font-medium tracking-wider ${isToday ? 'text-[#1a73e8]' : 'text-[#70757a]'}`}>
+                                            <span className={`text-[11px] font-medium tracking-wide ${isToday ? 'text-[#1a73e8]' : 'text-[#70757a]'}`}>
                                                 {dayLabel}
                                             </span>
                                             <button
                                                 onClick={() => setSelectedDate(date)}
-                                                className={`w-4 h-4 flex items-center justify-center rounded-full text-[10px] font-medium transition-all ${
+                                                className={`w-7 h-7 flex items-center justify-center rounded-full text-sm font-medium transition-all mt-0.5 ${
                                                     isToday
                                                         ? 'bg-[#1a73e8] text-white'
                                                         : isSelected
@@ -2008,7 +2008,7 @@ export function SchedulePage() {
                                                 <button
                                                     onClick={() => void handleAutoArrangeDay(date)}
                                                     disabled={isAutoArranging}
-                                                    className="mt-0.5 text-[8px] text-[#1a73e8] hover:underline disabled:opacity-50 opacity-70 hover:opacity-100"
+                                                    className="mt-1 text-[9px] text-[#1a73e8] hover:underline disabled:opacity-50 opacity-70 hover:opacity-100"
                                                 >
                                                     {isAutoArranging ? "..." : "Optimize"}
                                                 </button>
