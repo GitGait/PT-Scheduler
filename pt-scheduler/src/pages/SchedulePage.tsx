@@ -15,6 +15,7 @@ import { syncPatientToSheetByStatus } from "../api/sheets";
 import { Card, CardHeader } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { AppointmentDetailModal } from "../components/AppointmentDetailModal";
+import { AppointmentActionSheet } from "../components/AppointmentActionSheet";
 import { geocodeAddress } from "../api/geocode";
 import { db } from "../db/schema";
 import type { Appointment, Patient } from "../types";
@@ -297,6 +298,7 @@ export function SchedulePage() {
     const patientGeocodeInFlightRef = useRef(new Set<string>());
     const [detailAppointmentId, setDetailAppointmentId] = useState<string | null>(null);
     const [mapsMenuAddress, setMapsMenuAddress] = useState<string | null>(null);
+    const [actionSheetAppointmentId, setActionSheetAppointmentId] = useState<string | null>(null);
 
     // Zoom state for pinch-to-zoom on mobile
     const [zoomScale, setZoomScale] = useState(1);
@@ -948,8 +950,8 @@ export function SchedulePage() {
         if (suppressNextChipClickRef.current || resizingAppointmentId !== null) {
             return;
         }
-        // Open detail modal instead of move mode
-        setDetailAppointmentId(appointmentId);
+        // Open action sheet for mobile-friendly actions
+        setActionSheetAppointmentId(appointmentId);
     };
 
     const handleAppointmentLongPress = (
@@ -2083,7 +2085,7 @@ export function SchedulePage() {
                                                             ))}
                                                         </div>
 
-                                                        {/* Resize handles - positioned to not overlap action buttons */}
+                                                        {/* Resize handles - increased height for touch-friendliness */}
                                                         {/* Top resize handle */}
                                                         <div
                                                             onMouseDown={(event) => {
@@ -2094,8 +2096,7 @@ export function SchedulePage() {
                                                                 event.stopPropagation();
                                                                 handleResizeStart(event, appointment, "top");
                                                             }}
-                                                            className="absolute left-0 top-0 h-4 cursor-ns-resize pointer-events-auto touch-none"
-                                                            style={{ right: '28px' }}
+                                                            className="absolute left-0 right-0 top-0 h-6 cursor-ns-resize pointer-events-auto touch-none"
                                                         >
                                                             {/* Visual indicator for touch */}
                                                             <div className="absolute inset-x-4 top-1 h-1 bg-white/30 rounded-full" />
@@ -2110,88 +2111,11 @@ export function SchedulePage() {
                                                                 event.stopPropagation();
                                                                 handleResizeStart(event, appointment, "bottom");
                                                             }}
-                                                            className="absolute left-0 bottom-0 h-4 cursor-ns-resize pointer-events-auto touch-none"
-                                                            style={{ right: '60px' }}
+                                                            className="absolute left-0 right-0 bottom-0 h-6 cursor-ns-resize pointer-events-auto touch-none"
                                                         >
                                                             {/* Visual indicator for touch */}
                                                             <div className="absolute inset-x-4 bottom-1 h-1 bg-white/30 rounded-full" />
                                                         </div>
-
-                                                        {/* Delete button - top right, above resize handles */}
-                                                        <button
-                                                            type="button"
-                                                            draggable={false}
-                                                            onPointerDown={(e) => {
-                                                                e.stopPropagation();
-                                                            }}
-                                                            onMouseDown={(e) => {
-                                                                e.stopPropagation();
-                                                            }}
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                e.preventDefault();
-                                                                void handleDeleteAppointment(appointment);
-                                                            }}
-                                                            className="btn-sm absolute top-0 right-0 w-3 h-3 rounded-full bg-black/30 hover:bg-red-500 flex items-center justify-center transition-colors z-20 pointer-events-auto"
-                                                            style={{ touchAction: 'manipulation' }}
-                                                            aria-label={`Delete appointment for ${getPatientName(appointment.patientId)}`}
-                                                        >
-                                                            <X className="w-2 h-2" />
-                                                        </button>
-
-                                                        {/* Call & Navigate buttons - bottom right, above resize handles */}
-                                                        {(patient?.phone || patient?.address) && (
-                                                            <div className="absolute bottom-0 right-0 flex gap-px z-20 pointer-events-auto">
-                                                                {patient?.phone && (
-                                                                    <button
-                                                                        type="button"
-                                                                        draggable={false}
-                                                                        onPointerDown={(e) => {
-                                                                            e.stopPropagation();
-                                                                        }}
-                                                                        onMouseDown={(e) => {
-                                                                            e.stopPropagation();
-                                                                        }}
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            e.preventDefault();
-                                                                            window.location.href = buildPhoneHref(patient.phone)!;
-                                                                        }}
-                                                                        className="btn-sm w-3 h-3 flex items-center justify-center rounded-sm bg-white/25 hover:bg-white/50 transition-colors pointer-events-auto"
-                                                                        style={{ touchAction: 'manipulation' }}
-                                                                        aria-label={`Call ${patient.fullName}`}
-                                                                    >
-                                                                        <Phone className="w-2 h-2" />
-                                                                    </button>
-                                                                )}
-                                                                {patient?.address && (
-                                                                    <button
-                                                                        type="button"
-                                                                        draggable={false}
-                                                                        onPointerDown={(e) => {
-                                                                            e.stopPropagation();
-                                                                        }}
-                                                                        onMouseDown={(e) => {
-                                                                            e.stopPropagation();
-                                                                        }}
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            e.preventDefault();
-                                                                            if (isIOS()) {
-                                                                                setMapsMenuAddress(patient.address);
-                                                                            } else {
-                                                                                window.open(buildGoogleMapsHref(patient.address)!, '_blank');
-                                                                            }
-                                                                        }}
-                                                                        className="btn-sm w-3 h-3 flex items-center justify-center rounded-sm bg-white/25 hover:bg-white/50 transition-colors pointer-events-auto"
-                                                                        style={{ touchAction: 'manipulation' }}
-                                                                        aria-label={`Navigate to ${patient.fullName}`}
-                                                                    >
-                                                                        <Navigation className="w-2 h-2" />
-                                                                    </button>
-                                                                )}
-                                                            </div>
-                                                        )}
 
                                                     </div>
                                                 );
@@ -2547,6 +2471,48 @@ export function SchedulePage() {
                     </div>
                 </div>
             )}
+
+            {/* Appointment Action Sheet */}
+            {actionSheetAppointmentId && (() => {
+                const actionAppointment = appointments.find((apt) => apt.id === actionSheetAppointmentId);
+                const actionPatient = actionAppointment ? patientById.get(actionAppointment.patientId) : undefined;
+
+                if (!actionAppointment) {
+                    return null;
+                }
+
+                return (
+                    <AppointmentActionSheet
+                        appointment={actionAppointment}
+                        patient={actionPatient}
+                        isOpen={true}
+                        onClose={() => setActionSheetAppointmentId(null)}
+                        onCall={() => {
+                            if (actionPatient?.phone) {
+                                window.location.href = buildPhoneHref(actionPatient.phone)!;
+                            }
+                        }}
+                        onNavigate={() => {
+                            if (actionPatient?.address) {
+                                if (isIOS()) {
+                                    setMapsMenuAddress(actionPatient.address);
+                                } else {
+                                    window.open(buildGoogleMapsHref(actionPatient.address)!, '_blank');
+                                }
+                            }
+                        }}
+                        onViewEdit={() => {
+                            setDetailAppointmentId(actionSheetAppointmentId);
+                        }}
+                        onMove={() => {
+                            setMoveAppointmentId(actionSheetAppointmentId);
+                        }}
+                        onDelete={() => {
+                            void handleDeleteAppointment(actionAppointment);
+                        }}
+                    />
+                );
+            })()}
 
             {/* Appointment Detail Modal */}
             {detailAppointmentId && (() => {

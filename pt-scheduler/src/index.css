@@ -316,3 +316,13 @@ button:not(.btn-sm), a:not(.btn-sm), input[type="checkbox"], input[type="radio"]
 .animate-slide-in {
   animation: slideIn 0.2s ease;
 }
+
+/* Slide up animation for bottom sheets */
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.25s ease-out;
+}
