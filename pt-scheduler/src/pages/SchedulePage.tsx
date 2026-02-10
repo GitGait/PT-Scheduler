@@ -19,7 +19,8 @@ import { AppointmentActionSheet } from "../components/AppointmentActionSheet";
 import { geocodeAddress } from "../api/geocode";
 import { getDistanceMatrix } from "../api/distance";
 import { db } from "../db/schema";
-import type { Appointment, Patient } from "../types";
+import type { Appointment, Patient, VisitType } from "../types";
+import { getVisitTypeGradient } from "../utils/visitTypeColors";
 import "leaflet/dist/leaflet.css";
 import {
     ChevronLeft,
@@ -32,7 +33,6 @@ import {
     Navigation,
     Clock,
     Car,
-    GripVertical,
 } from "lucide-react";
 
 const SLOT_MINUTES = 15;
@@ -44,6 +44,11 @@ const EARTH_RADIUS_MILES = 3958.8;
 const AVERAGE_DRIVE_SPEED_MPH = 30;
 import { getHomeBase } from "../utils/scheduling";
 const APPOINTMENTS_SYNCED_EVENT = "pt-scheduler:appointments-synced";
+const REQUEST_SYNC_EVENT = "pt-scheduler:request-sync";
+
+const triggerSync = () => {
+    window.dispatchEvent(new Event(REQUEST_SYNC_EVENT));
+};
 
 interface ClearedWeekAppointmentSnapshot {
     patientId: string;
@@ -217,37 +222,6 @@ const isIOS = (): boolean => {
         (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 };
 
-const normalizeVisitType = (value?: string): string | null => {
-    const raw = (value ?? "").trim();
-    if (!raw) {
-        return null;
-    }
-
-    const cleaned = raw
-        .replace(/^[\[\(\{<]+|[\]\)\}>]+$/g, "")
-        .replace(/^visit\s*type\s*[:\-]?\s*/i, "")
-        .replace(/[–—]/g, "-")
-        .replace(/^[\s:;\-]+|[\s:;\-]+$/g, "")
-        .replace(/\s+/g, " ")
-        .trim();
-
-    if (!cleaned) {
-        return null;
-    }
-
-    const alphaNumeric = cleaned.match(/^([A-Za-z]{1,6})\s*[-]?\s*(\d{1,3})$/);
-    if (alphaNumeric) {
-        return `${alphaNumeric[1].toUpperCase()}${alphaNumeric[2]}`;
-    }
-
-    const keyword = cleaned.match(/^(EVAL|SOC|DC|ROC|RE[-\s]?EVAL)$/i);
-    if (keyword) {
-        return keyword[1].toUpperCase().replace(/[-\s]/g, "");
-    }
-
-    return cleaned.toUpperCase();
-};
-
 export function SchedulePage() {
     const {
         selectedDate,
@@ -280,6 +254,14 @@ export function SchedulePage() {
     const suppressNextChipClickRef = useRef(false);
     const suppressClickTimerRef = useRef<number | null>(null);
     const suppressChipClickTimerRef = useRef<number | null>(null);
+    const slotLongPressTimerRef = useRef<number | null>(null);
+    const slotLongPressTargetRef = useRef<{ date: string; startTime: string } | null>(null);
+    const resizeLongPressTimerRef = useRef<number | null>(null);
+    const resizeLongPressDataRef = useRef<{
+        event: TouchEvent<HTMLDivElement>;
+        appointment: Appointment;
+        edge: "top" | "bottom";
+    } | null>(null);
     const resizeSessionRef = useRef<{
         appointmentId: string;
         startY: number;
@@ -318,6 +300,9 @@ export function SchedulePage() {
     // View mode state (day or week)
     const [viewMode, setViewMode] = useState<'day' | 'week'>('week');
     const [viewDropdownOpen, setViewDropdownOpen] = useState(false);
+
+    // Header scroll shadow state
+    const [isScrolled, setIsScrolled] = useState(false);
     const [lastClearedWeekSnapshot, setLastClearedWeekSnapshot] = useState<ClearedWeekSnapshot | null>(null);
     const [weekActionInProgress, setWeekActionInProgress] = useState(false);
     const [weekActionMessage, setWeekActionMessage] = useState<string | null>(null);
@@ -810,31 +795,6 @@ export function SchedulePage() {
         return formatPatientDisplayName(patient);
     };
 
-    const getVisitTypeFromAppointment = (appointment: Appointment): string | null => {
-        const notes = appointment.notes ?? "";
-        if (!notes.trim()) {
-            return null;
-        }
-
-        const labeledMatch = notes.match(/(?:^|\n)\s*visit\s*type\s*[:\-]?\s*([^\n]+)\s*(?:\n|$)/i);
-        if (labeledMatch) {
-            return normalizeVisitType(labeledMatch[1]);
-        }
-
-        const bracketedMatch = notes.match(/\[\s*([A-Za-z]{1,6}\s*[-]?\s*\d{1,3}|EVAL|SOC|DC|ROC|RE[-\s]?EVAL)\s*\]/i);
-        if (bracketedMatch) {
-            return normalizeVisitType(bracketedMatch[1]);
-        }
-
-        const firstLine = notes.split(/\r?\n/)[0]?.trim() ?? "";
-        const prefixMatch = firstLine.match(/^([A-Za-z]{1,6}\s*[-]?\s*\d{1,3}|EVAL|SOC|DC|ROC|RE[-\s]?EVAL)\b/i);
-        if (prefixMatch) {
-            return normalizeVisitType(prefixMatch[1]);
-        }
-
-        return null;
-    };
-
     const openAddAppointment = (prefillDate = selectedDate, prefillTime?: string) => {
         setSelectedDate(prefillDate);
         setNewAppointmentDate(prefillDate);
@@ -888,6 +848,7 @@ export function SchedulePage() {
             setIsAddOpen(false);
             setNewStartTime("09:00");
             setNewDuration(60);
+            triggerSync();
         } catch (err) {
             setAddError(err instanceof Error ? err.message : "Failed to add appointment.");
         } finally {
@@ -933,6 +894,20 @@ export function SchedulePage() {
         return minutesToTimeString(DAY_START_MINUTES + slotIndex * SLOT_MINUTES);
     };
 
+    // Helper to preserve scroll position during updates
+    const preserveScrollPosition = (callback: () => void) => {
+        const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
+        const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
+        callback();
+        // Restore scroll position after React re-renders
+        requestAnimationFrame(() => {
+            if (zoomContainerRef.current) {
+                zoomContainerRef.current.scrollTop = scrollTop;
+                zoomContainerRef.current.scrollLeft = scrollLeft;
+            }
+        });
+    };
+
     const moveAppointmentToSlot = (appointmentId: string, date: string, startTime: string) => {
         const existingAppointment = appointments.find((apt) => apt.id === appointmentId);
         if (!existingAppointment) {
@@ -946,9 +921,11 @@ export function SchedulePage() {
             return;
         }
 
-        void update(appointmentId, {
-            date,
-            startTime,
+        preserveScrollPosition(() => {
+            void update(appointmentId, {
+                date,
+                startTime,
+            });
         });
     };
 
@@ -969,6 +946,7 @@ export function SchedulePage() {
 
         moveAppointmentToSlot(droppedId, date, startTime);
         setMoveAppointmentId(null);
+        triggerSync();
         suppressNextSlotClickRef.current = true;
         if (suppressClickTimerRef.current) {
             window.clearTimeout(suppressClickTimerRef.current);
@@ -995,6 +973,7 @@ export function SchedulePage() {
 
         moveAppointmentToSlot(droppedId, date, startTime);
         setMoveAppointmentId(null);
+        triggerSync();
         suppressNextSlotClickRef.current = true;
         if (suppressClickTimerRef.current) {
             window.clearTimeout(suppressClickTimerRef.current);
@@ -1072,13 +1051,42 @@ export function SchedulePage() {
             return;
         }
 
+        // Only handle click if we're in move mode - placing an appointment
         if (moveAppointmentId) {
             void moveAppointmentToSlot(moveAppointmentId, date, startTime);
             setMoveAppointmentId(null);
+            triggerSync();
+            return;
+        }
+        // For adding new appointments, require long press (handled separately)
+    };
+
+    const LONG_PRESS_DURATION_MS = 400;
+
+    const handleSlotLongPressStart = (date: string, startTime: string) => {
+        // Don't start long press if we're in move mode
+        if (moveAppointmentId) {
             return;
         }
 
-        openAddAppointment(date, startTime);
+        slotLongPressTargetRef.current = { date, startTime };
+        if (slotLongPressTimerRef.current) {
+            window.clearTimeout(slotLongPressTimerRef.current);
+        }
+        slotLongPressTimerRef.current = window.setTimeout(() => {
+            if (slotLongPressTargetRef.current) {
+                openAddAppointment(slotLongPressTargetRef.current.date, slotLongPressTargetRef.current.startTime);
+                slotLongPressTargetRef.current = null;
+            }
+        }, LONG_PRESS_DURATION_MS);
+    };
+
+    const handleSlotLongPressEnd = () => {
+        if (slotLongPressTimerRef.current) {
+            window.clearTimeout(slotLongPressTimerRef.current);
+            slotLongPressTimerRef.current = null;
+        }
+        slotLongPressTargetRef.current = null;
     };
 
     const handleDeleteAppointment = async (appointment: Appointment) => {
@@ -1110,6 +1118,7 @@ export function SchedulePage() {
         });
 
         await deleteAppointment(appointment.id);
+        triggerSync();
     };
 
     const handleAutoArrangeDay = async (date: string) => {
@@ -1184,6 +1193,7 @@ export function SchedulePage() {
             // Reload appointments to ensure UI reflects the changes
             await loadByRange(weekStart, weekEnd);
             setSelectedDate(date);
+            triggerSync();
         } catch (err) {
             setAutoArrangeError(
                 err instanceof Error
@@ -1259,6 +1269,7 @@ export function SchedulePage() {
             }
 
             await loadByRange(weekStart, weekEnd);
+            triggerSync();
 
             if (remainingAppointments.length > 0) {
                 setWeekActionError(
@@ -1318,6 +1329,7 @@ export function SchedulePage() {
 
             setWeekActionMessage(`Restored ${count} appointment${count === 1 ? "" : "s"} to the week.`);
             setLastClearedWeekSnapshot(null);
+            triggerSync();
         } catch (err) {
             setWeekActionError(
                 err instanceof Error ? err.message : "Failed to restore the cleared week."
@@ -1451,6 +1463,39 @@ export function SchedulePage() {
         };
     };
 
+    const RESIZE_LONG_PRESS_DURATION_MS = 300;
+
+    const handleResizeTouchStart = (
+        event: TouchEvent<HTMLDivElement>,
+        appointment: Appointment,
+        edge: "top" | "bottom"
+    ) => {
+        event.stopPropagation();
+        // Store the data for delayed start
+        resizeLongPressDataRef.current = { event, appointment, edge };
+
+        if (resizeLongPressTimerRef.current) {
+            window.clearTimeout(resizeLongPressTimerRef.current);
+        }
+
+        resizeLongPressTimerRef.current = window.setTimeout(() => {
+            const data = resizeLongPressDataRef.current;
+            if (data) {
+                // Now actually start the resize
+                handleResizeStart(data.event, data.appointment, data.edge);
+                resizeLongPressDataRef.current = null;
+            }
+        }, RESIZE_LONG_PRESS_DURATION_MS);
+    };
+
+    const handleResizeTouchEnd = () => {
+        if (resizeLongPressTimerRef.current) {
+            window.clearTimeout(resizeLongPressTimerRef.current);
+            resizeLongPressTimerRef.current = null;
+        }
+        resizeLongPressDataRef.current = null;
+    };
+
     useEffect(() => {
         const handleMove = (clientY: number) => {
             const session = resizeSessionRef.current;
@@ -1520,6 +1565,10 @@ export function SchedulePage() {
                 return;
             }
 
+            // Save scroll position before update
+            const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
+            const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
+
             const nextRender = resizeDraftRef.current ?? {
                 startMinutes: session.initialStartMinutes,
                 duration: session.initialDuration,
@@ -1531,7 +1580,7 @@ export function SchedulePage() {
                 void update(session.appointmentId, {
                     startTime: minutesToTimeString(nextRender.startMinutes),
                     duration: nextRender.duration,
-                });
+                }).then(() => triggerSync());
             }
 
             setDraftRenderById((current) => {
@@ -1543,6 +1592,14 @@ export function SchedulePage() {
             resizeSessionRef.current = null;
             resizeDraftRef.current = null;
             suppressNextChipClick();
+
+            // Restore scroll position after React re-renders
+            requestAnimationFrame(() => {
+                if (zoomContainerRef.current) {
+                    zoomContainerRef.current.scrollTop = scrollTop;
+                    zoomContainerRef.current.scrollLeft = scrollLeft;
+                }
+            });
         };
 
         window.addEventListener("mousemove", handleMouseMove);
@@ -1566,6 +1623,12 @@ export function SchedulePage() {
             }
             if (suppressChipClickTimerRef.current) {
                 window.clearTimeout(suppressChipClickTimerRef.current);
+            }
+            if (slotLongPressTimerRef.current) {
+                window.clearTimeout(slotLongPressTimerRef.current);
+            }
+            if (resizeLongPressTimerRef.current) {
+                window.clearTimeout(resizeLongPressTimerRef.current);
             }
         };
     }, []);
@@ -1764,83 +1827,84 @@ export function SchedulePage() {
     const todayInWeek = weekDates.includes(todayIso());
 
     return (
-        <div className="h-full flex flex-col bg-white">
+        <div className="h-full min-h-0 flex flex-col bg-white">
             {/* Header with navigation */}
-            <div className="flex items-center justify-between px-4 py-2 border-b border-[#dadce0]">
-                <div className="flex items-center gap-4">
+            <div className={`flex items-center justify-between px-2 sm:px-4 py-1.5 border-b border-[#e8eaed] bg-white header-nav ${isScrolled ? 'scrolled' : ''}`}>
+                <div className="flex items-center gap-1.5 sm:gap-2">
                     <button
                         onClick={() => setSelectedDate(todayIso())}
-                        className="px-4 h-9 border border-[#dadce0] rounded text-sm font-medium text-[#3c4043] hover:bg-[#f1f3f4] transition-colors"
+                        className="px-2.5 h-7 bg-white border border-[#dadce0] rounded-md text-xs font-medium text-[#3c4043] hover:bg-[#f8f9fa] hover:border-[#c4c7c9] active:bg-[#f1f3f4] transition-all shadow-sm"
                     >
                         Today
                     </button>
-                    <div className="flex items-center">
+                    <div className="flex items-center bg-[#f8f9fa] rounded-md">
                         <button
                             onClick={() => navigateWeek(-1)}
-                            className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#f1f3f4] transition-colors"
+                            className="w-7 h-7 flex items-center justify-center rounded-l-md hover:bg-[#e8eaed] active:bg-[#dadce0] transition-colors"
                             aria-label="Previous week"
                         >
-                            <ChevronLeft className="w-5 h-5 text-[#5f6368]" />
+                            <ChevronLeft className="w-4 h-4 text-[#5f6368]" />
                         </button>
+                        <div className="w-px h-4 bg-[#dadce0]" />
                         <button
                             onClick={() => navigateWeek(1)}
-                            className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#f1f3f4] transition-colors"
+                            className="w-7 h-7 flex items-center justify-center rounded-r-md hover:bg-[#e8eaed] active:bg-[#dadce0] transition-colors"
                             aria-label="Next week"
                         >
-                            <ChevronRight className="w-5 h-5 text-[#5f6368]" />
+                            <ChevronRight className="w-4 h-4 text-[#5f6368]" />
                         </button>
                     </div>
-                    <h1 className="text-[22px] font-normal text-[#3c4043]">{monthYearDisplay}</h1>
+                    <h1 className="text-sm sm:text-base font-semibold text-[#202124] ml-1">{monthYearDisplay}</h1>
                 </div>
 
-                <div className="relative flex items-center gap-2">
+                <div className="relative flex items-center gap-1">
                     <button
                         onClick={() => void handleOpenDayMap()}
                         disabled={isDayMapLoading}
-                        className="px-3 h-9 border border-[#dadce0] rounded text-sm font-medium text-[#1a73e8] hover:bg-[#e8f0fe] transition-colors disabled:opacity-60"
+                        className="hidden sm:flex px-2.5 h-7 bg-[#e8f0fe] rounded-md text-xs font-medium text-[#1a73e8] hover:bg-[#d2e3fc] active:bg-[#c5d9f9] transition-all disabled:opacity-50"
                     >
-                        {isDayMapLoading ? "Mapping..." : "Day Map"}
+                        {isDayMapLoading ? "..." : "Map"}
                     </button>
                     <button
                         onClick={() => void handleClearWeek()}
                         disabled={weekActionInProgress}
-                        className="px-3 h-9 border border-[#f2b8b5] rounded text-sm font-medium text-[#b3261e] hover:bg-[#fce8e6] transition-colors disabled:opacity-60"
+                        className="hidden sm:flex px-2.5 h-7 bg-[#fce8e6] rounded-md text-xs font-medium text-[#c5221f] hover:bg-[#f9d7d5] active:bg-[#f5c6c3] transition-all disabled:opacity-50"
                     >
-                        {weekActionInProgress ? "Working..." : "Clear Week"}
+                        {weekActionInProgress ? "..." : "Clear"}
                     </button>
                     <button
                         onClick={() => void handleUndoClearWeek()}
                         disabled={weekActionInProgress || !lastClearedWeekSnapshot}
-                        className="px-3 h-9 border border-[#dadce0] rounded text-sm font-medium text-[#3c4043] hover:bg-[#f1f3f4] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="hidden sm:flex px-2.5 h-7 bg-[#f8f9fa] rounded-md text-xs font-medium text-[#5f6368] hover:bg-[#e8eaed] active:bg-[#dadce0] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                        Undo Clear
+                        Undo
                     </button>
                     <button
                         onClick={() => setViewDropdownOpen(!viewDropdownOpen)}
-                        className="flex items-center gap-2 px-3 h-9 border border-[#dadce0] rounded text-sm font-medium text-[#3c4043] hover:bg-[#f1f3f4] transition-colors"
+                        className="flex items-center gap-0.5 px-2 h-7 bg-[#f8f9fa] border border-[#dadce0] rounded-md text-xs font-medium text-[#3c4043] hover:bg-[#e8eaed] active:bg-[#dadce0] transition-all"
                     >
                         <span>{viewMode === 'week' ? 'Week' : 'Day'}</span>
-                        <ChevronDown className={`w-4 h-4 transition-transform ${viewDropdownOpen ? 'rotate-180' : ''}`} />
+                        <ChevronDown className={`w-3.5 h-3.5 text-[#5f6368] transition-transform ${viewDropdownOpen ? 'rotate-180' : ''}`} />
                     </button>
                     {viewDropdownOpen && (
-                        <div className="absolute top-full right-0 mt-1 bg-white border border-[#dadce0] rounded-lg shadow-lg z-50 min-w-[120px]">
+                        <div className="absolute top-full right-0 mt-1 bg-white border border-[#e8eaed] rounded-lg shadow-lg z-50 min-w-[100px] py-1 overflow-hidden">
                             <button
                                 onClick={() => {
                                     setViewMode('day');
                                     setViewDropdownOpen(false);
                                 }}
-                                className={`w-full px-4 py-2 text-left text-sm hover:bg-[#f1f3f4] ${viewMode === 'day' ? 'text-[#1a73e8] font-medium' : 'text-[#3c4043]'}`}
+                                className={`w-full px-3 py-1.5 text-left text-xs hover:bg-[#f1f3f4] transition-colors ${viewMode === 'day' ? 'text-[#1a73e8] font-medium bg-[#e8f0fe]' : 'text-[#3c4043]'}`}
                             >
-                                Day
+                                Day view
                             </button>
                             <button
                                 onClick={() => {
                                     setViewMode('week');
                                     setViewDropdownOpen(false);
                                 }}
-                                className={`w-full px-4 py-2 text-left text-sm hover:bg-[#f1f3f4] ${viewMode === 'week' ? 'text-[#1a73e8] font-medium' : 'text-[#3c4043]'}`}
+                                className={`w-full px-3 py-1.5 text-left text-xs hover:bg-[#f1f3f4] transition-colors ${viewMode === 'week' ? 'text-[#1a73e8] font-medium bg-[#e8f0fe]' : 'text-[#3c4043]'}`}
                             >
-                                Week
+                                Week view
                             </button>
                         </div>
                     )}
@@ -1871,7 +1935,15 @@ export function SchedulePage() {
             {/* Main grid area */}
             <div
                 ref={zoomContainerRef}
-                className="flex-1 overflow-auto"
+                className="flex-1 min-h-0 overflow-auto"
+                style={{
+                    WebkitOverflowScrolling: 'touch',
+                    overscrollBehavior: 'contain',
+                }}
+                onScroll={(e) => {
+                    const scrollTop = (e.target as HTMLDivElement).scrollTop;
+                    setIsScrolled(scrollTop > 0);
+                }}
                 onTouchStart={handleZoomTouchStart}
                 onTouchMove={handleZoomTouchMove}
                 onTouchEnd={handleZoomTouchEnd}
@@ -1890,7 +1962,7 @@ export function SchedulePage() {
                         }}
                     >
                         {/* Day headers */}
-                        <div className="sticky top-0 z-20 bg-white border-b border-[#dadce0]">
+                        <div className="sticky top-0 z-20 bg-white/98 backdrop-blur-sm border-b border-[#e8eaed]">
                             <div className={`grid ${viewMode === 'day' ? 'grid-cols-[60px_1fr]' : 'grid-cols-[60px_repeat(7,1fr)]'}`}>
                                 {/* GMT offset */}
                                 <div className="py-2 px-1 text-right">
@@ -1910,16 +1982,16 @@ export function SchedulePage() {
                                     return (
                                         <div
                                             key={`header-${date}`}
-                                            className="flex flex-col items-center py-2 border-l border-[#dadce0]"
+                                            className="flex flex-col items-center py-1 border-l border-[#e8eaed] first:border-l-0"
                                         >
-                                            <span className={`text-xs font-medium ${isToday ? 'text-[#1a73e8]' : 'text-[#70757a]'}`}>
+                                            <span className={`text-[9px] font-medium tracking-wider ${isToday ? 'text-[#1a73e8]' : 'text-[#70757a]'}`}>
                                                 {dayLabel}
                                             </span>
                                             <button
                                                 onClick={() => setSelectedDate(date)}
-                                                className={`mt-1 w-11 h-11 flex items-center justify-center rounded-full text-2xl transition-colors ${
+                                                className={`w-5 h-5 flex items-center justify-center rounded-full text-xs font-medium transition-all ${
                                                     isToday
-                                                        ? 'bg-[#1a73e8] text-white'
+                                                        ? 'bg-[#1a73e8] text-white shadow-sm'
                                                         : isSelected
                                                         ? 'bg-[#e8f0fe] text-[#1a73e8]'
                                                         : 'text-[#3c4043] hover:bg-[#f1f3f4]'
@@ -1931,7 +2003,7 @@ export function SchedulePage() {
                                                 <button
                                                     onClick={() => void handleAutoArrangeDay(date)}
                                                     disabled={isAutoArranging}
-                                                    className="mt-1 text-[10px] text-[#1a73e8] hover:underline disabled:opacity-50"
+                                                    className="mt-0.5 text-[8px] text-[#1a73e8] hover:underline disabled:opacity-50 opacity-70 hover:opacity-100"
                                                 >
                                                     {isAutoArranging ? "..." : "Optimize"}
                                                 </button>
@@ -2004,11 +2076,26 @@ export function SchedulePage() {
                                         {timeSlots.map((slotMinutes) => {
                                             const slotTime = minutesToTimeString(slotMinutes);
                                             const isHourMark = slotMinutes % 60 === 0;
+                                            const hourIndex = Math.floor((slotMinutes - DAY_START_MINUTES) / 60);
+                                            const isEvenHour = hourIndex % 2 === 0;
 
                                             return (
-                                                <button
+                                                <div
                                                     key={`slot-${date}-${slotTime}`}
+                                                    role="button"
+                                                    tabIndex={0}
                                                     onClick={() => handleSlotClick(date, slotTime)}
+                                                    onDoubleClick={() => openAddAppointment(date, slotTime)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter' || e.key === ' ') {
+                                                            e.preventDefault();
+                                                            openAddAppointment(date, slotTime);
+                                                        }
+                                                    }}
+                                                    onTouchStart={() => handleSlotLongPressStart(date, slotTime)}
+                                                    onTouchMove={handleSlotLongPressEnd}
+                                                    onTouchEnd={handleSlotLongPressEnd}
+                                                    onTouchCancel={handleSlotLongPressEnd}
                                                     onDragOver={(event) => {
                                                         event.preventDefault();
                                                         event.dataTransfer.dropEffect = "move";
@@ -2020,11 +2107,11 @@ export function SchedulePage() {
                                                     onDrop={(event) => {
                                                         void handleSlotDrop(event, date, slotTime);
                                                     }}
-                                                    className={`block w-full text-left transition-colors hover:bg-[#f1f3f4] ${
-                                                        isHourMark ? 'border-t border-[#dadce0]' : 'border-t border-[#f1f3f4]'
-                                                    }`}
+                                                    className={`block w-full text-left transition-colors hover:bg-blue-50/50 cursor-pointer ${
+                                                        isHourMark ? 'border-t border-[#e0e0e0]' : 'border-t border-[#f5f5f5]'
+                                                    } ${isEvenHour ? 'bg-slate-50/40' : ''}`}
                                                     style={{ height: SLOT_HEIGHT_PX }}
-                                                    aria-label={`Add appointment ${date} at ${formatAxisTime(slotMinutes)}`}
+                                                    aria-label={`Double-click or hold to add appointment ${date} at ${formatAxisTime(slotMinutes)}`}
                                                 />
                                             );
                                         })}
@@ -2069,9 +2156,11 @@ export function SchedulePage() {
                                                     0,
                                                     sameStartGroup.findIndex((apt) => apt.id === appointment.id)
                                                 );
-                                                const widthPct = 100 / groupSize;
-                                                const leftStyle = `calc(${groupIndex * widthPct}% + 2px)`;
-                                                const widthStyle = `calc(${widthPct}% - 4px)`;
+                                                // In day view, use full width for better readability
+                                                const isDayView = viewMode === 'day';
+                                                const widthPct = isDayView ? 100 : (100 / groupSize);
+                                                const leftStyle = isDayView ? '4px' : `calc(${groupIndex * widthPct}% + 2px)`;
+                                                const widthStyle = isDayView ? 'calc(100% - 8px)' : `calc(${widthPct}% - 4px)`;
                                                 const isActiveMove =
                                                     moveAppointmentId === appointment.id ||
                                                     draggingAppointmentId === appointment.id;
@@ -2079,7 +2168,7 @@ export function SchedulePage() {
                                                     resizingAppointmentId === appointment.id;
                                                 const patient = getPatient(appointment.patientId);
                                                 const legInfo = legInfoByAppointmentId[appointment.id];
-                                                const visitType = getVisitTypeFromAppointment(appointment);
+                                                const visitType = appointment.visitType;
                                                 const showMilesRow = heightPx >= 46;
                                                 const showPhoneRow = heightPx >= 58;
                                                 const showAddressRow = heightPx >= 72;
@@ -2096,52 +2185,56 @@ export function SchedulePage() {
                                                         onClick={(event) =>
                                                             handleAppointmentChipClick(event, appointment.id)
                                                         }
-                                                        className={`pointer-events-auto absolute rounded overflow-hidden text-white text-xs cursor-grab active:cursor-grabbing transition-shadow group ${
+                                                        className={`pointer-events-auto absolute rounded-md overflow-hidden text-white text-xs cursor-grab active:cursor-grabbing group appointment-chip ${
                                                             isActiveMove || isActiveResize
-                                                                ? 'ring-2 ring-[#1a73e8] ring-offset-1 shadow-lg'
-                                                                : 'hover:shadow-md'
+                                                                ? 'ring-2 ring-[#1a73e8] ring-offset-1 shadow-lg !transform-none'
+                                                                : ''
                                                         }`}
                                                         style={{
                                                             top: topPx,
                                                             height: heightPx,
                                                             left: leftStyle,
                                                             width: widthStyle,
-                                                            backgroundColor: '#039be5',
-                                                            borderLeft: '4px solid #0288d1',
+                                                            background: getVisitTypeGradient(visitType),
                                                         }}
                                                         title={`${getPatientName(appointment.patientId)}${patient?.phone ? ` - ${patient.phone}` : ''}${patient?.address ? ` - ${patient.address}` : ''}`}
                                                     >
-                                                        {/* Drag handle on left side */}
+                                                        {/* Main content area - full width, draggable from anywhere */}
+                                                        {/* Larger text and spacing in day view for better readability */}
                                                         <div
-                                                            className="absolute left-0 top-0 bottom-0 w-4 bg-black/15 flex items-center justify-center cursor-grab active:cursor-grabbing touch-none"
-                                                        >
-                                                            <GripVertical className="w-3 h-3 text-white/60" />
-                                                        </div>
-                                                        {/* Main content area */}
-                                                        <div
-                                                            className="absolute left-4 right-1 top-0 bottom-0 overflow-hidden text-[9px] leading-tight"
+                                                            className={`absolute left-2 right-1.5 top-0 bottom-0 overflow-hidden leading-snug ${
+                                                                isDayView ? 'text-[13px]' : 'text-[10px]'
+                                                            }`}
                                                             style={{
                                                                 display: 'flex',
                                                                 flexDirection: 'column',
                                                                 alignItems: 'flex-start',
-                                                                gap: '1px',
-                                                                padding: '2px 0 11px 0',
+                                                                gap: isDayView ? '4px' : '2px',
+                                                                padding: isDayView ? '8px 4px 14px 4px' : '4px 0 12px 0',
                                                             }}
                                                         >
-                                                            <div className="font-semibold truncate text-[11px] leading-[1.1] min-h-[12px] w-full overflow-hidden">
+                                                            <div className={`font-semibold truncate leading-[1.2] w-full overflow-hidden drop-shadow-sm ${
+                                                                isDayView ? 'text-[15px] min-h-[18px]' : 'text-[11px] min-h-[13px]'
+                                                            }`}>
                                                                 {getPatientName(appointment.patientId)}
                                                             </div>
                                                             {visitType && (
-                                                                <div className="opacity-95 truncate min-h-[11px] w-full overflow-hidden font-medium text-[9px]">
+                                                                <div className={`opacity-95 truncate w-full overflow-hidden font-medium tracking-wide ${
+                                                                    isDayView ? 'text-[13px] min-h-[16px]' : 'text-[10px] min-h-[12px]'
+                                                                }`}>
                                                                     [{visitType}]
                                                                 </div>
                                                             )}
-                                                            <div className="opacity-90 truncate min-h-[11px] w-full overflow-hidden text-[9px]">
+                                                            <div className={`opacity-90 truncate w-full overflow-hidden ${
+                                                                isDayView ? 'text-[13px] min-h-[16px]' : 'text-[10px] min-h-[12px]'
+                                                            }`}>
                                                                 {minutesToTimeString(startMinutes)} ({displayDuration}m)
                                                             </div>
                                                             {showMilesRow && legInfo?.miles != null && (
-                                                                <div className="inline-flex items-center gap-0.5 opacity-85 truncate min-h-[11px] max-w-full overflow-hidden text-[9px]">
-                                                                    <Car className="w-2 h-2 shrink-0" />
+                                                                <div className={`inline-flex items-center gap-1 opacity-90 truncate max-w-full overflow-hidden ${
+                                                                    isDayView ? 'text-[13px] min-h-[16px]' : 'text-[10px] min-h-[12px]'
+                                                                }`}>
+                                                                    <Car className={isDayView ? 'w-3.5 h-3.5 shrink-0' : 'w-2.5 h-2.5 shrink-0'} />
                                                                     <span className="truncate">
                                                                         {legInfo.miles.toFixed(1)} mi
                                                                         {legInfo.minutes != null && ` (${legInfo.minutes} min)`}
@@ -2149,80 +2242,59 @@ export function SchedulePage() {
                                                                 </div>
                                                             )}
                                                             {showPhoneRow && patient?.phone && (
-                                                                <a
-                                                                    href={buildPhoneHref(patient.phone)!}
-                                                                    onClick={(e) => e.stopPropagation()}
-                                                                    onMouseDown={(e) => e.stopPropagation()}
-                                                                    onPointerDown={(e) => e.stopPropagation()}
-                                                                    className="inline-flex w-fit max-w-full items-center gap-0.5 hover:underline pointer-events-auto min-h-[11px] overflow-hidden whitespace-nowrap text-ellipsis opacity-90 text-[9px]"
-                                                                    draggable={false}
-                                                                >
-                                                                    <Phone className="w-2 h-2 shrink-0" />
+                                                                <div className={`inline-flex w-fit max-w-full items-center gap-1 overflow-hidden whitespace-nowrap text-ellipsis opacity-90 ${
+                                                                    isDayView ? 'text-[13px] min-h-[16px]' : 'text-[10px] min-h-[12px]'
+                                                                }`}>
+                                                                    <Phone className={isDayView ? 'w-3.5 h-3.5 shrink-0' : 'w-2.5 h-2.5 shrink-0'} />
                                                                     <span className="truncate">{patient.phone}</span>
-                                                                </a>
+                                                                </div>
                                                             )}
                                                             {showAddressRow && patient?.address && (
-                                                                <a
-                                                                    href={buildGoogleMapsHref(patient.address)!}
-                                                                    target="_blank"
-                                                                    rel="noopener noreferrer"
-                                                                    onClick={(e) => e.stopPropagation()}
-                                                                    onMouseDown={(e) => e.stopPropagation()}
-                                                                    onPointerDown={(e) => e.stopPropagation()}
-                                                                    className="inline-flex w-fit max-w-full items-center gap-0.5 hover:underline pointer-events-auto min-h-[11px] overflow-hidden whitespace-nowrap text-ellipsis opacity-90 text-[9px]"
-                                                                    draggable={false}
-                                                                >
-                                                                    <MapPin className="w-2 h-2 shrink-0" />
+                                                                <div className={`inline-flex w-fit max-w-full items-center gap-1 overflow-hidden whitespace-nowrap text-ellipsis opacity-90 ${
+                                                                    isDayView ? 'text-[13px] min-h-[16px]' : 'text-[10px] min-h-[12px]'
+                                                                }`}>
+                                                                    <MapPin className={isDayView ? 'w-3.5 h-3.5 shrink-0' : 'w-2.5 h-2.5 shrink-0'} />
                                                                     <span className="truncate">{patient.address.split(',')[0]}</span>
-                                                                </a>
+                                                                </div>
                                                             )}
                                                             {showAlternateContactRows && patient?.alternateContacts?.map((contact, idx) => (
-                                                                <a
+                                                                <div
                                                                     key={idx}
-                                                                    href={buildPhoneHref(contact.phone)!}
-                                                                    onClick={(e) => e.stopPropagation()}
-                                                                    onMouseDown={(e) => e.stopPropagation()}
-                                                                    onPointerDown={(e) => e.stopPropagation()}
-                                                                    className="inline-flex w-fit max-w-full items-center gap-0.5 hover:underline pointer-events-auto min-h-[11px] overflow-hidden whitespace-nowrap text-ellipsis opacity-80 text-[9px]"
-                                                                    draggable={false}
+                                                                    className={`inline-flex w-fit max-w-full items-center gap-1 overflow-hidden whitespace-nowrap text-ellipsis opacity-85 ${
+                                                                        isDayView ? 'text-[13px] min-h-[16px]' : 'text-[10px] min-h-[12px]'
+                                                                    }`}
                                                                 >
-                                                                    <Phone className="w-2 h-2 shrink-0" />
+                                                                    <Phone className={isDayView ? 'w-3.5 h-3.5 shrink-0' : 'w-2.5 h-2.5 shrink-0'} />
                                                                     <span className="truncate">{contact.firstName ? `${contact.firstName}: ` : ''}{contact.phone}</span>
-                                                                </a>
+                                                                </div>
                                                             ))}
                                                         </div>
 
-                                                        {/* Resize handles - increased height for touch-friendliness */}
+                                                        {/* Invisible resize handles - larger in day view for easier grabbing */}
                                                         {/* Top resize handle */}
                                                         <div
                                                             onMouseDown={(event) => {
                                                                 event.stopPropagation();
                                                                 handleResizeStart(event as unknown as MouseEvent<HTMLButtonElement>, appointment, "top");
                                                             }}
-                                                            onTouchStart={(event) => {
-                                                                event.stopPropagation();
-                                                                handleResizeStart(event, appointment, "top");
-                                                            }}
-                                                            className="absolute left-0 right-0 top-0 h-6 cursor-ns-resize pointer-events-auto touch-none"
-                                                        >
-                                                            {/* Visual indicator for touch */}
-                                                            <div className="absolute inset-x-4 top-1 h-1 bg-white/30 rounded-full" />
-                                                        </div>
+                                                            onTouchStart={(event) => handleResizeTouchStart(event, appointment, "top")}
+                                                            onTouchEnd={handleResizeTouchEnd}
+                                                            onTouchCancel={handleResizeTouchEnd}
+                                                            className={`absolute left-0 right-0 top-0 cursor-ns-resize pointer-events-auto ${isDayView ? 'h-8' : 'h-4'}`}
+                                                            style={{ touchAction: 'none' }}
+                                                        />
                                                         {/* Bottom resize handle */}
                                                         <div
                                                             onMouseDown={(event) => {
                                                                 event.stopPropagation();
                                                                 handleResizeStart(event as unknown as MouseEvent<HTMLButtonElement>, appointment, "bottom");
                                                             }}
-                                                            onTouchStart={(event) => {
-                                                                event.stopPropagation();
-                                                                handleResizeStart(event, appointment, "bottom");
-                                                            }}
-                                                            className="absolute left-0 right-0 bottom-0 h-6 cursor-ns-resize pointer-events-auto touch-none"
-                                                        >
-                                                            {/* Visual indicator for touch */}
-                                                            <div className="absolute inset-x-4 bottom-1 h-1 bg-white/30 rounded-full" />
-                                                        </div>
+                                                            onTouchStart={(event) => handleResizeTouchStart(event, appointment, "bottom")}
+                                                            onTouchEnd={handleResizeTouchEnd}
+                                                            onTouchCancel={handleResizeTouchEnd}
+                                                            className={`absolute left-0 right-0 bottom-0 cursor-ns-resize pointer-events-auto ${isDayView ? 'h-8' : 'h-4'}`}
+                                                            style={{ touchAction: 'none' }}
+                                                        />
 
                                                     </div>
                                                 );
@@ -2594,11 +2666,6 @@ export function SchedulePage() {
                         patient={actionPatient}
                         isOpen={true}
                         onClose={() => setActionSheetAppointmentId(null)}
-                        onCall={() => {
-                            if (actionPatient?.phone) {
-                                window.location.href = buildPhoneHref(actionPatient.phone)!;
-                            }
-                        }}
                         onNavigate={() => {
                             if (actionPatient?.address) {
                                 if (isIOS()) {
@@ -2641,6 +2708,7 @@ export function SchedulePage() {
                         }}
                         onSaveAppointment={async (appointmentId, changes) => {
                             await update(appointmentId, changes);
+                            triggerSync();
                         }}
                         onSyncToSheet={async (updatedPatient) => {
                             // Get spreadsheet ID from sync store

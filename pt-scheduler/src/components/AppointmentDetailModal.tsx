@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { X, Phone, MapPin, Clock, FileText, Save, Loader2 } from "lucide-react";
+import { X, Phone, MapPin, Clock, FileText, Save, Loader2, Tag } from "lucide-react";
 import { Button } from "./ui/Button";
-import type { Appointment, Patient } from "../types";
+import type { Appointment, Patient, VisitType } from "../types";
+import { VISIT_TYPE_CONFIGS } from "../utils/visitTypeColors";
 
 interface AppointmentDetailModalProps {
     appointment: Appointment;
@@ -25,6 +26,7 @@ export function AppointmentDetailModal({
     const [phone, setPhone] = useState("");
     const [address, setAddress] = useState("");
     const [notes, setNotes] = useState("");
+    const [visitType, setVisitType] = useState<VisitType>(null);
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -36,6 +38,7 @@ export function AppointmentDetailModal({
             setAddress(patient.address || "");
         }
         setNotes(appointment.notes || "");
+        setVisitType(appointment.visitType ?? null);
         setError(null);
         setSuccessMessage(null);
     }, [patient, appointment, isOpen]);
@@ -57,7 +60,8 @@ export function AppointmentDetailModal({
         try {
             // Check if patient data changed
             const patientChanged = phone !== patient.phone || address !== patient.address;
-            const appointmentChanged = notes !== (appointment.notes || "");
+            const visitTypeChanged = visitType !== (appointment.visitType ?? null);
+            const appointmentChanged = notes !== (appointment.notes || "") || visitTypeChanged;
 
             if (patientChanged) {
                 // Update patient locally
@@ -81,6 +85,7 @@ export function AppointmentDetailModal({
                 // Update appointment
                 await onSaveAppointment(appointment.id, {
                     notes: notes || undefined,
+                    visitType: visitType,
                 });
             }
 
@@ -181,6 +186,44 @@ export function AppointmentDetailModal({
                             placeholder="Enter address"
                             className="w-full input-google"
                         />
+                    </div>
+
+                    {/* Visit Type */}
+                    <div>
+                        <label className="flex items-center gap-2 text-sm font-medium text-[#5f6368] mb-2">
+                            <Tag className="w-4 h-4" />
+                            Visit Type
+                        </label>
+                        <div className="grid grid-cols-2 gap-2">
+                            {VISIT_TYPE_CONFIGS.map((config) => {
+                                const isSelected = visitType === config.code;
+                                return (
+                                    <button
+                                        key={config.code ?? "none"}
+                                        type="button"
+                                        onClick={() => setVisitType(config.code)}
+                                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-left transition-all ${
+                                            isSelected
+                                                ? "border-[#1a73e8] ring-2 ring-[#1a73e8]/20"
+                                                : "border-[#dadce0] hover:border-[#5f6368]"
+                                        }`}
+                                    >
+                                        <span
+                                            className="w-3 h-3 rounded-full shrink-0"
+                                            style={{ backgroundColor: config.bg }}
+                                        />
+                                        <span className="flex flex-col min-w-0">
+                                            <span className="text-xs font-medium text-[#202124] truncate">
+                                                {config.code ?? "None"}
+                                            </span>
+                                            <span className="text-[10px] text-[#5f6368] truncate">
+                                                {config.label}
+                                            </span>
+                                        </span>
+                                    </button>
+                                );
+                            })}
+                        </div>
                     </div>
 
                     {/* Notes */}

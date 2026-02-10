@@ -5,6 +5,7 @@ import type {
     RecurringBlock,
     CalendarEvent,
     SyncQueueItem,
+    VisitType,
 } from "../types";
 
 // Route cache for storing optimized route results
@@ -40,7 +41,103 @@ export class PTSchedulerDB extends Dexie {
             syncQueue: "++id, timestamp, status, nextRetryAt",
             routeCache: "id, date, expiresAt",
         });
+
+        // Version 2: Add visitType field to appointments
+        this.version(2)
+            .stores({
+                patients: "id, fullName, status",
+                appointments: "id, patientId, date, status, syncStatus, visitType",
+                recurringBlocks: "id, patientId, dayOfWeek",
+                calendarEvents: "id, appointmentId, googleEventId",
+                syncQueue: "++id, timestamp, status, nextRetryAt",
+                routeCache: "id, date, expiresAt",
+            })
+            .upgrade((tx) => {
+                // Migrate existing appointments: extract visitType from notes
+                return tx
+                    .table("appointments")
+                    .toCollection()
+                    .modify((appointment) => {
+                        if (appointment.visitType === undefined) {
+                            appointment.visitType = extractVisitTypeFromNotes(
+                                appointment.notes
+                            );
+                        }
+                    });
+            });
     }
+}
+
+// Valid visit type codes
+const VALID_VISIT_TYPES = new Set(["PT00", "PT01", "PT02", "PT11", "PT18", "PT19"]);
+
+/**
+ * Extract visit type from notes field during migration.
+ * Returns a valid VisitType code or null.
+ */
+function extractVisitTypeFromNotes(notes?: string): VisitType {
+    if (!notes?.trim()) {
+        return null;
+    }
+
+    // Check for labeled format: "Visit Type: PT11"
+    const labeledMatch = notes.match(
+        /(?:^|\n)\s*visit\s*type\s*[:\-]?\s*([^\n]+)\s*(?:\n|$)/i
+    );
+    if (labeledMatch) {
+        const normalized = normalizeVisitTypeCode(labeledMatch[1]);
+        if (normalized && VALID_VISIT_TYPES.has(normalized)) {
+            return normalized as VisitType;
+        }
+    }
+
+    // Check for bracketed format: "[PT11]"
+    const bracketedMatch = notes.match(
+        /\[\s*([A-Za-z]{1,6}\s*[-]?\s*\d{1,3})\s*\]/i
+    );
+    if (bracketedMatch) {
+        const normalized = normalizeVisitTypeCode(bracketedMatch[1]);
+        if (normalized && VALID_VISIT_TYPES.has(normalized)) {
+            return normalized as VisitType;
+        }
+    }
+
+    // Check first line prefix: "PT11 - additional notes"
+    const firstLine = notes.split(/\r?\n/)[0]?.trim() ?? "";
+    const prefixMatch = firstLine.match(/^([A-Za-z]{1,6}\s*[-]?\s*\d{1,3})\b/i);
+    if (prefixMatch) {
+        const normalized = normalizeVisitTypeCode(prefixMatch[1]);
+        if (normalized && VALID_VISIT_TYPES.has(normalized)) {
+            return normalized as VisitType;
+        }
+    }
+
+    return null;
+}
+
+/**
+ * Normalize a visit type code string to canonical format (e.g., "PT 11" -> "PT11")
+ */
+function normalizeVisitTypeCode(value: string): string | null {
+    const cleaned = value
+        .replace(/^[\[\(\{<]+|[\]\)\}>]+$/g, "")
+        .replace(/[–—]/g, "-")
+        .replace(/^[\s:;\-]+|[\s:;\-]+$/g, "")
+        .replace(/\s+/g, "")
+        .trim()
+        .toUpperCase();
+
+    if (!cleaned) {
+        return null;
+    }
+
+    // Match pattern like PT11, PT01, etc.
+    const match = cleaned.match(/^([A-Z]{1,6})(\d{1,3})$/);
+    if (match) {
+        return `${match[1]}${match[2]}`;
+    }
+
+    return null;
 }
 
 // Singleton database instance

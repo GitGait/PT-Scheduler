@@ -26,7 +26,7 @@ const BATCH_DELAY_MS = 2500;
 const MAX_RETRIES = 5;
 const SHEETS_AUTO_SYNC_COOLDOWN_MS = 15 * 60 * 1000;
 const APPOINTMENT_BACKFILL_COOLDOWN_MS = 5 * 60 * 1000;
-const CALENDAR_POLL_INTERVAL_MS = 30000;
+const CALENDAR_POLL_INTERVAL_MS = 120000; // 2 minutes
 const CALENDAR_LOOKBACK_DAYS = 30;
 const CALENDAR_LOOKAHEAD_DAYS = 365;
 const CALENDAR_METADATA_KEYS = {
@@ -45,6 +45,7 @@ export interface SyncConfig {
 }
 
 const APPOINTMENTS_SYNCED_EVENT = "pt-scheduler:appointments-synced";
+export const REQUEST_SYNC_EVENT = "pt-scheduler:request-sync";
 const LAST_SHEETS_SYNC_KEY_PREFIX = "ptScheduler.lastSheetsAutoSync.";
 const LAST_APPOINTMENT_BACKFILL_KEY_PREFIX = "ptScheduler.lastCalendarBackfill.";
 
@@ -424,11 +425,17 @@ export function useSync(config: SyncConfig | null) {
             void runFastSync();
         };
 
+        const handleRequestSync = () => {
+            void runFastSync();
+        };
+
         window.addEventListener("focus", handleWindowFocus);
+        window.addEventListener(REQUEST_SYNC_EVENT, handleRequestSync);
 
         return () => {
             window.clearInterval(intervalId);
             window.removeEventListener("focus", handleWindowFocus);
+            window.removeEventListener(REQUEST_SYNC_EVENT, handleRequestSync);
         };
     }, [
         isOnline,

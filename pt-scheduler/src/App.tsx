@@ -26,12 +26,12 @@ function AppContent() {
   const selectedDateObj = new Date(selectedDate + "T12:00:00");
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="h-screen bg-white flex flex-col overflow-hidden">
       <TopNav
         onMenuClick={toggleSidebar}
         showMenuButton={showSidebar}
       />
-      <div className="flex flex-1 overflow-hidden">
+      <div className="flex flex-1 min-h-0 overflow-hidden">
         {showSidebar && (
           <Sidebar
             isOpen={sidebarOpen}
@@ -40,7 +40,7 @@ function AppContent() {
             onDateSelect={(date) => setSelectedDate(date)}
           />
         )}
-        <main className={`flex-1 overflow-auto ${showSidebar && sidebarOpen ? '' : ''}`}>
+        <main className={`flex-1 min-h-0 min-w-0 overflow-hidden ${showSidebar && sidebarOpen ? '' : ''}`}>
           <Routes>
             <Route path="/" element={<SchedulePage />} />
             <Route path="/patients" element={<PatientsPage />} />

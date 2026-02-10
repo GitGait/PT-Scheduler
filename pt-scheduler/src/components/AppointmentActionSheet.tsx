@@ -1,4 +1,4 @@
-import { Phone, Navigation, Edit3, Move, Trash2, X } from "lucide-react";
+import { Phone, MessageSquare, Navigation, Edit3, Move, Trash2, X } from "lucide-react";
 import type { Appointment, Patient } from "../types";
 
 interface AppointmentActionSheetProps {
@@ -6,19 +6,47 @@ interface AppointmentActionSheetProps {
     patient: Patient | undefined;
     isOpen: boolean;
     onClose: () => void;
-    onCall: () => void;
     onNavigate: () => void;
     onViewEdit: () => void;
     onMove: () => void;
     onDelete: () => void;
 }
 
+const buildPhoneHref = (rawPhone?: string): string | null => {
+    if (!rawPhone) return null;
+    const trimmed = rawPhone.trim();
+    if (!trimmed) return null;
+    const normalized = trimmed.replace(/[^\d+]/g, "");
+    return normalized ? `tel:${normalized}` : null;
+};
+
+const buildSmsHref = (rawPhone?: string): string | null => {
+    if (!rawPhone) return null;
+    const trimmed = rawPhone.trim();
+    if (!trimmed) return null;
+    const normalized = trimmed.replace(/[^\d+]/g, "");
+    return normalized ? `sms:${normalized}` : null;
+};
+
+const formatPhoneDisplay = (rawPhone?: string): string => {
+    if (!rawPhone) return "";
+    const trimmed = rawPhone.trim();
+    // Try to format as (xxx) xxx-xxxx if it's 10 digits
+    const digits = trimmed.replace(/\D/g, "");
+    if (digits.length === 10) {
+        return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+    }
+    if (digits.length === 11 && digits.startsWith("1")) {
+        return `+1 (${digits.slice(1, 4)}) ${digits.slice(4, 7)}-${digits.slice(7)}`;
+    }
+    return trimmed;
+};
+
 export function AppointmentActionSheet({
     appointment,
     patient,
     isOpen,
     onClose,
-    onCall,
     onNavigate,
     onViewEdit,
     onMove,
@@ -31,6 +59,10 @@ export function AppointmentActionSheet({
     const patientName = patient?.fullName ?? "Unknown Patient";
     const hasPhone = Boolean(patient?.phone);
     const hasAddress = Boolean(patient?.address);
+    const alternateContacts = patient?.alternateContacts ?? [];
+
+    const phoneHref = buildPhoneHref(patient?.phone);
+    const smsHref = buildSmsHref(patient?.phone);
 
     return (
         <div
@@ -38,11 +70,11 @@ export function AppointmentActionSheet({
             onClick={onClose}
         >
             <div
-                className="bg-white rounded-t-xl shadow-2xl w-full max-w-md mx-4 mb-0 animate-slide-up safe-area-pb"
+                className="bg-white rounded-t-xl shadow-2xl w-full max-w-md mx-4 mb-0 animate-slide-up safe-area-pb max-h-[80vh] overflow-y-auto"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-[#dadce0]">
+                <div className="flex items-center justify-between p-4 border-b border-[#dadce0] sticky top-0 bg-white">
                     <h3 className="text-base font-medium text-[#202124] truncate pr-4">
                         {patientName}
                     </h3>
@@ -57,21 +89,84 @@ export function AppointmentActionSheet({
 
                 {/* Action buttons */}
                 <div className="p-2">
-                    {/* Call Patient */}
-                    {hasPhone && (
-                        <button
-                            onClick={() => {
-                                onCall();
-                                onClose();
-                            }}
+                    {/* Call Patient (Primary) */}
+                    {hasPhone && phoneHref && (
+                        <a
+                            href={phoneHref}
+                            onClick={onClose}
                             className="w-full flex items-center gap-4 py-3 px-4 text-left text-[#202124] hover:bg-[#f1f3f4] rounded-lg transition-colors"
                         >
                             <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#e8f0fe]">
                                 <Phone className="w-5 h-5 text-[#1a73e8]" />
                             </div>
-                            <span className="font-medium">Call Patient</span>
-                        </button>
+                            <div className="flex flex-col">
+                                <span className="font-medium">Call Patient</span>
+                                <span className="text-sm text-[#5f6368]">{formatPhoneDisplay(patient?.phone)}</span>
+                            </div>
+                        </a>
                     )}
+
+                    {/* Text Patient (Primary) */}
+                    {hasPhone && smsHref && (
+                        <a
+                            href={smsHref}
+                            onClick={onClose}
+                            className="w-full flex items-center gap-4 py-3 px-4 text-left text-[#202124] hover:bg-[#f1f3f4] rounded-lg transition-colors"
+                        >
+                            <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#e8f0fe]">
+                                <MessageSquare className="w-5 h-5 text-[#1a73e8]" />
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="font-medium">Text Patient</span>
+                                <span className="text-sm text-[#5f6368]">{formatPhoneDisplay(patient?.phone)}</span>
+                            </div>
+                        </a>
+                    )}
+
+                    {/* Alternate Contacts */}
+                    {alternateContacts.map((contact, index) => {
+                        const altPhoneHref = buildPhoneHref(contact.phone);
+                        const altSmsHref = buildSmsHref(contact.phone);
+                        const contactLabel = contact.firstName + (contact.relationship ? ` (${contact.relationship})` : "");
+
+                        return (
+                            <div key={index}>
+                                {/* Call Alternate */}
+                                {altPhoneHref && (
+                                    <a
+                                        href={altPhoneHref}
+                                        onClick={onClose}
+                                        className="w-full flex items-center gap-4 py-3 px-4 text-left text-[#202124] hover:bg-[#f1f3f4] rounded-lg transition-colors"
+                                    >
+                                        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#fef7e0]">
+                                            <Phone className="w-5 h-5 text-[#f9ab00]" />
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="font-medium">Call {contactLabel}</span>
+                                            <span className="text-sm text-[#5f6368]">{formatPhoneDisplay(contact.phone)}</span>
+                                        </div>
+                                    </a>
+                                )}
+
+                                {/* Text Alternate */}
+                                {altSmsHref && (
+                                    <a
+                                        href={altSmsHref}
+                                        onClick={onClose}
+                                        className="w-full flex items-center gap-4 py-3 px-4 text-left text-[#202124] hover:bg-[#f1f3f4] rounded-lg transition-colors"
+                                    >
+                                        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#fef7e0]">
+                                            <MessageSquare className="w-5 h-5 text-[#f9ab00]" />
+                                        </div>
+                                        <div className="flex flex-col">
+                                            <span className="font-medium">Text {contactLabel}</span>
+                                            <span className="text-sm text-[#5f6368]">{formatPhoneDisplay(contact.phone)}</span>
+                                        </div>
+                                    </a>
+                                )}
+                            </div>
+                        );
+                    })}
 
                     {/* Navigate to Address */}
                     {hasAddress && (
@@ -85,9 +180,15 @@ export function AppointmentActionSheet({
                             <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#e6f4ea]">
                                 <Navigation className="w-5 h-5 text-[#1e8e3e]" />
                             </div>
-                            <span className="font-medium">Navigate to Address</span>
+                            <div className="flex flex-col">
+                                <span className="font-medium">Navigate to Address</span>
+                                <span className="text-sm text-[#5f6368] truncate max-w-[250px]">{patient?.address}</span>
+                            </div>
                         </button>
                     )}
+
+                    {/* Divider */}
+                    <div className="my-2 border-t border-[#dadce0]" />
 
                     {/* View / Edit Details */}
                     <button
@@ -97,8 +198,8 @@ export function AppointmentActionSheet({
                         }}
                         className="w-full flex items-center gap-4 py-3 px-4 text-left text-[#202124] hover:bg-[#f1f3f4] rounded-lg transition-colors"
                     >
-                        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#fef7e0]">
-                            <Edit3 className="w-5 h-5 text-[#f9ab00]" />
+                        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#f1f3f4]">
+                            <Edit3 className="w-5 h-5 text-[#5f6368]" />
                         </div>
                         <span className="font-medium">View / Edit Details</span>
                     </button>

@@ -43,6 +43,7 @@ export interface Patient {
 
 export type AppointmentStatus = "scheduled" | "completed" | "cancelled" | "no-show";
 export type SyncStatus = "local" | "pending" | "synced" | "error";
+export type VisitType = "PT00" | "PT01" | "PT02" | "PT11" | "PT18" | "PT19" | null;
 
 export interface Appointment {
   id: string;
@@ -54,6 +55,7 @@ export interface Appointment {
   syncStatus: SyncStatus;
   calendarEventId?: string;
   notes?: string;
+  visitType?: VisitType;
   createdAt: Date;
   updatedAt: Date;
 }

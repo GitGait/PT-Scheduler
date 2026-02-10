@@ -38,8 +38,8 @@ export function Sidebar({
     setLoadingCalendars,
   } = useScheduleStore();
 
-  const [myCalendarsOpen, setMyCalendarsOpen] = useState(true);
-  const [otherCalendarsOpen, setOtherCalendarsOpen] = useState(true);
+  const [myCalendarsOpen, setMyCalendarsOpen] = useState(false);
+  const [otherCalendarsOpen, setOtherCalendarsOpen] = useState(false);
 
   // Fetch calendars when sidebar opens and when app regains focus.
   useEffect(() => {
