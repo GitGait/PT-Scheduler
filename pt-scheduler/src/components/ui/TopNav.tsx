@@ -1,3 +1,4 @@
+import { useState, useEffect, useCallback } from "react";
 import { NavLink } from "react-router-dom";
 import {
   Menu,
@@ -9,6 +10,7 @@ import {
   HelpCircle,
   Search,
 } from "lucide-react";
+import { isSignedIn, signIn, tryRestoreSignIn } from "../../api/auth";
 
 interface TopNavProps {
   onMenuClick: () => void;
@@ -24,6 +26,58 @@ const navItems = [
 ];
 
 export function TopNav({ onMenuClick, showMenuButton = true }: TopNavProps) {
+  const [googleSignedIn, setGoogleSignedIn] = useState(() => isSignedIn());
+  const [isSigningIn, setIsSigningIn] = useState(false);
+
+  // Check sign-in status periodically and on visibility change
+  useEffect(() => {
+    const checkStatus = () => {
+      setGoogleSignedIn(isSignedIn());
+    };
+
+    // Check immediately
+    checkStatus();
+
+    // Check every 30 seconds (tokens can expire)
+    const interval = setInterval(checkStatus, 30000);
+
+    // Check when tab becomes visible again
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        checkStatus();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, []);
+
+  // Try to restore sign-in on mount
+  useEffect(() => {
+    const restore = async () => {
+      const restored = await tryRestoreSignIn();
+      setGoogleSignedIn(restored);
+    };
+    void restore();
+  }, []);
+
+  const handleSignInClick = useCallback(async () => {
+    if (googleSignedIn) return;
+
+    setIsSigningIn(true);
+    try {
+      await signIn();
+      setGoogleSignedIn(true);
+    } catch (err) {
+      console.error("Sign-in failed:", err);
+    } finally {
+      setIsSigningIn(false);
+    }
+  }, [googleSignedIn]);
+
   return (
     <header className="h-16 border-b border-[#dadce0] bg-white flex items-center px-4 flex-shrink-0">
       {/* Left section */}
@@ -61,6 +115,31 @@ export function TopNav({ onMenuClick, showMenuButton = true }: TopNavProps) {
 
       {/* Right section */}
       <div className="flex items-center gap-1">
+        {/* Google Sign-in Status Indicator */}
+        <button
+          onClick={handleSignInClick}
+          disabled={googleSignedIn || isSigningIn}
+          className={`flex items-center gap-2 px-3 h-9 rounded-full text-xs font-medium transition-colors ${
+            googleSignedIn
+              ? "bg-[#e6f4ea] text-[#1e8e3e] cursor-default"
+              : "bg-[#fce8e6] text-[#d93025] hover:bg-[#f5c6c0] cursor-pointer"
+          }`}
+          title={googleSignedIn ? "Connected to Google" : "Click to sign in to Google"}
+          aria-label={googleSignedIn ? "Connected to Google" : "Sign in to Google"}
+        >
+          <span
+            className={`w-2 h-2 rounded-full ${
+              isSigningIn
+                ? "bg-yellow-500 animate-pulse"
+                : googleSignedIn
+                ? "bg-[#1e8e3e]"
+                : "bg-[#d93025]"
+            }`}
+          />
+          <span className="hidden sm:inline">
+            {isSigningIn ? "Signing in..." : googleSignedIn ? "Google" : "Sign in"}
+          </span>
+        </button>
         <button
           className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-[#f1f3f4] transition-colors"
           aria-label="Search"
