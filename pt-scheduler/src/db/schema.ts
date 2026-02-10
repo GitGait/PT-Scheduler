@@ -1,11 +1,12 @@
 import Dexie, { type EntityTable } from "dexie";
-import type {
-    Patient,
-    Appointment,
-    RecurringBlock,
-    CalendarEvent,
-    SyncQueueItem,
-    VisitType,
+import {
+    VISIT_TYPE_CODES,
+    type Patient,
+    type Appointment,
+    type RecurringBlock,
+    type CalendarEvent,
+    type SyncQueueItem,
+    type VisitType,
 } from "../types";
 
 // Route cache for storing optimized route results
@@ -68,8 +69,8 @@ export class PTSchedulerDB extends Dexie {
     }
 }
 
-// Valid visit type codes
-const VALID_VISIT_TYPES = new Set(["PT00", "PT01", "PT02", "PT11", "PT18", "PT19", "PT33"]);
+// Valid visit type codes (from single source of truth)
+const VALID_VISIT_TYPES = new Set<string>(VISIT_TYPE_CODES);
 
 /**
  * Extract visit type from notes field during migration.

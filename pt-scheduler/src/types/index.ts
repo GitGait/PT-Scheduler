@@ -43,7 +43,11 @@ export interface Patient {
 
 export type AppointmentStatus = "scheduled" | "completed" | "cancelled" | "no-show";
 export type SyncStatus = "local" | "pending" | "synced" | "error";
-export type VisitType = "PT00" | "PT01" | "PT02" | "PT11" | "PT18" | "PT19" | "PT33" | null;
+
+// Single source of truth for visit type codes
+export const VISIT_TYPE_CODES = ["PT00", "PT01", "PT02", "PT11", "PT18", "PT19", "PT33"] as const;
+export type VisitTypeCode = typeof VISIT_TYPE_CODES[number];
+export type VisitType = VisitTypeCode | null;
 
 export interface Appointment {
   id: string;
@@ -55,7 +59,7 @@ export interface Appointment {
   syncStatus: SyncStatus;
   calendarEventId?: string;
   notes?: string;
-  visitType?: VisitType;
+  visitType: VisitType;  // Required field, null means unspecified
   createdAt: Date;
   updatedAt: Date;
 }

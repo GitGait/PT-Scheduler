@@ -147,7 +147,7 @@ button:not(.btn-sm), a:not(.btn-sm), input[type="checkbox"], input[type="radio"]
 }
 
 .appointment-chip:hover {
-  box-shadow: 0 4px 12px rgba(3, 155, 229, 0.3), 0 2px 4px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25), 0 2px 4px rgba(0, 0, 0, 0.1);
   transform: translateY(-1px);
 }
 

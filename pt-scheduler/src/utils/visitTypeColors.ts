@@ -58,40 +58,31 @@ export const VISIT_TYPE_CONFIGS: VisitTypeConfig[] = [
     },
 ];
 
-const colorMap = new Map<string | null, VisitTypeConfig>();
+const colorMap = new Map<VisitType, VisitTypeConfig>();
 for (const config of VISIT_TYPE_CONFIGS) {
     colorMap.set(config.code, config);
 }
 
-const defaultConfig = VISIT_TYPE_CONFIGS.find((c) => c.code === null)!;
+const defaultConfig = VISIT_TYPE_CONFIGS.find((c) => c.code === null);
+if (!defaultConfig) {
+    throw new Error("VISIT_TYPE_CONFIGS must include a null (default) config entry");
+}
 
-export function getVisitTypeColor(visitType: VisitType | string | undefined): string {
-    if (visitType === undefined || visitType === null) {
-        return defaultConfig.bg;
-    }
-    const config = colorMap.get(visitType as string);
+export function getVisitTypeColor(visitType: VisitType | undefined): string {
+    const config = colorMap.get(visitType ?? null);
     return config?.bg ?? defaultConfig.bg;
 }
 
-export function getVisitTypeGradient(visitType: VisitType | string | undefined): string {
-    if (visitType === undefined || visitType === null) {
-        return defaultConfig.gradient;
-    }
-    const config = colorMap.get(visitType as string);
+export function getVisitTypeGradient(visitType: VisitType | undefined): string {
+    const config = colorMap.get(visitType ?? null);
     return config?.gradient ?? defaultConfig.gradient;
 }
 
-export function getVisitTypeLabel(visitType: VisitType | string | undefined): string {
-    if (visitType === undefined || visitType === null) {
-        return defaultConfig.label;
-    }
-    const config = colorMap.get(visitType as string);
-    return config?.label ?? visitType;
+export function getVisitTypeLabel(visitType: VisitType | undefined): string {
+    const config = colorMap.get(visitType ?? null);
+    return config?.label ?? defaultConfig.label;
 }
 
-export function getVisitTypeConfig(visitType: VisitType | string | undefined): VisitTypeConfig {
-    if (visitType === undefined || visitType === null) {
-        return defaultConfig;
-    }
-    return colorMap.get(visitType as string) ?? defaultConfig;
+export function getVisitTypeConfig(visitType: VisitType | undefined): VisitTypeConfig {
+    return colorMap.get(visitType ?? null) ?? defaultConfig;
 }
