@@ -2142,7 +2142,10 @@ export function SchedulePage() {
                                                             {showMilesRow && legInfo?.miles != null && (
                                                                 <div className="inline-flex items-center gap-0.5 opacity-85 truncate min-h-[11px] max-w-full overflow-hidden text-[9px]">
                                                                     <Car className="w-2 h-2 shrink-0" />
-                                                                    <span className="truncate">{legInfo.miles.toFixed(1)} mi</span>
+                                                                    <span className="truncate">
+                                                                        {legInfo.miles.toFixed(1)} mi
+                                                                        {legInfo.minutes != null && ` (${legInfo.minutes} min)`}
+                                                                    </span>
                                                                 </div>
                                                             )}
                                                             {showPhoneRow && patient?.phone && (
