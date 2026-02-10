@@ -4,6 +4,7 @@ import { Card, CardHeader } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { geocodeAddress } from "../api/geocode";
 import { optimizeRoute } from "../api/optimize";
+import { getDistanceMatrix } from "../api/distance";
 import type { Patient, Appointment } from "../types";
 import {
     Phone,
@@ -65,6 +66,10 @@ export function RoutePage() {
     const [resolvedCoordinates, setResolvedCoordinates] = useState<
         Record<string, { lat: number; lng: number }>
     >({});
+    const [drivingDistances, setDrivingDistances] = useState<
+        Record<string, { miles: number; minutes: number }>
+    >({});
+    const [isLoadingDistances, setIsLoadingDistances] = useState(false);
 
     const { patients, loadAll: loadPatients } = usePatientStore();
     const { appointments, loadByRange, markComplete } = useAppointmentStore();
@@ -158,7 +163,54 @@ export function RoutePage() {
         return resolvedCoordinates[patientId] ?? null;
     };
 
-    // Build route stops
+    // Fetch real driving distances
+    useEffect(() => {
+        let cancelled = false;
+
+        const fetchDistances = async () => {
+            if (dayAppointments.length === 0) return;
+
+            // Build locations array: home + all appointments with coordinates
+            const locations: Array<{ id: string; lat: number; lng: number }> = [
+                { id: 'home', lat: homeCoordinates.lat, lng: homeCoordinates.lng }
+            ];
+
+            for (const apt of dayAppointments) {
+                const coords = getPatientCoordinates(apt.patientId);
+                if (coords) {
+                    locations.push({ id: apt.id, lat: coords.lat, lng: coords.lng });
+                }
+            }
+
+            if (locations.length < 2) return;
+
+            setIsLoadingDistances(true);
+            try {
+                const result = await getDistanceMatrix(locations);
+                if (cancelled) return;
+
+                const updates: Record<string, { miles: number; minutes: number }> = {};
+                for (const dist of result.distances) {
+                    updates[dist.destinationId] = {
+                        miles: dist.distanceMiles,
+                        minutes: dist.durationMinutes
+                    };
+                }
+                setDrivingDistances(updates);
+            } catch (err) {
+                console.error('Failed to fetch driving distances:', err);
+            } finally {
+                if (!cancelled) {
+                    setIsLoadingDistances(false);
+                }
+            }
+        };
+
+        void fetchDistances();
+        return () => { cancelled = true; };
+    }, [dayAppointments, homeCoordinates, resolvedCoordinates]);
+
+    // Build route stops using real driving distances when available
     useEffect(() => {
         const stops: RouteStop[] = [];
         let prevCoords = homeCoordinates;
@@ -169,18 +221,27 @@ export function RoutePage() {
             const coords = getPatientCoordinates(apt.patientId);
 
             let miles = 0;
+            let driveMinutes = 0;
             let fromLabel = i === 0 ? "From Home" : `From Stop ${i}`;
 
-            if (coords && prevCoords) {
+            // Use real driving distance if available
+            const realDistance = drivingDistances[apt.id];
+            if (realDistance) {
+                miles = realDistance.miles;
+                driveMinutes = realDistance.minutes;
+            } else if (coords && prevCoords) {
+                // Fall back to straight-line estimate
                 miles = calculateMilesBetweenCoordinates(prevCoords, coords);
+                miles = Math.round(miles * 10) / 10;
+                driveMinutes = estimateDriveMinutes(miles);
             }
 
             stops.push({
                 appointment: apt,
                 patient,
                 order: i + 1,
-                distanceMiles: Math.round(miles * 10) / 10,
-                driveTimeMinutes: estimateDriveMinutes(miles),
+                distanceMiles: miles,
+                driveTimeMinutes: driveMinutes,
                 fromLabel,
                 coordinates: coords,
             });
@@ -191,7 +252,7 @@ export function RoutePage() {
         }
 
         setRouteStops(stops);
-    }, [dayAppointments, patientById, homeCoordinates, resolvedCoordinates]);
+    }, [dayAppointments, patientById, homeCoordinates, resolvedCoordinates, drivingDistances]);
 
     const totalMiles = useMemo(() => {
         return routeStops.reduce((sum, s) => sum + s.distanceMiles, 0);

@@ -17,6 +17,7 @@ import { Button } from "../components/ui/Button";
 import { AppointmentDetailModal } from "../components/AppointmentDetailModal";
 import { AppointmentActionSheet } from "../components/AppointmentActionSheet";
 import { geocodeAddress } from "../api/geocode";
+import { getDistanceMatrix } from "../api/distance";
 import { db } from "../db/schema";
 import type { Appointment, Patient } from "../types";
 import "leaflet/dist/leaflet.css";
@@ -299,6 +300,12 @@ export function SchedulePage() {
     const [detailAppointmentId, setDetailAppointmentId] = useState<string | null>(null);
     const [mapsMenuAddress, setMapsMenuAddress] = useState<string | null>(null);
     const [actionSheetAppointmentId, setActionSheetAppointmentId] = useState<string | null>(null);
+
+    // Driving distances from Google Distance Matrix API (real road distances)
+    const [drivingDistances, setDrivingDistances] = useState<
+        Record<string, { miles: number; minutes: number }>
+    >({});
+    const distanceFetchInFlightRef = useRef<string | null>(null);
 
     // Zoom state for pinch-to-zoom on mobile
     const [zoomScale, setZoomScale] = useState(1);
@@ -584,6 +591,83 @@ export function SchedulePage() {
         };
     }, [appointments, patientById, resolvedPatientCoordinates]);
 
+    // Fetch real driving distances from Google Distance Matrix API
+    useEffect(() => {
+        let cancelled = false;
+
+        const fetchDrivingDistances = async () => {
+            if (!homeCoordinates) return;
+
+            // Build list of locations for each day
+            for (const date of Object.keys(appointmentsByDay)) {
+                const dayAppointments = appointmentsByDay[date];
+                if (dayAppointments.length === 0) continue;
+
+                // Build locations array: home + all appointments with coordinates
+                const locations: Array<{ id: string; lat: number; lng: number }> = [
+                    { id: `home-${date}`, lat: homeCoordinates.lat, lng: homeCoordinates.lng }
+                ];
+
+                for (const apt of dayAppointments) {
+                    const patient = patientById.get(apt.patientId);
+                    let coords: { lat: number; lng: number } | null = null;
+
+                    if (patient?.lat !== undefined && patient?.lng !== undefined) {
+                        coords = { lat: patient.lat, lng: patient.lng };
+                    } else if (resolvedPatientCoordinates[apt.patientId]) {
+                        coords = resolvedPatientCoordinates[apt.patientId];
+                    }
+
+                    if (coords) {
+                        locations.push({ id: apt.id, lat: coords.lat, lng: coords.lng });
+                    }
+                }
+
+                // Need at least 2 locations (home + 1 appointment)
+                if (locations.length < 2) continue;
+
+                // Create a cache key to avoid redundant fetches
+                const cacheKey = locations.map(l => `${l.id}:${l.lat},${l.lng}`).join('|');
+                if (distanceFetchInFlightRef.current === cacheKey) continue;
+
+                distanceFetchInFlightRef.current = cacheKey;
+
+                try {
+                    const result = await getDistanceMatrix(locations);
+
+                    if (cancelled) return;
+
+                    // Update driving distances state
+                    const updates: Record<string, { miles: number; minutes: number }> = {};
+                    for (const dist of result.distances) {
+                        updates[dist.destinationId] = {
+                            miles: dist.distanceMiles,
+                            minutes: dist.durationMinutes
+                        };
+                    }
+
+                    if (Object.keys(updates).length > 0) {
+                        setDrivingDistances(prev => ({ ...prev, ...updates }));
+                    }
+                } catch (err) {
+                    console.error('Failed to fetch driving distances:', err);
+                } finally {
+                    distanceFetchInFlightRef.current = null;
+                }
+            }
+        };
+
+        // Debounce the fetch to avoid rapid re-fetching
+        const timeoutId = setTimeout(() => {
+            void fetchDrivingDistances();
+        }, 500);
+
+        return () => {
+            cancelled = true;
+            clearTimeout(timeoutId);
+        };
+    }, [appointmentsByDay, homeCoordinates, patientById, resolvedPatientCoordinates]);
+
     const getPatientCoordinates = (patientId: string): { lat: number; lng: number } | null => {
         const patient = patientById.get(patientId);
         if (!patient) {
@@ -630,7 +714,7 @@ export function SchedulePage() {
     const legInfoByAppointmentId = useMemo(() => {
         const infoById: Record<
             string,
-            { miles: number | null; minutes: number | null; fromHome: boolean }
+            { miles: number | null; minutes: number | null; fromHome: boolean; isRealDistance: boolean }
         > = {};
 
         for (const date of Object.keys(appointmentsByDay)) {
@@ -641,11 +725,29 @@ export function SchedulePage() {
                 const appointment = dayAppointments[index];
                 const isFirstOfDay = index === 0;
                 const currentCoords = getPatientCoordinates(appointment.patientId);
+
+                // Check if we have real driving distance from the API
+                const realDistance = drivingDistances[appointment.id];
+                if (realDistance) {
+                    infoById[appointment.id] = {
+                        miles: realDistance.miles,
+                        minutes: realDistance.minutes,
+                        fromHome: isFirstOfDay,
+                        isRealDistance: true,
+                    };
+                    if (currentCoords) {
+                        previousCoords = currentCoords;
+                    }
+                    continue;
+                }
+
+                // Fall back to straight-line distance
                 if (!currentCoords) {
                     infoById[appointment.id] = {
                         miles: null,
                         minutes: null,
                         fromHome: isFirstOfDay,
+                        isRealDistance: false,
                     };
                     continue;
                 }
@@ -655,6 +757,7 @@ export function SchedulePage() {
                         miles: null,
                         minutes: null,
                         fromHome: isFirstOfDay,
+                        isRealDistance: false,
                     };
                     previousCoords = currentCoords;
                     continue;
@@ -666,13 +769,14 @@ export function SchedulePage() {
                     miles: roundedMiles,
                     minutes: estimateDriveMinutes(roundedMiles),
                     fromHome: isFirstOfDay,
+                    isRealDistance: false,
                 };
                 previousCoords = currentCoords;
             }
         }
 
         return infoById;
-    }, [appointmentsByDay, homeCoordinates, patientById, resolvedPatientCoordinates]);
+    }, [appointmentsByDay, homeCoordinates, patientById, resolvedPatientCoordinates, drivingDistances]);
 
     const selectedDayEstimatedMiles = useMemo(() => {
         return selectedDayAppointments.reduce((total, appointment) => {

@@ -21,7 +21,9 @@ export {
   extractPatientRequestSchema,
   extractPatientResponseSchema,
   csvMappingRequestSchema,
-  csvMappingResponseSchema
+  csvMappingResponseSchema,
+  distanceMatrixRequestSchema,
+  distanceMatrixResponseSchema
 } from "../src/utils/validation.js";
 /**
  * Validate request body against a Zod schema.

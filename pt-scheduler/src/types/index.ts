@@ -10,7 +10,9 @@ export type {
   GeocodeResponse,
   AIMatchResponse,
   AlternateContact,
-  ExtractPatientResponse
+  ExtractPatientResponse,
+  DistanceMatrixElement,
+  DistanceMatrixResponse
 } from "../utils/validation";
 
 // =============================================================================
