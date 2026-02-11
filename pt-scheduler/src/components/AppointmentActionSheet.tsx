@@ -1,4 +1,5 @@
-import { Phone, MessageSquare, Navigation, Edit3, Move, Trash2, X } from "lucide-react";
+import { useState, useCallback } from "react";
+import { Phone, MessageSquare, Navigation, Edit3, Move, Trash2, X, Copy, Check } from "lucide-react";
 import type { Appointment, Patient } from "../types";
 
 interface AppointmentActionSheetProps {
@@ -52,6 +53,14 @@ export function AppointmentActionSheet({
     onMove,
     onDelete,
 }: AppointmentActionSheetProps) {
+    const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+    const copyToClipboard = useCallback((text: string, key: string) => {
+        void navigator.clipboard.writeText(text);
+        setCopiedKey(key);
+        setTimeout(() => setCopiedKey(null), 1500);
+    }, []);
+
     if (!isOpen) {
         return null;
     }
@@ -91,19 +100,32 @@ export function AppointmentActionSheet({
                 <div className="p-2">
                     {/* Call Patient (Primary) */}
                     {hasPhone && phoneHref && (
-                        <a
-                            href={phoneHref}
-                            onClick={onClose}
-                            className="w-full flex items-center gap-4 py-3 px-4 text-left text-[#202124] hover:bg-[#f1f3f4] rounded-lg transition-colors"
-                        >
-                            <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#e8f0fe]">
-                                <Phone className="w-5 h-5 text-[#1a73e8]" />
-                            </div>
-                            <div className="flex flex-col">
-                                <span className="font-medium">Call Patient</span>
-                                <span className="text-sm text-[#5f6368]">{formatPhoneDisplay(patient?.phone)}</span>
-                            </div>
-                        </a>
+                        <div className="flex items-center">
+                            <a
+                                href={phoneHref}
+                                onClick={onClose}
+                                className="flex-1 flex items-center gap-4 py-3 px-4 text-left text-[#202124] hover:bg-[#f1f3f4] rounded-lg transition-colors"
+                            >
+                                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#e8f0fe]">
+                                    <Phone className="w-5 h-5 text-[#1a73e8]" />
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="font-medium">Call Patient</span>
+                                    <span className="text-sm text-[#5f6368]">{formatPhoneDisplay(patient?.phone)}</span>
+                                </div>
+                            </a>
+                            <button
+                                onClick={() => copyToClipboard(patient?.phone ?? '', 'phone')}
+                                className="p-2.5 mr-2 rounded-full hover:bg-[#f1f3f4] transition-colors"
+                                aria-label="Copy phone number"
+                            >
+                                {copiedKey === 'phone' ? (
+                                    <Check className="w-4 h-4 text-[#1e8e3e]" />
+                                ) : (
+                                    <Copy className="w-4 h-4 text-[#5f6368]" />
+                                )}
+                            </button>
+                        </div>
                     )}
 
                     {/* Text Patient (Primary) */}
@@ -128,24 +150,38 @@ export function AppointmentActionSheet({
                         const altPhoneHref = buildPhoneHref(contact.phone);
                         const altSmsHref = buildSmsHref(contact.phone);
                         const contactLabel = contact.firstName + (contact.relationship ? ` (${contact.relationship})` : "");
+                        const altCopyKey = `alt-phone-${index}`;
 
                         return (
                             <div key={index}>
                                 {/* Call Alternate */}
                                 {altPhoneHref && (
-                                    <a
-                                        href={altPhoneHref}
-                                        onClick={onClose}
-                                        className="w-full flex items-center gap-4 py-3 px-4 text-left text-[#202124] hover:bg-[#f1f3f4] rounded-lg transition-colors"
-                                    >
-                                        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#fef7e0]">
-                                            <Phone className="w-5 h-5 text-[#f9ab00]" />
-                                        </div>
-                                        <div className="flex flex-col">
-                                            <span className="font-medium">Call {contactLabel}</span>
-                                            <span className="text-sm text-[#5f6368]">{formatPhoneDisplay(contact.phone)}</span>
-                                        </div>
-                                    </a>
+                                    <div className="flex items-center">
+                                        <a
+                                            href={altPhoneHref}
+                                            onClick={onClose}
+                                            className="flex-1 flex items-center gap-4 py-3 px-4 text-left text-[#202124] hover:bg-[#f1f3f4] rounded-lg transition-colors"
+                                        >
+                                            <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#fef7e0]">
+                                                <Phone className="w-5 h-5 text-[#f9ab00]" />
+                                            </div>
+                                            <div className="flex flex-col">
+                                                <span className="font-medium">Call {contactLabel}</span>
+                                                <span className="text-sm text-[#5f6368]">{formatPhoneDisplay(contact.phone)}</span>
+                                            </div>
+                                        </a>
+                                        <button
+                                            onClick={() => copyToClipboard(contact.phone, altCopyKey)}
+                                            className="p-2.5 mr-2 rounded-full hover:bg-[#f1f3f4] transition-colors"
+                                            aria-label={`Copy ${contactLabel} phone number`}
+                                        >
+                                            {copiedKey === altCopyKey ? (
+                                                <Check className="w-4 h-4 text-[#1e8e3e]" />
+                                            ) : (
+                                                <Copy className="w-4 h-4 text-[#5f6368]" />
+                                            )}
+                                        </button>
+                                    </div>
                                 )}
 
                                 {/* Text Alternate */}
@@ -170,21 +206,34 @@ export function AppointmentActionSheet({
 
                     {/* Navigate to Address */}
                     {hasAddress && (
-                        <button
-                            onClick={() => {
-                                onNavigate();
-                                onClose();
-                            }}
-                            className="w-full flex items-center gap-4 py-3 px-4 text-left text-[#202124] hover:bg-[#f1f3f4] rounded-lg transition-colors"
-                        >
-                            <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#e6f4ea]">
-                                <Navigation className="w-5 h-5 text-[#1e8e3e]" />
-                            </div>
-                            <div className="flex flex-col">
-                                <span className="font-medium">Navigate to Address</span>
-                                <span className="text-sm text-[#5f6368] truncate max-w-[250px]">{patient?.address}</span>
-                            </div>
-                        </button>
+                        <div className="flex items-center">
+                            <button
+                                onClick={() => {
+                                    onNavigate();
+                                    onClose();
+                                }}
+                                className="flex-1 flex items-center gap-4 py-3 px-4 text-left text-[#202124] hover:bg-[#f1f3f4] rounded-lg transition-colors"
+                            >
+                                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#e6f4ea]">
+                                    <Navigation className="w-5 h-5 text-[#1e8e3e]" />
+                                </div>
+                                <div className="flex flex-col">
+                                    <span className="font-medium">Navigate to Address</span>
+                                    <span className="text-sm text-[#5f6368] truncate max-w-[250px]">{patient?.address}</span>
+                                </div>
+                            </button>
+                            <button
+                                onClick={() => copyToClipboard(patient?.address ?? '', 'address')}
+                                className="p-2.5 mr-2 rounded-full hover:bg-[#f1f3f4] transition-colors"
+                                aria-label="Copy address"
+                            >
+                                {copiedKey === 'address' ? (
+                                    <Check className="w-4 h-4 text-[#1e8e3e]" />
+                                ) : (
+                                    <Copy className="w-4 h-4 text-[#5f6368]" />
+                                )}
+                            </button>
+                        </div>
                     )}
 
                     {/* Divider */}
