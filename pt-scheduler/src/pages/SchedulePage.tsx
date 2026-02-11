@@ -1,6 +1,7 @@
 import {
     useCallback,
     useEffect,
+    useLayoutEffect,
     useMemo,
     useRef,
     useState,
@@ -907,18 +908,27 @@ export function SchedulePage() {
         return minutesToTimeString(DAY_START_MINUTES + slotIndex * SLOT_MINUTES);
     };
 
-    // Helper to preserve scroll position during updates
+    // Robust scroll preservation that survives async re-renders (DB updates, state changes)
+    const pendingScrollRestoreRef = useRef<{ top: number; left: number; rendersLeft: number } | null>(null);
+
+    useLayoutEffect(() => {
+        const pending = pendingScrollRestoreRef.current;
+        if (pending && zoomContainerRef.current) {
+            zoomContainerRef.current.scrollTop = pending.top;
+            zoomContainerRef.current.scrollLeft = pending.left;
+            pending.rendersLeft--;
+            if (pending.rendersLeft <= 0) {
+                pendingScrollRestoreRef.current = null;
+            }
+        }
+    });
+
     const preserveScrollPosition = (callback: () => void) => {
         const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
         const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
+        // Persist restoration across multiple re-renders to catch async DB updates
+        pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 6 };
         callback();
-        // Restore scroll position after React re-renders
-        requestAnimationFrame(() => {
-            if (zoomContainerRef.current) {
-                zoomContainerRef.current.scrollTop = scrollTop;
-                zoomContainerRef.current.scrollLeft = scrollLeft;
-            }
-        });
     };
 
     const moveAppointmentToSlot = (appointmentId: string, date: string, startTime: string) => {
@@ -948,6 +958,12 @@ export function SchedulePage() {
     ) => {
         event.preventDefault();
         const droppedId = event.dataTransfer.getData("text/plain") || draggingAppointmentId;
+
+        // Lock scroll before any state changes
+        const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
+        const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
+        pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 6 };
+
         setDraggingAppointmentId(null);
         setDragPreview(null);
 
@@ -1030,6 +1046,14 @@ export function SchedulePage() {
 
     const handleChipTouchEnd = () => {
         const state = touchDragRef.current;
+
+        // Lock scroll position BEFORE any state changes
+        if (state?.activated) {
+            const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
+            const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
+            pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 6 };
+        }
+
         if (state?.activated && touchDragPreviewRef.current) {
             moveAppointmentToSlot(
                 state.appointmentId,
@@ -1647,41 +1671,45 @@ export function SchedulePage() {
                 return;
             }
 
-            // Save scroll position before update
+            // Lock scroll position before any state changes
             const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
             const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
+            pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 6 };
 
             const nextRender = resizeDraftRef.current ?? {
                 startMinutes: session.initialStartMinutes,
                 duration: session.initialDuration,
             };
-            if (
+            const changed =
                 nextRender.startMinutes !== session.initialStartMinutes ||
-                nextRender.duration !== session.initialDuration
-            ) {
-                void update(session.appointmentId, {
-                    startTime: minutesToTimeString(nextRender.startMinutes),
-                    duration: nextRender.duration,
-                }).then(() => triggerSync());
-            }
+                nextRender.duration !== session.initialDuration;
 
-            setDraftRenderById((current) => {
-                const next = { ...current };
-                delete next[session.appointmentId];
-                return next;
-            });
             setResizingAppointmentId(null);
             resizeSessionRef.current = null;
             resizeDraftRef.current = null;
             suppressNextChipClick();
 
-            // Restore scroll position after React re-renders
-            requestAnimationFrame(() => {
-                if (zoomContainerRef.current) {
-                    zoomContainerRef.current.scrollTop = scrollTop;
-                    zoomContainerRef.current.scrollLeft = scrollLeft;
-                }
-            });
+            if (changed) {
+                // Update DB first, THEN clear the draft so the chip doesn't snap back
+                void update(session.appointmentId, {
+                    startTime: minutesToTimeString(nextRender.startMinutes),
+                    duration: nextRender.duration,
+                }).then(() => {
+                    setDraftRenderById((current) => {
+                        const next = { ...current };
+                        delete next[session.appointmentId];
+                        return next;
+                    });
+                    triggerSync();
+                });
+            } else {
+                // No change — just clear the draft
+                setDraftRenderById((current) => {
+                    const next = { ...current };
+                    delete next[session.appointmentId];
+                    return next;
+                });
+            }
         };
 
         window.addEventListener("mousemove", handleMouseMove);
