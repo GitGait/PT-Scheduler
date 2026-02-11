@@ -366,6 +366,10 @@ export function SchedulePage() {
             if (!weekStart || !weekEnd) {
                 return;
             }
+            // Preserve scroll position when sync replaces appointments
+            const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
+            const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
+            pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 6 };
             void loadByRange(weekStart, weekEnd);
         };
 
@@ -2409,6 +2413,7 @@ export function SchedulePage() {
                                                                 : ''
                                                         }`}
                                                         style={{
+                                                            position: 'absolute',
                                                             top: topPx,
                                                             height: heightPx,
                                                             left: leftStyle,
