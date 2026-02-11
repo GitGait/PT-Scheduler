@@ -12,7 +12,20 @@ cd pt-scheduler
 npm run dev      # Dev server
 npm run build    # tsc + vite build (use to verify changes)
 npm test         # Vitest
+vercel --prod    # Deploy to production (run from pt-scheduler/)
 ```
+
+## Deploy Rule
+**Always deploy after completing changes.** Full sequence:
+```bash
+cd pt-scheduler
+npm run build                          # 1. Verify build
+cd ..
+git add -A && git commit -m "message"  # 2. Commit
+git push origin main                   # 3. Push to GitHub
+cd pt-scheduler && vercel --prod       # 4. Deploy to Vercel
+```
+Do all four steps. Don't skip any. If build fails, fix it before committing.
 
 ## Key File Map
 
@@ -43,6 +56,7 @@ npm test         # Vitest
 - **Check existing code first.** Before creating a new file or utility, check if something similar already exists in `src/utils/`, `src/components/ui/`, or `src/api/`. Extend existing code over creating duplicates.
 - **Verify after changes.** Run `npm run build` after any non-trivial edit to catch TypeScript and build errors early. Don't stack multiple changes without verifying.
 - **Don't create or restructure files without asking.** Add to existing files when possible. Only create new files when clearly necessary for the task.
+- **Save corrections immediately.** When the user corrects a preference, style, or approach, write it to MEMORY.md right away. Don't wait to be asked.
 
 ## Session Startup
 1. Read `HANDOFF.md` for what was last worked on

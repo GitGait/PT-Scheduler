@@ -10,7 +10,7 @@ const SCOPES = [
 
 const TOKEN_STORAGE_KEY = "ptScheduler.googleAuthToken";
 
-// Access token stored in memory and mirrored in sessionStorage (short-lived)
+// Access token stored in memory and mirrored in localStorage (persists across tabs/restarts)
 let accessToken: string | null = null;
 let tokenClient: google.accounts.oauth2.TokenClient | null = null;
 let tokenExpiresAt: number = 0;
@@ -35,18 +35,18 @@ function persistToken(): void {
     if (typeof window === "undefined") return;
 
     if (!accessToken || tokenExpiresAt <= 0) {
-        window.sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+        window.localStorage.removeItem(TOKEN_STORAGE_KEY);
         return;
     }
 
     const payload: StoredToken = { accessToken, tokenExpiresAt };
-    window.sessionStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(payload));
+    window.localStorage.setItem(TOKEN_STORAGE_KEY, JSON.stringify(payload));
 }
 
 function restoreTokenFromStorage(): void {
     if (typeof window === "undefined") return;
 
-    const raw = window.sessionStorage.getItem(TOKEN_STORAGE_KEY);
+    const raw = window.localStorage.getItem(TOKEN_STORAGE_KEY);
     if (!raw) return;
 
     try {
@@ -64,7 +64,7 @@ function restoreTokenFromStorage(): void {
         // ignore and clear invalid data below
     }
 
-    window.sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+    window.localStorage.removeItem(TOKEN_STORAGE_KEY);
 }
 
 function setToken(token: string, expiresInSeconds: number): void {
