@@ -901,9 +901,10 @@ export function SchedulePage() {
     const getStartTimeFromColumnPosition = (event: DragEvent<HTMLDivElement>): string => {
         const rect = event.currentTarget.getBoundingClientRect();
         const y = event.clientY - rect.top;
+        const scaledSlotHeight = SLOT_HEIGHT_PX * zoomScale;
         const slotIndex = Math.max(
             0,
-            Math.min(timeSlots.length - 1, Math.floor(y / SLOT_HEIGHT_PX))
+            Math.min(timeSlots.length - 1, Math.floor(y / scaledSlotHeight))
         );
         return minutesToTimeString(DAY_START_MINUTES + slotIndex * SLOT_MINUTES);
     };
@@ -1063,6 +1064,15 @@ export function SchedulePage() {
             triggerSync();
             suppressNextSlotClickRef.current = true;
             suppressNextChipClickRef.current = true;
+            // Reset suppression after synthetic click events fire (~300ms after touchend)
+            if (suppressClickTimerRef.current) window.clearTimeout(suppressClickTimerRef.current);
+            suppressClickTimerRef.current = window.setTimeout(() => {
+                suppressNextSlotClickRef.current = false;
+            }, 400);
+            if (suppressChipClickTimerRef.current) window.clearTimeout(suppressChipClickTimerRef.current);
+            suppressChipClickTimerRef.current = window.setTimeout(() => {
+                suppressNextChipClickRef.current = false;
+            }, 400);
         }
 
         if (touchDragTimerRef.current) {

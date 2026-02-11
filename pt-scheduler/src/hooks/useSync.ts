@@ -180,6 +180,14 @@ export function useSync(config: SyncConfig | null) {
 
                 const status = parseAppointmentStatus(metadata[CALENDAR_METADATA_KEYS.status]);
                 const existing = await db.appointments.get(appointmentId);
+
+                // Skip overwriting appointments with pending local changes.
+                // These will be pushed to the calendar by processQueue; pulling
+                // old calendar data here would revert the user's local edits.
+                if (existing && (existing.syncStatus === "pending" || existing.syncStatus === "local")) {
+                    continue;
+                }
+
                 const appointmentRecord = {
                     id: appointmentId,
                     patientId,
@@ -391,14 +399,15 @@ export function useSync(config: SyncConfig | null) {
                 return;
             }
 
-            await backfillLocalAppointmentsToCalendar();
-            await syncPatientsFromSheets();
-            await syncAppointmentsFromCalendar();
-
+            // Push local changes first to avoid pull overwriting them
             const pending = await syncQueueDB.getPendingCount();
             if (pending > 0) {
                 await processQueue();
             }
+
+            await backfillLocalAppointmentsToCalendar();
+            await syncPatientsFromSheets();
+            await syncAppointmentsFromCalendar();
         };
 
         const runFastSync = async () => {
@@ -406,13 +415,16 @@ export function useSync(config: SyncConfig | null) {
                 return;
             }
 
-            await syncPatientsFromSheets();
-            await syncAppointmentsFromCalendar();
-
+            // Push local changes first so the calendar has current data
+            // before we pull, preventing stale calendar data from
+            // overwriting recent local edits.
             const pending = await syncQueueDB.getPendingCount();
             if (pending > 0) {
                 await processQueue();
             }
+
+            await syncPatientsFromSheets();
+            await syncAppointmentsFromCalendar();
         };
 
         void runFullSync();
