@@ -284,6 +284,7 @@ export function SchedulePage() {
     } | null>(null);
     const touchDragTimerRef = useRef<number | null>(null);
     const touchDragPreviewRef = useRef<{ date: string; startTime: string } | null>(null);
+    const [touchDragGhost, setTouchDragGhost] = useState<{ x: number; y: number; name: string; duration: number } | null>(null);
 
     const [homeCoordinates, setHomeCoordinates] = useState<{ lat: number; lng: number } | null>(() => {
         const homeBase = getHomeBase();
@@ -1044,6 +1045,16 @@ export function SchedulePage() {
                     setDragPreview(preview);
                     touchDragPreviewRef.current = preview;
                 }
+                // Show floating ghost at finger position
+                if (touchDragRef.current) {
+                    const patient = patients.find((p) => p.id === existing?.patientId);
+                    setTouchDragGhost({
+                        x: touchDragRef.current.startX,
+                        y: touchDragRef.current.startY,
+                        name: patient ? `${patient.lastName}, ${patient.firstName}` : 'Appointment',
+                        duration: existing?.duration ?? 30,
+                    });
+                }
                 if (navigator.vibrate) navigator.vibrate(30);
             }
         }, TOUCH_DRAG_HOLD_MS);
@@ -1087,6 +1098,7 @@ export function SchedulePage() {
         touchDragPreviewRef.current = null;
         setDraggingAppointmentId(null);
         setDragPreview(null);
+        setTouchDragGhost(null);
     };
 
     // Pinch-to-zoom handlers for mobile
@@ -1774,6 +1786,13 @@ export function SchedulePage() {
 
             // Drag is active — prevent scrolling
             event.preventDefault();
+
+            // Update floating ghost position (follows finger directly)
+            setTouchDragGhost((prev) => {
+                if (!prev) return prev;
+                if (prev.x === touch.clientX && prev.y === touch.clientY) return prev;
+                return { ...prev, x: touch.clientX, y: touch.clientY };
+            });
 
             const columnEl = findColumnAtPoint(touch.clientX, touch.clientY);
             if (columnEl) {
@@ -2610,6 +2629,28 @@ export function SchedulePage() {
                     </div>
                 )}
             </div>
+
+            {/* Floating ghost chip during touch drag */}
+            {touchDragGhost && (
+                <div
+                    className="fixed z-50 pointer-events-none rounded-md text-white text-xs shadow-2xl"
+                    style={{
+                        left: touchDragGhost.x - 60,
+                        top: touchDragGhost.y - 20,
+                        width: 120,
+                        height: 40,
+                        background: 'linear-gradient(135deg, #1a73e8 0%, #4285f4 100%)',
+                        opacity: 0.9,
+                    }}
+                >
+                    <div className="px-2 py-1 truncate font-semibold text-[11px]">
+                        {touchDragGhost.name}
+                    </div>
+                    <div className="px-2 text-[10px] opacity-90">
+                        {touchDragGhost.duration}m
+                    </div>
+                </div>
+            )}
 
             {/* Day Map Modal */}
             {isDayMapOpen && (
