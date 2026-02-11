@@ -113,16 +113,16 @@ export function TopNav({ onMenuClick, showMenuButton = true }: TopNavProps) {
   }, [googleSignedIn, isSigningIn]);
 
   return (
-    <header className="h-16 border-b border-[#dadce0] bg-white flex items-center px-4 flex-shrink-0">
+    <header className="h-16 border-b border-[var(--color-border)] bg-[var(--color-surface)] flex items-center px-4 flex-shrink-0 transition-colors duration-200">
       {/* Left section */}
       <div className="flex items-center gap-2">
         {showMenuButton && (
           <button
             onClick={onMenuClick}
-            className="w-12 h-12 flex items-center justify-center rounded-full hover:bg-[#f1f3f4] transition-colors"
+            className="w-12 h-12 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-hover)] transition-colors"
             aria-label="Toggle menu"
           >
-            <Menu className="w-6 h-6 text-[#5f6368]" />
+            <Menu className="w-6 h-6 text-[var(--color-text-secondary)]" />
           </button>
         )}
       </div>
@@ -136,8 +136,8 @@ export function TopNav({ onMenuClick, showMenuButton = true }: TopNavProps) {
             className={({ isActive }) =>
               `flex items-center gap-2 px-4 h-10 rounded-full text-sm font-medium transition-colors ${
                 isActive
-                  ? "bg-[#e8f0fe] text-[#1a73e8]"
-                  : "text-[#5f6368] hover:bg-[#f1f3f4]"
+                  ? "bg-[var(--color-primary-light)] text-[var(--color-primary)]"
+                  : "text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]"
               }`
             }
           >
@@ -155,12 +155,12 @@ export function TopNav({ onMenuClick, showMenuButton = true }: TopNavProps) {
           disabled={googleSignedIn || isSigningIn}
           className={`flex items-center gap-2 px-3 h-9 rounded-full text-xs font-medium transition-all shadow-sm border ${
             signInError
-              ? "bg-[#fce8e6] border-[#ea4335] text-[#c5221f] cursor-pointer"
+              ? "bg-red-50 dark:bg-red-950 border-red-400 dark:border-red-700 text-red-700 dark:text-red-300 cursor-pointer"
               : googleSignedIn
-              ? "bg-[#e6f4ea] border-[#34a853] text-[#1e8e3e] cursor-default"
+              ? "bg-green-50 dark:bg-green-950 border-green-400 dark:border-green-700 text-green-700 dark:text-green-300 cursor-default"
               : isSigningIn
-              ? "bg-[#fef7e0] border-[#f9ab00] text-[#b06000] cursor-wait"
-              : "bg-white border-[#dadce0] text-[#3c4043] hover:bg-[#f8f9fa] hover:border-[#1a73e8] hover:text-[#1a73e8] cursor-pointer"
+              ? "bg-yellow-50 dark:bg-yellow-950 border-yellow-400 dark:border-yellow-700 text-yellow-700 dark:text-yellow-300 cursor-wait"
+              : "bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] cursor-pointer"
           }`}
           title={
             signInError
@@ -208,16 +208,16 @@ export function TopNav({ onMenuClick, showMenuButton = true }: TopNavProps) {
           </span>
         </button>
         <button
-          className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-[#f1f3f4] transition-colors"
+          className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-hover)] transition-colors"
           aria-label="Search"
         >
-          <Search className="w-5 h-5 text-[#5f6368]" />
+          <Search className="w-5 h-5 text-[var(--color-text-secondary)]" />
         </button>
         <button
-          className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-[#f1f3f4] transition-colors"
+          className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-hover)] transition-colors"
           aria-label="Help"
         >
-          <HelpCircle className="w-5 h-5 text-[#5f6368]" />
+          <HelpCircle className="w-5 h-5 text-[var(--color-text-secondary)]" />
         </button>
       </div>
     </header>

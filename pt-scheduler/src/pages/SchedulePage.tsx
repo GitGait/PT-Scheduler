@@ -14,6 +14,8 @@ import { isSignedIn } from "../api/auth";
 import { syncPatientToSheetByStatus } from "../api/sheets";
 import { Card, CardHeader } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
+import { ScheduleGridSkeleton } from "../components/ui/Skeleton";
+import { ScheduleEmptyState } from "../components/ui/EmptyState";
 import { AppointmentDetailModal } from "../components/AppointmentDetailModal";
 import { AppointmentActionSheet } from "../components/AppointmentActionSheet";
 import { geocodeAddress } from "../api/geocode";
@@ -258,7 +260,7 @@ export function SchedulePage() {
     const slotLongPressTargetRef = useRef<{ date: string; startTime: string } | null>(null);
     const resizeLongPressTimerRef = useRef<number | null>(null);
     const resizeLongPressDataRef = useRef<{
-        event: TouchEvent<HTMLDivElement>;
+        clientY: number;
         appointment: Appointment;
         edge: "top" | "bottom";
     } | null>(null);
@@ -271,6 +273,17 @@ export function SchedulePage() {
         initialEndMinutes: number;
     } | null>(null);
     const resizeDraftRef = useRef<{ startMinutes: number; duration: number } | null>(null);
+
+    // Touch-based drag refs for mobile appointment dragging
+    const touchDragRef = useRef<{
+        appointmentId: string;
+        startX: number;
+        startY: number;
+        activated: boolean;
+    } | null>(null);
+    const touchDragTimerRef = useRef<number | null>(null);
+    const touchDragPreviewRef = useRef<{ date: string; startTime: string } | null>(null);
+
     const [homeCoordinates, setHomeCoordinates] = useState<{ lat: number; lng: number } | null>(() => {
         const homeBase = getHomeBase();
         return homeBase.lat !== 0 && homeBase.lng !== 0 ? { lat: homeBase.lat, lng: homeBase.lng } : null;
@@ -983,6 +996,62 @@ export function SchedulePage() {
         }, 0);
     };
 
+    // Touch-based drag for mobile appointment moving
+    const TOUCH_DRAG_HOLD_MS = 200;
+
+    const handleChipTouchStart = (event: TouchEvent<HTMLDivElement>, appointmentId: string) => {
+        // Don't start touch drag if already resizing
+        if (resizeSessionRef.current || resizingAppointmentId) return;
+
+        const touch = event.touches[0];
+        touchDragRef.current = {
+            appointmentId,
+            startX: touch.clientX,
+            startY: touch.clientY,
+            activated: false,
+        };
+        touchDragPreviewRef.current = null;
+
+        touchDragTimerRef.current = window.setTimeout(() => {
+            if (touchDragRef.current && !touchDragRef.current.activated) {
+                touchDragRef.current.activated = true;
+                setDraggingAppointmentId(appointmentId);
+                setMoveAppointmentId(appointmentId);
+                const existing = appointments.find((a) => a.id === appointmentId);
+                if (existing) {
+                    const preview = { date: existing.date, startTime: existing.startTime };
+                    setDragPreview(preview);
+                    touchDragPreviewRef.current = preview;
+                }
+                if (navigator.vibrate) navigator.vibrate(30);
+            }
+        }, TOUCH_DRAG_HOLD_MS);
+    };
+
+    const handleChipTouchEnd = () => {
+        const state = touchDragRef.current;
+        if (state?.activated && touchDragPreviewRef.current) {
+            moveAppointmentToSlot(
+                state.appointmentId,
+                touchDragPreviewRef.current.date,
+                touchDragPreviewRef.current.startTime
+            );
+            triggerSync();
+            suppressNextSlotClickRef.current = true;
+            suppressNextChipClickRef.current = true;
+        }
+
+        if (touchDragTimerRef.current) {
+            clearTimeout(touchDragTimerRef.current);
+            touchDragTimerRef.current = null;
+        }
+        touchDragRef.current = null;
+        touchDragPreviewRef.current = null;
+        setDraggingAppointmentId(null);
+        setDragPreview(null);
+        if (state?.activated) setMoveAppointmentId(null);
+    };
+
     // Pinch-to-zoom handlers for mobile
     const getDistance = (touch1: Touch, touch2: Touch): number => {
         const dx = touch1.clientX - touch2.clientX;
@@ -1432,22 +1501,34 @@ export function SchedulePage() {
     };
 
     const handleResizeStart = (
-        event: MouseEvent<HTMLButtonElement> | TouchEvent<HTMLDivElement>,
+        event: MouseEvent<HTMLButtonElement> | TouchEvent<HTMLDivElement> | null,
         appointment: Appointment,
-        edge: "top" | "bottom"
+        edge: "top" | "bottom",
+        rawClientY?: number
     ) => {
-        event.stopPropagation();
-        event.preventDefault();
+        if (event) {
+            event.stopPropagation();
+            event.preventDefault();
+        }
         suppressNextChipClick();
         setMoveAppointmentId(null);
+        // Cancel any active touch drag when resize starts
+        if (touchDragTimerRef.current) {
+            clearTimeout(touchDragTimerRef.current);
+            touchDragTimerRef.current = null;
+        }
+        touchDragRef.current = null;
         setResizingAppointmentId(appointment.id);
         const initialStartMinutes = getRenderedStartMinutes(appointment);
         const initialDuration = getRenderedDuration(appointment);
 
-        // Get clientY from either mouse or touch event
-        const clientY = 'touches' in event
-            ? event.touches[0].clientY
-            : event.clientY;
+        // Get clientY from explicit value, touch event, or mouse event
+        let clientY = rawClientY ?? 0;
+        if (!rawClientY && event) {
+            clientY = 'touches' in event
+                ? event.touches[0].clientY
+                : (event as unknown as globalThis.MouseEvent).clientY;
+        }
 
         resizeSessionRef.current = {
             appointmentId: appointment.id,
@@ -1471,8 +1552,9 @@ export function SchedulePage() {
         edge: "top" | "bottom"
     ) => {
         event.stopPropagation();
-        // Store the data for delayed start
-        resizeLongPressDataRef.current = { event, appointment, edge };
+        // Store clientY immediately to avoid stale event references
+        const clientY = event.touches[0].clientY;
+        resizeLongPressDataRef.current = { clientY, appointment, edge };
 
         if (resizeLongPressTimerRef.current) {
             window.clearTimeout(resizeLongPressTimerRef.current);
@@ -1481,8 +1563,8 @@ export function SchedulePage() {
         resizeLongPressTimerRef.current = window.setTimeout(() => {
             const data = resizeLongPressDataRef.current;
             if (data) {
-                // Now actually start the resize
-                handleResizeStart(data.event, data.appointment, data.edge);
+                // Start resize using the stored clientY value
+                handleResizeStart(null, data.appointment, data.edge, data.clientY);
                 resizeLongPressDataRef.current = null;
             }
         }, RESIZE_LONG_PRESS_DURATION_MS);
@@ -1616,6 +1698,70 @@ export function SchedulePage() {
         };
     }, [update]);
 
+    // Touch-based drag move tracking for mobile appointment dragging
+    useEffect(() => {
+        const findColumnAtPoint = (x: number, y: number): HTMLElement | null => {
+            const columns = document.querySelectorAll<HTMLElement>('[data-column-date]');
+            for (const col of columns) {
+                const rect = col.getBoundingClientRect();
+                if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+                    return col;
+                }
+            }
+            return null;
+        };
+
+        const handleTouchDragMove = (event: globalThis.TouchEvent) => {
+            const state = touchDragRef.current;
+            if (!state) return;
+
+            const touch = event.touches[0];
+
+            // Before activation: cancel if finger moves too far (user is scrolling)
+            if (!state.activated) {
+                const dx = Math.abs(touch.clientX - state.startX);
+                const dy = Math.abs(touch.clientY - state.startY);
+                if (dx > 10 || dy > 10) {
+                    if (touchDragTimerRef.current) {
+                        clearTimeout(touchDragTimerRef.current);
+                        touchDragTimerRef.current = null;
+                    }
+                    touchDragRef.current = null;
+                }
+                return;
+            }
+
+            // Drag is active — prevent scrolling
+            event.preventDefault();
+
+            const columnEl = findColumnAtPoint(touch.clientX, touch.clientY);
+            if (columnEl) {
+                const date = columnEl.getAttribute('data-column-date');
+                const rect = columnEl.getBoundingClientRect();
+                const y = touch.clientY - rect.top;
+                const scaledSlotHeight = SLOT_HEIGHT_PX * zoomScale;
+                const slotIndex = Math.max(
+                    0,
+                    Math.min(timeSlots.length - 1, Math.floor(y / scaledSlotHeight))
+                );
+                const startTime = minutesToTimeString(DAY_START_MINUTES + slotIndex * SLOT_MINUTES);
+                if (date) {
+                    const preview = { date, startTime };
+                    touchDragPreviewRef.current = preview;
+                    setDragPreview((prev) => {
+                        if (prev?.date === date && prev.startTime === startTime) return prev;
+                        return preview;
+                    });
+                }
+            }
+        };
+
+        window.addEventListener('touchmove', handleTouchDragMove, { passive: false });
+        return () => {
+            window.removeEventListener('touchmove', handleTouchDragMove);
+        };
+    }, [zoomScale, timeSlots.length]);
+
     useEffect(() => {
         return () => {
             if (suppressClickTimerRef.current) {
@@ -1629,6 +1775,9 @@ export function SchedulePage() {
             }
             if (resizeLongPressTimerRef.current) {
                 window.clearTimeout(resizeLongPressTimerRef.current);
+            }
+            if (touchDragTimerRef.current) {
+                window.clearTimeout(touchDragTimerRef.current);
             }
         };
     }, []);
@@ -1827,41 +1976,41 @@ export function SchedulePage() {
     const todayInWeek = weekDates.includes(todayIso());
 
     return (
-        <div className="h-full min-h-0 flex flex-col bg-white">
+        <div className="h-full min-h-0 flex flex-col bg-[var(--color-background)] transition-colors duration-200">
             {/* Header with navigation */}
-            <div className={`flex items-center justify-between px-2 sm:px-4 py-1.5 border-b border-[#e8eaed] bg-white header-nav ${isScrolled ? 'scrolled' : ''}`}>
+            <div className={`flex items-center justify-between px-2 sm:px-4 py-1.5 border-b border-[var(--color-border-light)] bg-[var(--color-surface)] header-nav transition-colors duration-200 ${isScrolled ? 'scrolled' : ''}`}>
                 <div className="flex items-center gap-1.5 sm:gap-2">
                     <button
                         onClick={() => setSelectedDate(todayIso())}
-                        className="px-2.5 h-7 bg-white border border-[#dadce0] rounded-md text-xs font-medium text-[#3c4043] hover:bg-[#f8f9fa] hover:border-[#c4c7c9] active:bg-[#f1f3f4] transition-all shadow-sm"
+                        className="px-2.5 h-7 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-md text-xs font-medium text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-text-tertiary)] active:bg-[var(--color-surface-hover)] transition-all shadow-sm"
                     >
                         Today
                     </button>
-                    <div className="flex items-center bg-[#f8f9fa] rounded-md">
+                    <div className="flex items-center bg-[var(--color-surface-hover)] rounded-md">
                         <button
                             onClick={() => navigateWeek(-1)}
-                            className="w-7 h-7 flex items-center justify-center rounded-l-md hover:bg-[#e8eaed] active:bg-[#dadce0] transition-colors"
+                            className="w-7 h-7 flex items-center justify-center rounded-l-md hover:bg-[var(--color-border)] active:bg-[var(--color-border)] transition-colors"
                             aria-label="Previous week"
                         >
-                            <ChevronLeft className="w-4 h-4 text-[#5f6368]" />
+                            <ChevronLeft className="w-4 h-4 text-[var(--color-text-secondary)]" />
                         </button>
-                        <div className="w-px h-4 bg-[#dadce0]" />
+                        <div className="w-px h-4 bg-[var(--color-border)]" />
                         <button
                             onClick={() => navigateWeek(1)}
-                            className="w-7 h-7 flex items-center justify-center rounded-r-md hover:bg-[#e8eaed] active:bg-[#dadce0] transition-colors"
+                            className="w-7 h-7 flex items-center justify-center rounded-r-md hover:bg-[var(--color-border)] active:bg-[var(--color-border)] transition-colors"
                             aria-label="Next week"
                         >
-                            <ChevronRight className="w-4 h-4 text-[#5f6368]" />
+                            <ChevronRight className="w-4 h-4 text-[var(--color-text-secondary)]" />
                         </button>
                     </div>
-                    <h1 className="text-sm sm:text-base font-semibold text-[#202124] ml-1">{monthYearDisplay}</h1>
+                    <h1 className="text-sm sm:text-base font-semibold text-[var(--color-text-primary)] ml-1">{monthYearDisplay}</h1>
                 </div>
 
                 <div className="relative flex items-center gap-1.5">
                     <button
                         onClick={() => void handleOpenDayMap()}
                         disabled={isDayMapLoading}
-                        className="hidden sm:flex items-center gap-1.5 px-3 h-8 bg-white border border-[#dadce0] rounded-full text-xs font-medium text-[#3c4043] hover:bg-[#f8f9fa] hover:border-[#1a73e8] hover:text-[#1a73e8] active:bg-[#e8f0fe] transition-all disabled:opacity-50 shadow-sm"
+                        className="hidden sm:flex items-center gap-1.5 px-3 h-8 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-full text-xs font-medium text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] active:bg-[var(--color-primary-light)] transition-all disabled:opacity-50 shadow-sm"
                     >
                         <Navigation className="w-3.5 h-3.5" />
                         {isDayMapLoading ? "Loading..." : "Map Day"}
@@ -1869,7 +2018,7 @@ export function SchedulePage() {
                     <button
                         onClick={() => void handleClearWeek()}
                         disabled={weekActionInProgress}
-                        className="hidden sm:flex items-center gap-1.5 px-3 h-8 bg-white border border-[#dadce0] rounded-full text-xs font-medium text-[#3c4043] hover:bg-[#fce8e6] hover:border-[#ea4335] hover:text-[#c5221f] active:bg-[#f5c6c3] transition-all disabled:opacity-50 shadow-sm"
+                        className="hidden sm:flex items-center gap-1.5 px-3 h-8 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-full text-xs font-medium text-[var(--color-text-primary)] hover:bg-red-50 dark:hover:bg-red-950 hover:border-red-400 hover:text-red-600 dark:hover:text-red-400 active:bg-red-100 dark:active:bg-red-900 transition-all disabled:opacity-50 shadow-sm"
                     >
                         <X className="w-3.5 h-3.5" />
                         {weekActionInProgress ? "Working..." : "Clear Week"}
@@ -1878,7 +2027,7 @@ export function SchedulePage() {
                         <button
                             onClick={() => void handleUndoClearWeek()}
                             disabled={weekActionInProgress}
-                            className="hidden sm:flex items-center gap-1.5 px-3 h-8 bg-[#e8f0fe] border border-[#1a73e8] rounded-full text-xs font-medium text-[#1a73e8] hover:bg-[#d2e3fc] active:bg-[#c5d9f9] transition-all disabled:opacity-50 shadow-sm"
+                            className="hidden sm:flex items-center gap-1.5 px-3 h-8 bg-[var(--color-primary-light)] border border-[var(--color-primary)] rounded-full text-xs font-medium text-[var(--color-primary)] hover:opacity-80 active:opacity-70 transition-all disabled:opacity-50 shadow-sm"
                         >
                             <Clock className="w-3.5 h-3.5" />
                             Undo
@@ -1886,19 +2035,19 @@ export function SchedulePage() {
                     )}
                     <button
                         onClick={() => setViewDropdownOpen(!viewDropdownOpen)}
-                        className="flex items-center gap-0.5 px-2 h-7 bg-[#f8f9fa] border border-[#dadce0] rounded-md text-xs font-medium text-[#3c4043] hover:bg-[#e8eaed] active:bg-[#dadce0] transition-all"
+                        className="flex items-center gap-0.5 px-2 h-7 bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-md text-xs font-medium text-[var(--color-text-primary)] hover:bg-[var(--color-border)] active:bg-[var(--color-border)] transition-all"
                     >
                         <span>{viewMode === 'week' ? 'Week' : 'Day'}</span>
-                        <ChevronDown className={`w-3.5 h-3.5 text-[#5f6368] transition-transform ${viewDropdownOpen ? 'rotate-180' : ''}`} />
+                        <ChevronDown className={`w-3.5 h-3.5 text-[var(--color-text-secondary)] transition-transform ${viewDropdownOpen ? 'rotate-180' : ''}`} />
                     </button>
                     {viewDropdownOpen && (
-                        <div className="absolute top-full right-0 mt-1 bg-white border border-[#e8eaed] rounded-lg shadow-lg z-50 min-w-[100px] py-1 overflow-hidden">
+                        <div className="absolute top-full right-0 mt-1 bg-[var(--color-surface-elevated)] border border-[var(--color-border-light)] rounded-lg shadow-lg z-50 min-w-[100px] py-1 overflow-hidden dropdown-google">
                             <button
                                 onClick={() => {
                                     setViewMode('day');
                                     setViewDropdownOpen(false);
                                 }}
-                                className={`w-full px-3 py-1.5 text-left text-xs hover:bg-[#f1f3f4] transition-colors ${viewMode === 'day' ? 'text-[#1a73e8] font-medium bg-[#e8f0fe]' : 'text-[#3c4043]'}`}
+                                className={`w-full px-3 py-1.5 text-left text-xs hover:bg-[var(--color-surface-hover)] transition-colors ${viewMode === 'day' ? 'text-[var(--color-primary)] font-medium bg-[var(--color-primary-light)]' : 'text-[var(--color-text-primary)]'}`}
                             >
                                 Day view
                             </button>
@@ -1907,7 +2056,7 @@ export function SchedulePage() {
                                     setViewMode('week');
                                     setViewDropdownOpen(false);
                                 }}
-                                className={`w-full px-3 py-1.5 text-left text-xs hover:bg-[#f1f3f4] transition-colors ${viewMode === 'week' ? 'text-[#1a73e8] font-medium bg-[#e8f0fe]' : 'text-[#3c4043]'}`}
+                                className={`w-full px-3 py-1.5 text-left text-xs hover:bg-[var(--color-surface-hover)] transition-colors ${viewMode === 'week' ? 'text-[var(--color-primary)] font-medium bg-[var(--color-primary-light)]' : 'text-[var(--color-text-primary)]'}`}
                             >
                                 Week view
                             </button>
@@ -1918,22 +2067,22 @@ export function SchedulePage() {
 
             {/* Info banner when moving */}
             {selectedMoveAppointment && (
-                <div className="px-4 py-2 bg-[#e8f0fe] border-b border-[#dadce0]">
-                    <p className="text-sm text-[#1a73e8]">
+                <div className="px-4 py-2 bg-[var(--color-primary-light)] border-b border-[var(--color-border)]">
+                    <p className="text-sm text-[var(--color-primary)]">
                         Moving {getPatientName(selectedMoveAppointment.patientId)}. Click a time slot to place it.
                     </p>
                 </div>
             )}
 
             {weekActionMessage && (
-                <div className="px-4 py-2 bg-[#e6f4ea] border-b border-[#ceead6]">
-                    <p className="text-sm text-[#137333]">{weekActionMessage}</p>
+                <div className="px-4 py-2 bg-green-50 dark:bg-green-950 border-b border-green-200 dark:border-green-800">
+                    <p className="text-sm text-green-700 dark:text-green-300">{weekActionMessage}</p>
                 </div>
             )}
 
             {weekActionError && (
-                <div className="px-4 py-2 bg-[#fce8e6] border-b border-[#f6c7c3]">
-                    <p className="text-sm text-[#b3261e]">{weekActionError}</p>
+                <div className="px-4 py-2 bg-red-50 dark:bg-red-950 border-b border-red-200 dark:border-red-800">
+                    <p className="text-sm text-red-700 dark:text-red-300">{weekActionError}</p>
                 </div>
             )}
 
@@ -1954,9 +2103,7 @@ export function SchedulePage() {
                 onTouchEnd={handleZoomTouchEnd}
             >
                 {loading ? (
-                    <div className="h-full flex items-center justify-center">
-                        <p className="text-[#5f6368]">Loading appointments...</p>
-                    </div>
+                    <ScheduleGridSkeleton />
                 ) : (
                     <div
                         className={viewMode === 'day' ? 'min-w-[300px]' : 'min-w-[900px]'}
@@ -1967,11 +2114,11 @@ export function SchedulePage() {
                         }}
                     >
                         {/* Day headers */}
-                        <div className="sticky top-0 z-20 bg-white/98 backdrop-blur-sm border-b border-[#e8eaed]">
+                        <div className="sticky top-0 z-20 bg-[var(--color-surface)]/98 backdrop-blur-sm border-b border-[var(--color-border-light)] transition-colors duration-200">
                             <div className={`grid ${viewMode === 'day' ? 'grid-cols-[60px_1fr]' : 'grid-cols-[60px_repeat(7,1fr)]'}`}>
                                 {/* GMT offset */}
                                 <div className="py-2 px-1 text-right">
-                                    <span className="text-[10px] text-[#70757a]">GMT-07</span>
+                                    <span className="text-[10px] text-[var(--color-text-tertiary)]">GMT-07</span>
                                 </div>
 
                                 {/* Day headers */}
@@ -1987,19 +2134,19 @@ export function SchedulePage() {
                                     return (
                                         <div
                                             key={`header-${date}`}
-                                            className="flex flex-col items-center py-2 border-l border-[#e8eaed] first:border-l-0"
+                                            className="flex flex-col items-center py-2 border-l border-[var(--color-border-light)] first:border-l-0"
                                         >
-                                            <span className={`text-[11px] font-medium tracking-wide ${isToday ? 'text-[#1a73e8]' : 'text-[#70757a]'}`}>
+                                            <span className={`text-[11px] font-medium tracking-wide ${isToday ? 'text-[var(--color-primary)]' : 'text-[var(--color-text-tertiary)]'}`}>
                                                 {dayLabel}
                                             </span>
                                             <button
                                                 onClick={() => setSelectedDate(date)}
                                                 className={`w-7 h-7 flex items-center justify-center rounded-full text-sm font-medium transition-all mt-0.5 ${
                                                     isToday
-                                                        ? 'bg-[#1a73e8] text-white'
+                                                        ? 'bg-[var(--color-primary)] text-white'
                                                         : isSelected
-                                                        ? 'bg-[#e8f0fe] text-[#1a73e8]'
-                                                        : 'text-[#3c4043] hover:bg-[#f1f3f4]'
+                                                        ? 'bg-[var(--color-primary-light)] text-[var(--color-primary)]'
+                                                        : 'text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)]'
                                                 }`}
                                             >
                                                 {dayNumber}
@@ -2008,7 +2155,7 @@ export function SchedulePage() {
                                                 <button
                                                     onClick={() => void handleAutoArrangeDay(date)}
                                                     disabled={isAutoArranging}
-                                                    className="mt-1 text-[9px] text-[#1a73e8] hover:underline disabled:opacity-50 opacity-70 hover:opacity-100"
+                                                    className="mt-1 text-[9px] text-[var(--color-primary)] hover:underline disabled:opacity-50 opacity-70 hover:opacity-100"
                                                 >
                                                     {isAutoArranging ? "..." : "Optimize"}
                                                 </button>
@@ -2022,7 +2169,7 @@ export function SchedulePage() {
                         {/* Time grid */}
                         <div className={`grid ${viewMode === 'day' ? 'grid-cols-[60px_1fr]' : 'grid-cols-[60px_repeat(7,1fr)]'}`}>
                             {/* Time axis */}
-                            <div className="border-r border-[#dadce0]">
+                            <div className="border-r border-[var(--color-border)]">
                                 {timeSlots.map((slotMinutes, slotIndex) => (
                                     <div
                                         key={`axis-${slotMinutes}`}
@@ -2030,7 +2177,7 @@ export function SchedulePage() {
                                         style={{ height: SLOT_HEIGHT_PX }}
                                     >
                                         {slotIndex % 4 === 0 && (
-                                            <span className="absolute -top-2 right-2 text-[10px] text-[#70757a]">
+                                            <span className="absolute -top-2 right-2 text-[10px] text-[var(--color-text-tertiary)]">
                                                 {formatAxisTime(slotMinutes)}
                                             </span>
                                         )}
@@ -2060,8 +2207,9 @@ export function SchedulePage() {
                                 return (
                                     <div
                                         key={`column-${date}`}
-                                        className={`relative border-l border-[#dadce0] ${
-                                            isSelectedDay ? 'bg-[#f8f9fa]' : ''
+                                        data-column-date={date}
+                                        className={`relative border-l border-[var(--color-border)] ${
+                                            isSelectedDay ? 'bg-[var(--color-surface-hover)]/50' : ''
                                         }`}
                                         onDragOver={(event) => {
                                             event.preventDefault();
@@ -2112,9 +2260,9 @@ export function SchedulePage() {
                                                     onDrop={(event) => {
                                                         void handleSlotDrop(event, date, slotTime);
                                                     }}
-                                                    className={`block w-full text-left transition-colors hover:bg-blue-50/50 cursor-pointer ${
-                                                        isHourMark ? 'border-t border-[#e0e0e0]' : 'border-t border-[#f5f5f5]'
-                                                    } ${isEvenHour ? 'bg-slate-50/40' : ''}`}
+                                                    className={`block w-full text-left transition-colors hover:bg-[var(--color-primary-light)]/30 cursor-pointer ${
+                                                        isHourMark ? 'border-t grid-line-hour' : 'border-t grid-line-soft'
+                                                    } ${isEvenHour ? 'hour-even' : 'hour-odd'}`}
                                                     style={{ height: SLOT_HEIGHT_PX }}
                                                     aria-label={`Double-click or hold to add appointment ${date} at ${formatAxisTime(slotMinutes)}`}
                                                 />
@@ -2187,6 +2335,11 @@ export function SchedulePage() {
                                                             handleAppointmentDragStart(event, appointment.id)
                                                         }
                                                         onDragEnd={handleAppointmentDragEnd}
+                                                        onTouchStart={(event) =>
+                                                            handleChipTouchStart(event, appointment.id)
+                                                        }
+                                                        onTouchEnd={handleChipTouchEnd}
+                                                        onTouchCancel={handleChipTouchEnd}
                                                         onClick={(event) =>
                                                             handleAppointmentChipClick(event, appointment.id)
                                                         }
@@ -2201,6 +2354,7 @@ export function SchedulePage() {
                                                             left: leftStyle,
                                                             width: widthStyle,
                                                             background: getVisitTypeGradient(visitType),
+                                                            touchAction: 'none',
                                                         }}
                                                         title={`${getPatientName(appointment.patientId)}${patient?.phone ? ` - ${patient.phone}` : ''}${patient?.address ? ` - ${patient.address}` : ''}`}
                                                     >

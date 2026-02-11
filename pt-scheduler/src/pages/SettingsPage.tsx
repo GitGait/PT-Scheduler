@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { usePatientStore, useSyncStore } from "../stores";
+import { usePatientStore, useSyncStore, useThemeStore, type ThemeMode } from "../stores";
 import { Card, CardHeader } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { initAuth, isSignedIn, signIn, signOut, tryRestoreSignIn, getAccessToken } from "../api/auth";
@@ -13,6 +13,39 @@ import { getHomeBase, setHomeBase } from "../utils/scheduling";
 
 // Event for notifying other components of auth state changes
 export const AUTH_STATE_CHANGED_EVENT = "pt-scheduler:auth-state-changed";
+
+// Theme toggle component
+function ThemeToggle() {
+    const { mode, setMode } = useThemeStore();
+
+    const options: { value: ThemeMode; label: string; icon: string }[] = [
+        { value: "system", label: "System", icon: "💻" },
+        { value: "light", label: "Light", icon: "☀️" },
+        { value: "dark", label: "Dark", icon: "🌙" },
+    ];
+
+    return (
+        <Card className="mb-4">
+            <CardHeader title="Appearance" subtitle="Choose your preferred theme" />
+            <div className="flex gap-2">
+                {options.map((option) => (
+                    <button
+                        key={option.value}
+                        onClick={() => setMode(option.value)}
+                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg border-2 transition-all ${
+                            mode === option.value
+                                ? "border-[var(--color-primary)] bg-[var(--color-primary-light)] text-[var(--color-primary)]"
+                                : "border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:border-[var(--color-text-tertiary)] hover:bg-[var(--color-surface-hover)]"
+                        }`}
+                    >
+                        <span className="text-lg">{option.icon}</span>
+                        <span className="text-sm font-medium">{option.label}</span>
+                    </button>
+                ))}
+            </div>
+        </Card>
+    );
+}
 
 function normalizeSpreadsheetId(input: string): string {
     const trimmed = input.trim();
@@ -417,7 +450,7 @@ export function SettingsPage() {
 
     return (
         <div className="pb-20 p-4 max-w-2xl mx-auto">
-            <h1 className="mb-4 text-xl font-medium text-[#202124]">Settings</h1>
+            <h1 className="mb-4 text-xl font-medium text-[var(--color-text-primary)]">Settings</h1>
 
             <Card className="mb-4">
                 <CardHeader title="Connection Status" />
@@ -426,15 +459,17 @@ export function SettingsPage() {
                         className={`h-3 w-3 rounded-full ${isOnline ? "bg-green-500" : "bg-red-500"}`}
                         aria-hidden="true"
                     />
-                    <span className="text-[#3c4043]">{isOnline ? "Online" : "Offline"}</span>
+                    <span className="text-[var(--color-text-primary)]">{isOnline ? "Online" : "Offline"}</span>
                 </div>
             </Card>
+
+            <ThemeToggle />
 
             <Card className="mb-4">
                 <CardHeader title="Home Base Address" subtitle="Your starting location for route calculations" />
                 <div className="space-y-3">
                     <div>
-                        <label htmlFor="home-address" className="mb-1 block text-sm text-[#5f6368]">
+                        <label htmlFor="home-address" className="mb-1 block text-sm text-[var(--color-text-secondary)]">
                             Home Address
                         </label>
                         <input
@@ -455,10 +490,10 @@ export function SettingsPage() {
                         {savingHomeBase ? "Saving..." : "Save Home Base"}
                     </Button>
                     {homeBaseStatus && (
-                        <p className="text-sm text-[#1e8e3e]">{homeBaseStatus}</p>
+                        <p className="text-sm text-[var(--color-event-green)]">{homeBaseStatus}</p>
                     )}
                     {homeBaseError && (
-                        <p className="text-sm text-[#d93025]">{homeBaseError}</p>
+                        <p className="text-sm text-[var(--color-event-red)]">{homeBaseError}</p>
                     )}
                 </div>
             </Card>
@@ -482,7 +517,7 @@ export function SettingsPage() {
                 <CardHeader title="Google Sync Setup" subtitle="Paste Spreadsheet ID or full sheet URL" />
                 <div className="space-y-3">
                     <div>
-                        <label htmlFor="spreadsheet-id" className="mb-1 block text-sm text-[#5f6368]">
+                        <label htmlFor="spreadsheet-id" className="mb-1 block text-sm text-[var(--color-text-secondary)]">
                             Spreadsheet ID (optional, required for patient import)
                         </label>
                         <input
@@ -495,7 +530,7 @@ export function SettingsPage() {
                         />
                     </div>
                     <div>
-                        <label htmlFor="calendar-id" className="mb-1 block text-sm text-[#5f6368]">
+                        <label htmlFor="calendar-id" className="mb-1 block text-sm text-[var(--color-text-secondary)]">
                             Google Calendar ID (optional, for appointment sync)
                         </label>
                         <input

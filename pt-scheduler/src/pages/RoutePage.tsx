@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useAppointmentStore, usePatientStore } from "../stores";
 import { Card, CardHeader } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
+import { RouteStopSkeleton } from "../components/ui/Skeleton";
+import { RouteEmptyState } from "../components/ui/EmptyState";
 import { geocodeAddress } from "../api/geocode";
 import { optimizeRoute } from "../api/optimize";
 import { getDistanceMatrix } from "../api/distance";
@@ -361,20 +363,20 @@ export function RoutePage() {
                 <div className="flex items-center gap-2">
                     <button
                         onClick={() => navigateDay(-1)}
-                        className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#f1f3f4] transition-colors"
+                        className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-hover)] transition-colors"
                         aria-label="Previous day"
                     >
-                        <ChevronLeft className="w-5 h-5 text-[#5f6368]" />
+                        <ChevronLeft className="w-5 h-5 text-[var(--color-text-secondary)]" />
                     </button>
-                    <h1 className="text-xl font-medium text-[#202124]">
+                    <h1 className="text-xl font-medium text-[var(--color-text-primary)]">
                         {formatDate(selectedDate)}
                     </h1>
                     <button
                         onClick={() => navigateDay(1)}
-                        className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#f1f3f4] transition-colors"
+                        className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-hover)] transition-colors"
                         aria-label="Next day"
                     >
-                        <ChevronRight className="w-5 h-5 text-[#5f6368]" />
+                        <ChevronRight className="w-5 h-5 text-[var(--color-text-secondary)]" />
                     </button>
                 </div>
                 <div className="flex gap-2">
@@ -398,35 +400,35 @@ export function RoutePage() {
 
             {/* Summary */}
             {routeStops.length > 0 && (
-                <div className="bg-[#f1f3f4] rounded-lg p-4 mb-4 grid grid-cols-4 gap-2 text-center">
+                <div className="bg-[var(--color-surface-hover)] rounded-lg p-4 mb-4 grid grid-cols-4 gap-2 text-center">
                     <div>
-                        <p className="text-2xl font-bold text-[#1a73e8]">{routeStops.length}</p>
-                        <p className="text-xs text-[#5f6368]">Stops</p>
+                        <p className="text-2xl font-bold text-[var(--color-primary)]">{routeStops.length}</p>
+                        <p className="text-xs text-[var(--color-text-secondary)]">Stops</p>
                     </div>
                     <div>
-                        <p className="text-2xl font-bold text-[#1a73e8]">{totalMiles.toFixed(1)}</p>
-                        <p className="text-xs text-[#5f6368]">Miles</p>
+                        <p className="text-2xl font-bold text-[var(--color-primary)]">{totalMiles.toFixed(1)}</p>
+                        <p className="text-xs text-[var(--color-text-secondary)]">Miles</p>
                     </div>
                     <div>
-                        <p className="text-2xl font-bold text-[#1a73e8]">{totalDriveMinutes}</p>
-                        <p className="text-xs text-[#5f6368]">Drive (min)</p>
+                        <p className="text-2xl font-bold text-[var(--color-primary)]">{totalDriveMinutes}</p>
+                        <p className="text-xs text-[var(--color-text-secondary)]">Drive (min)</p>
                     </div>
                     <div>
-                        <p className="text-2xl font-bold text-[#1a73e8]">{totalAppointmentMinutes}</p>
-                        <p className="text-xs text-[#5f6368]">Appt (min)</p>
+                        <p className="text-2xl font-bold text-[var(--color-primary)]">{totalAppointmentMinutes}</p>
+                        <p className="text-xs text-[var(--color-text-secondary)]">Appt (min)</p>
                     </div>
                 </div>
             )}
 
             {/* Home Base */}
-            <Card className="mb-3 border-l-4 border-l-[#34a853]">
+            <Card className="mb-3 border-l-4 border-l-[var(--color-event-green)]">
                 <div className="flex items-center gap-3">
-                    <div className="flex-shrink-0 w-10 h-10 bg-[#34a853] rounded-full flex items-center justify-center text-white">
+                    <div className="flex-shrink-0 w-10 h-10 bg-[var(--color-event-green)] rounded-full flex items-center justify-center text-white">
                         <Home className="w-5 h-5" />
                     </div>
                     <div className="flex-1">
-                        <p className="font-medium text-[#202124]">Start: Home Base</p>
-                        <p className="text-sm text-[#5f6368]">{homeBaseAddress}</p>
+                        <p className="font-medium text-[var(--color-text-primary)]">Start: Home Base</p>
+                        <p className="text-sm text-[var(--color-text-secondary)]">{homeBaseAddress}</p>
                     </div>
                 </div>
             </Card>
@@ -434,11 +436,10 @@ export function RoutePage() {
             {/* Route Stops */}
             <div className="space-y-3">
                 {routeStops.length === 0 ? (
-                    <div className="text-center py-12">
-                        <Car className="w-12 h-12 mx-auto text-[#dadce0] mb-4" />
-                        <p className="text-[#5f6368] mb-2">No appointments for {formatDate(selectedDate)}</p>
-                        <p className="text-sm text-[#5f6368]">Add appointments from the Schedule page</p>
-                    </div>
+                    <RouteEmptyState
+                        hasAppointments={false}
+                        onViewSchedule={() => window.location.href = "/"}
+                    />
                 ) : (
                     routeStops.map((stop) => {
                         const isCompleted = stop.appointment.status === "completed";
@@ -452,7 +453,7 @@ export function RoutePage() {
                             >
                                 {/* Drive time indicator */}
                                 {stop.driveTimeMinutes > 0 && (
-                                    <div className="flex items-center gap-2 text-sm text-[#5f6368] mb-2 pb-2 border-b border-[#f1f3f4]">
+                                    <div className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)] mb-2 pb-2 border-b border-[var(--color-surface-hover)]">
                                         <Car className="w-4 h-4" />
                                         <span>{stop.fromLabel}: {stop.distanceMiles} mi ({stop.driveTimeMinutes} min)</span>
                                     </div>
@@ -460,17 +461,17 @@ export function RoutePage() {
 
                                 <div className="flex items-start gap-3">
                                     <div className={`flex-shrink-0 w-10 h-10 rounded-full flex items-center justify-center text-white font-medium ${
-                                        isCompleted ? "bg-[#34a853]" : "bg-[#1a73e8]"
+                                        isCompleted ? "bg-[var(--color-event-green)]" : "bg-[var(--color-primary)]"
                                     }`}>
                                         {isCompleted ? <CheckCircle className="w-5 h-5" /> : stop.order}
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <div className="flex items-start justify-between gap-2">
                                             <div className="min-w-0">
-                                                <p className="font-medium text-[#202124] truncate">
+                                                <p className="font-medium text-[var(--color-text-primary)] truncate">
                                                     {stop.patient?.fullName ?? "Unknown Patient"}
                                                 </p>
-                                                <div className="flex items-center gap-2 text-sm text-[#5f6368]">
+                                                <div className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)]">
                                                     <Clock className="w-4 h-4" />
                                                     <span>
                                                         {formatTime(stop.appointment.startTime)} ({stop.appointment.duration} min)
@@ -490,7 +491,7 @@ export function RoutePage() {
 
                                         {/* Address */}
                                         {stop.patient?.address && (
-                                            <div className="flex items-start gap-2 mt-2 text-sm text-[#5f6368]">
+                                            <div className="flex items-start gap-2 mt-2 text-sm text-[var(--color-text-secondary)]">
                                                 <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
                                                 <span className="break-words">{stop.patient.address}</span>
                                             </div>

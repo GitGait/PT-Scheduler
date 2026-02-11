@@ -107,7 +107,7 @@ export function Sidebar({
 
   return (
     <aside
-      className={`sidebar bg-white border-r border-[#dadce0] flex-shrink-0 overflow-y-auto transition-all duration-200 ${
+      className={`sidebar bg-[var(--color-sidebar-bg)] border-r border-[var(--color-border)] flex-shrink-0 overflow-y-auto transition-all duration-200 ${
         isOpen ? "w-64" : "w-0 overflow-hidden"
       }`}
     >
@@ -122,7 +122,7 @@ export function Sidebar({
         <div>
           <button
             onClick={() => setMyCalendarsOpen(!myCalendarsOpen)}
-            className="flex items-center gap-2 w-full text-left py-2 text-sm font-medium text-[#3c4043] hover:bg-[#f1f3f4] rounded px-2 -mx-2"
+            className="flex items-center gap-2 w-full text-left py-2 text-sm font-medium text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] rounded px-2 -mx-2"
           >
             <ChevronDown className={`w-4 h-4 transition-transform ${myCalendarsOpen ? "" : "-rotate-90"}`} />
             <span>My calendars</span>
@@ -130,7 +130,7 @@ export function Sidebar({
           {myCalendarsOpen && (
             <div className="ml-6 space-y-1 mt-1">
               {/* PT Appointments - always shown */}
-              <label className="flex items-center gap-3 py-1.5 px-2 rounded hover:bg-[#f1f3f4] cursor-pointer">
+              <label className="flex items-center gap-3 py-1.5 px-2 rounded hover:bg-[var(--color-surface-hover)] cursor-pointer">
                 <input
                   type="checkbox"
                   checked={enabledCalendars["pt-appointments"] !== false}
@@ -138,16 +138,16 @@ export function Sidebar({
                   className="w-4 h-4 rounded border-2 accent-[#039be5]"
                   style={{ accentColor: "#039be5" }}
                 />
-                <span className="text-sm text-[#3c4043]">PT Appointments</span>
+                <span className="text-sm text-[var(--color-text-primary)]">PT Appointments</span>
               </label>
 
               {loadingCalendars ? (
-                <p className="text-xs text-[#5f6368] py-1 px-2">Loading...</p>
+                <p className="text-xs text-[var(--color-text-secondary)] py-1 px-2">Loading...</p>
               ) : (
                 myCalendars.map((cal) => (
                   <label
                     key={cal.id}
-                    className="flex items-center gap-3 py-1.5 px-2 rounded hover:bg-[#f1f3f4] cursor-pointer"
+                    className="flex items-center gap-3 py-1.5 px-2 rounded hover:bg-[var(--color-surface-hover)] cursor-pointer"
                   >
                     <input
                       type="checkbox"
@@ -156,7 +156,7 @@ export function Sidebar({
                       className="w-4 h-4 rounded border-2"
                       style={{ accentColor: cal.backgroundColor || "#33b679" }}
                     />
-                    <span className="text-sm text-[#3c4043] truncate">
+                    <span className="text-sm text-[var(--color-text-primary)] truncate">
                       {cal.primary ? "Personal" : cal.summary}
                     </span>
                   </label>
@@ -171,7 +171,7 @@ export function Sidebar({
           <div>
             <button
               onClick={() => setOtherCalendarsOpen(!otherCalendarsOpen)}
-              className="flex items-center gap-2 w-full text-left py-2 text-sm font-medium text-[#3c4043] hover:bg-[#f1f3f4] rounded px-2 -mx-2"
+              className="flex items-center gap-2 w-full text-left py-2 text-sm font-medium text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] rounded px-2 -mx-2"
             >
               <ChevronDown className={`w-4 h-4 transition-transform ${otherCalendarsOpen ? "" : "-rotate-90"}`} />
               <span>Other calendars</span>
@@ -181,7 +181,7 @@ export function Sidebar({
                 {otherCalendars.map((cal) => (
                   <label
                     key={cal.id}
-                    className="flex items-center gap-3 py-1.5 px-2 rounded hover:bg-[#f1f3f4] cursor-pointer"
+                    className="flex items-center gap-3 py-1.5 px-2 rounded hover:bg-[var(--color-surface-hover)] cursor-pointer"
                   >
                     <input
                       type="checkbox"
@@ -190,7 +190,7 @@ export function Sidebar({
                       className="w-4 h-4 rounded border-2"
                       style={{ accentColor: cal.backgroundColor || "#0b8043" }}
                     />
-                    <span className="text-sm text-[#3c4043] truncate">{cal.summary}</span>
+                    <span className="text-sm text-[var(--color-text-primary)] truncate">{cal.summary}</span>
                   </label>
                 ))}
               </div>
@@ -237,23 +237,23 @@ function MiniCalendar({ selectedDate, onDateSelect }: MiniCalendarProps) {
     <div className="mini-calendar">
       {/* Month navigation */}
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-medium text-[#3c4043]">
+        <span className="text-sm font-medium text-[var(--color-text-primary)]">
           {format(viewMonth, "MMMM yyyy")}
         </span>
         <div className="flex gap-1">
           <button
             onClick={() => setViewMonth(subMonths(viewMonth, 1))}
-            className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#f1f3f4]"
+            className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-hover)]"
             aria-label="Previous month"
           >
-            <ChevronLeft className="w-4 h-4 text-[#5f6368]" />
+            <ChevronLeft className="w-4 h-4 text-[var(--color-text-secondary)]" />
           </button>
           <button
             onClick={() => setViewMonth(addMonths(viewMonth, 1))}
-            className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-[#f1f3f4]"
+            className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-hover)]"
             aria-label="Next month"
           >
-            <ChevronRight className="w-4 h-4 text-[#5f6368]" />
+            <ChevronRight className="w-4 h-4 text-[var(--color-text-secondary)]" />
           </button>
         </div>
       </div>
@@ -263,7 +263,7 @@ function MiniCalendar({ selectedDate, onDateSelect }: MiniCalendarProps) {
         {weekDays.map((day, index) => (
           <div
             key={index}
-            className="h-7 flex items-center justify-center text-[11px] font-medium text-[#70757a]"
+            className="h-7 flex items-center justify-center text-[11px] font-medium text-[var(--color-text-tertiary)]"
           >
             {day}
           </div>
@@ -288,12 +288,12 @@ function MiniCalendar({ selectedDate, onDateSelect }: MiniCalendarProps) {
                   <span
                     className={`w-6 h-6 flex items-center justify-center text-[11px] rounded-full transition-colors ${
                       !isCurrentMonth
-                        ? "text-[#70757a]"
+                        ? "text-[var(--color-text-tertiary)]"
                         : isTodayDate
-                        ? "bg-[#1a73e8] text-white font-medium"
+                        ? "bg-[var(--color-primary)] text-white font-medium"
                         : isSelected
-                        ? "bg-[#e8f0fe] text-[#1a73e8] font-medium"
-                        : "text-[#3c4043] hover:bg-[#f1f3f4]"
+                        ? "bg-[var(--color-primary-light)] text-[var(--color-primary)] font-medium"
+                        : "text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)]"
                     }`}
                   >
                     {format(day, "d")}

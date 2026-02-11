@@ -7,11 +7,11 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variantStyles = {
-    primary: "bg-[#1a73e8] hover:bg-[#1557b0] text-white shadow-sm hover:shadow",
-    secondary: "bg-white hover:bg-[#f1f3f4] text-[#1a73e8] border border-[#dadce0] hover:border-[#1a73e8]",
-    danger: "bg-[#d93025] hover:bg-[#b3261e] text-white",
-    ghost: "bg-transparent hover:bg-[#f1f3f4] text-[#5f6368]",
-    text: "bg-transparent hover:bg-[#e8f0fe] text-[#1a73e8]",
+    primary: "bg-[var(--color-primary)] hover:bg-[var(--color-primary-hover)] text-white shadow-sm hover:shadow",
+    secondary: "bg-[var(--color-surface)] hover:bg-[var(--color-surface-hover)] text-[var(--color-primary)] border border-[var(--color-border)] hover:border-[var(--color-primary)]",
+    danger: "bg-red-600 hover:bg-red-700 dark:bg-red-700 dark:hover:bg-red-800 text-white",
+    ghost: "bg-transparent hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)]",
+    text: "bg-transparent hover:bg-[var(--color-primary-light)] text-[var(--color-primary)]",
 };
 
 const sizeStyles = {
@@ -33,7 +33,7 @@ export function Button({
         inline-flex items-center justify-center
         font-medium rounded
         transition-all duration-150
-        focus:outline-none focus:ring-2 focus:ring-[#1a73e8] focus:ring-offset-2
+        focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:ring-offset-2 focus:ring-offset-[var(--color-background)]
         disabled:opacity-50 disabled:cursor-not-allowed
         min-h-[36px] min-w-[36px]
         ${variantStyles[variant]}

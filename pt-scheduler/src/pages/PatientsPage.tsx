@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import { usePatientStore, useSyncStore } from "../stores";
 import { Card, CardHeader } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
+import { PatientListSkeleton } from "../components/ui/Skeleton";
+import { PatientsEmptyState, SearchEmptyState } from "../components/ui/EmptyState";
 import { mapCsvColumns } from "../api/csvMapping";
 import { extractPatient } from "../api/extract";
 import { isSignedIn } from "../api/auth";
@@ -1686,19 +1688,16 @@ export function PatientsPage() {
                 )}
 
                 {loading ? (
-                    <div className="text-center py-12">
-                        <p className="text-[#5f6368]">Loading patients...</p>
-                    </div>
+                    <PatientListSkeleton count={5} />
                 ) : filteredPatients.length === 0 ? (
-                    <div className="text-center py-12">
-                        <p className="text-[#5f6368] mb-4">
-                            {searchQuery ? "No patients found" : "No patients yet"}
-                        </p>
-                        <Button variant="primary" onClick={handleOpenAdd}>
-                            <Plus className="w-4 h-4 mr-1" />
-                            Add Patient
-                        </Button>
-                    </div>
+                    searchQuery ? (
+                        <SearchEmptyState
+                            query={searchQuery}
+                            onClearSearch={() => search("")}
+                        />
+                    ) : (
+                        <PatientsEmptyState onAddPatient={handleOpenAdd} />
+                    )
                 ) : (
                     filteredPatients.map((patient) => (
                         <Card key={patient.id} className="group hover:shadow-md transition-shadow">
@@ -1713,7 +1712,7 @@ export function PatientsPage() {
                                     <a
                                         href={buildPhoneHref(patient.phone)!}
                                         onClick={(e) => e.stopPropagation()}
-                                        className="inline-flex items-center gap-1 text-[#1a73e8] text-sm hover:underline"
+                                        className="inline-flex items-center gap-1 text-[var(--color-primary)] text-sm hover:underline"
                                         aria-label={`Call ${patient.fullName}`}
                                     >
                                         <Phone className="w-4 h-4" />
@@ -1726,7 +1725,7 @@ export function PatientsPage() {
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         onClick={(e) => e.stopPropagation()}
-                                        className="inline-flex items-center gap-1 text-[#1a73e8] text-sm hover:underline"
+                                        className="inline-flex items-center gap-1 text-[var(--color-primary)] text-sm hover:underline"
                                         aria-label={`Navigate to ${patient.fullName}`}
                                     >
                                         <Navigation className="w-4 h-4" />
@@ -1742,7 +1741,7 @@ export function PatientsPage() {
             {/* Floating Add Button */}
             <button
                 onClick={handleOpenAdd}
-                className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-[#1a73e8] text-white shadow-lg hover:shadow-xl hover:bg-[#1557b0] transition-all flex items-center justify-center"
+                className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-[var(--color-primary)] text-white shadow-lg hover:shadow-xl hover:bg-[var(--color-primary-hover)] transition-all flex items-center justify-center"
                 aria-label="Add patient"
             >
                 <Plus className="w-6 h-6" />
