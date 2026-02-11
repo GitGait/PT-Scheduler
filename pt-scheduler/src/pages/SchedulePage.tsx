@@ -600,17 +600,17 @@ export function SchedulePage() {
         let cancelled = false;
 
         const fetchDrivingDistances = async () => {
-            if (!homeCoordinates) return;
-
             // Build list of locations for each day
             for (const date of Object.keys(appointmentsByDay)) {
                 const dayAppointments = appointmentsByDay[date];
                 if (dayAppointments.length === 0) continue;
 
-                // Build locations array: home + all appointments with coordinates
-                const locations: Array<{ id: string; lat: number; lng: number }> = [
-                    { id: `home-${date}`, lat: homeCoordinates.lat, lng: homeCoordinates.lng }
-                ];
+                // Build locations array: optionally home + all appointments with coordinates
+                const locations: Array<{ id: string; lat: number; lng: number }> = [];
+
+                if (homeCoordinates) {
+                    locations.push({ id: `home-${date}`, lat: homeCoordinates.lat, lng: homeCoordinates.lng });
+                }
 
                 for (const apt of dayAppointments) {
                     const patient = patientById.get(apt.patientId);
@@ -627,7 +627,7 @@ export function SchedulePage() {
                     }
                 }
 
-                // Need at least 2 locations (home + 1 appointment)
+                // Need at least 2 locations to calculate distances
                 if (locations.length < 2) continue;
 
                 // Create a cache key to avoid redundant fetches
