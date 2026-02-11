@@ -887,6 +887,7 @@ export function SchedulePage() {
     const handleAppointmentDragEnd = () => {
         setDraggingAppointmentId(null);
         setDragPreview(null);
+        setMoveAppointmentId(null);
     };
 
     const updateDragPreview = (date: string, startTime: string) => {
@@ -1033,7 +1034,10 @@ export function SchedulePage() {
             if (touchDragRef.current && !touchDragRef.current.activated) {
                 touchDragRef.current.activated = true;
                 setDraggingAppointmentId(appointmentId);
-                setMoveAppointmentId(appointmentId);
+                // Don't set moveAppointmentId here — that's only for the
+                // action-sheet "click slot to place" path. Setting it during
+                // touch drag would show the "Moving..." banner, which causes
+                // a layout shift that pushes the grid down mid-drag.
                 const existing = appointments.find((a) => a.id === appointmentId);
                 if (existing) {
                     const preview = { date: existing.date, startTime: existing.startTime };
@@ -1083,7 +1087,6 @@ export function SchedulePage() {
         touchDragPreviewRef.current = null;
         setDraggingAppointmentId(null);
         setDragPreview(null);
-        if (state?.activated) setMoveAppointmentId(null);
     };
 
     // Pinch-to-zoom handlers for mobile
@@ -2103,8 +2106,8 @@ export function SchedulePage() {
                 </div>
             </div>
 
-            {/* Info banner when moving */}
-            {selectedMoveAppointment && (
+            {/* Info banner when moving (hide during active touch drag to prevent layout shift) */}
+            {selectedMoveAppointment && !draggingAppointmentId && (
                 <div className="px-4 py-2 bg-[var(--color-primary-light)] border-b border-[var(--color-border)]">
                     <p className="text-sm text-[var(--color-primary)]">
                         Moving {getPatientName(selectedMoveAppointment.patientId)}. Click a time slot to place it.
@@ -2393,6 +2396,7 @@ export function SchedulePage() {
                                                             width: widthStyle,
                                                             background: getVisitTypeGradient(visitType),
                                                             touchAction: 'none',
+                                                            opacity: draggingAppointmentId === appointment.id ? 0.4 : undefined,
                                                         }}
                                                         title={`${getPatientName(appointment.patientId)}${patient?.phone ? ` - ${patient.phone}` : ''}${patient?.address ? ` - ${patient.address}` : ''}`}
                                                     >
