@@ -10,6 +10,7 @@ interface AppointmentActionSheetProps {
     onNavigate: () => void;
     onViewEdit: () => void;
     onMove: () => void;
+    onCopy: () => void;
     onDelete: () => void;
 }
 
@@ -51,6 +52,7 @@ export function AppointmentActionSheet({
     onNavigate,
     onViewEdit,
     onMove,
+    onCopy,
     onDelete,
 }: AppointmentActionSheetProps) {
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -265,6 +267,20 @@ export function AppointmentActionSheet({
                             <Move className="w-5 h-5 text-[#8e24aa]" />
                         </div>
                         <span className="font-medium">Move Appointment</span>
+                    </button>
+
+                    {/* Copy Appointment */}
+                    <button
+                        onClick={() => {
+                            onCopy();
+                            onClose();
+                        }}
+                        className="w-full flex items-center gap-4 py-3 px-4 text-left text-[#202124] hover:bg-[#f1f3f4] rounded-lg transition-colors"
+                    >
+                        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#e0f2f1]">
+                            <Copy className="w-5 h-5 text-[#00897b]" />
+                        </div>
+                        <span className="font-medium">Copy Appointment</span>
                     </button>
 
                     {/* Delete Appointment */}

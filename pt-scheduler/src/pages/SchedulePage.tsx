@@ -249,6 +249,7 @@ export function SchedulePage() {
     const [draggingAppointmentId, setDraggingAppointmentId] = useState<string | null>(null);
     const [dragPreview, setDragPreview] = useState<{ date: string; startTime: string } | null>(null);
     const [moveAppointmentId, setMoveAppointmentId] = useState<string | null>(null);
+    const [copyAppointmentId, setCopyAppointmentId] = useState<string | null>(null);
     const [resizingAppointmentId, setResizingAppointmentId] = useState<string | null>(null);
     const [draftRenderById, setDraftRenderById] = useState<
         Record<string, { startMinutes: number; duration: number }>
@@ -480,6 +481,10 @@ export function SchedulePage() {
     const selectedMoveAppointment = useMemo(
         () => appointments.find((apt) => apt.id === moveAppointmentId),
         [appointments, moveAppointmentId]
+    );
+    const selectedCopyAppointment = useMemo(
+        () => appointments.find((apt) => apt.id === copyAppointmentId),
+        [appointments, copyAppointmentId]
     );
     const draggingAppointment = useMemo(
         () => appointments.find((apt) => apt.id === draggingAppointmentId) ?? null,
@@ -959,6 +964,23 @@ export function SchedulePage() {
         });
     };
 
+    const copyAppointmentToSlot = async (appointmentId: string, date: string, startTime: string) => {
+        const source = appointments.find((apt) => apt.id === appointmentId);
+        if (!source) return;
+
+        preserveScrollPosition(() => {
+            void create({
+                patientId: source.patientId,
+                date,
+                startTime,
+                duration: source.duration,
+                visitType: source.visitType,
+                notes: source.notes,
+                status: 'scheduled',
+            });
+        });
+    };
+
     const handleDayDrop = (
         event: DragEvent<HTMLDivElement>,
         date: string
@@ -1173,10 +1195,17 @@ export function SchedulePage() {
             return;
         }
 
-        // Only handle click if we're in move mode - placing an appointment
+        // Handle move mode - placing an appointment
         if (moveAppointmentId) {
             void moveAppointmentToSlot(moveAppointmentId, date, startTime);
             setMoveAppointmentId(null);
+            triggerSync();
+            return;
+        }
+        // Handle copy mode - duplicating an appointment to a new slot
+        if (copyAppointmentId) {
+            void copyAppointmentToSlot(copyAppointmentId, date, startTime);
+            setCopyAppointmentId(null);
             triggerSync();
             return;
         }
@@ -1186,8 +1215,8 @@ export function SchedulePage() {
     const LONG_PRESS_DURATION_MS = 400;
 
     const handleSlotLongPressStart = (date: string, startTime: string) => {
-        // Don't start long press if we're in move mode
-        if (moveAppointmentId) {
+        // Don't start long press if we're in move or copy mode
+        if (moveAppointmentId || copyAppointmentId) {
             return;
         }
 
@@ -1222,6 +1251,9 @@ export function SchedulePage() {
 
         if (moveAppointmentId === appointment.id) {
             setMoveAppointmentId(null);
+        }
+        if (copyAppointmentId === appointment.id) {
+            setCopyAppointmentId(null);
         }
         if (draggingAppointmentId === appointment.id) {
             setDraggingAppointmentId(null);
@@ -2138,6 +2170,15 @@ export function SchedulePage() {
                 </div>
             )}
 
+            {/* Info banner when copying */}
+            {selectedCopyAppointment && !draggingAppointmentId && (
+                <div className="px-4 py-2 bg-[#e0f2f1] border-b border-[var(--color-border)]">
+                    <p className="text-sm text-[#00897b]">
+                        Copying {getPatientName(selectedCopyAppointment.patientId)}. Click a time slot to place the copy.
+                    </p>
+                </div>
+            )}
+
             {weekActionMessage && (
                 <div className="px-4 py-2 bg-green-50 dark:bg-green-950 border-b border-green-200 dark:border-green-800">
                     <p className="text-sm text-green-700 dark:text-green-300">{weekActionMessage}</p>
@@ -2380,6 +2421,7 @@ export function SchedulePage() {
                                                 const widthStyle = isDayView ? 'calc(100% - 8px)' : `calc(${widthPct}% - 4px)`;
                                                 const isActiveMove =
                                                     moveAppointmentId === appointment.id ||
+                                                    copyAppointmentId === appointment.id ||
                                                     draggingAppointmentId === appointment.id;
                                                 const isActiveResize =
                                                     resizingAppointmentId === appointment.id;
@@ -2927,6 +2969,9 @@ export function SchedulePage() {
                         }}
                         onMove={() => {
                             setMoveAppointmentId(actionSheetAppointmentId);
+                        }}
+                        onCopy={() => {
+                            setCopyAppointmentId(actionSheetAppointmentId);
                         }}
                         onDelete={() => {
                             void handleDeleteAppointment(actionAppointment);
