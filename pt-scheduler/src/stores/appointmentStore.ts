@@ -74,7 +74,11 @@ export const useAppointmentStore = create<AppointmentState & AppointmentActions>
     },
 
     loadByRange: async (startDate: string, endDate: string) => {
-        set({ loading: true, error: null });
+        // Only show loading skeleton on initial load (no appointments yet).
+        // On refresh/reload, keep existing appointments visible to prevent
+        // scroll position reset from DOM swap (skeleton replaces grid).
+        const isInitialLoad = get().appointments.length === 0;
+        set({ loading: isInitialLoad, error: null });
         try {
             const appointments = await appointmentDB.byRange(startDate, endDate);
             set({ appointments, loading: false });

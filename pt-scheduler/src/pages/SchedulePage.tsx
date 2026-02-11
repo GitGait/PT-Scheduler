@@ -370,7 +370,7 @@ export function SchedulePage() {
             // Preserve scroll position when sync replaces appointments
             const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
             const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
-            pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 6 };
+            pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 20 };
             void loadByRange(weekStart, weekEnd);
         };
 
@@ -894,7 +894,8 @@ export function SchedulePage() {
         }
     };
 
-    const handleAppointmentDragEnd = () => {
+    const handleAppointmentDragEnd = (event: DragEvent<HTMLDivElement>) => {
+        event.preventDefault();
         setDraggingAppointmentId(null);
         setDragPreview(null);
         setMoveAppointmentId(null);
@@ -939,7 +940,7 @@ export function SchedulePage() {
         const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
         const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
         // Persist restoration across multiple re-renders to catch async DB updates
-        pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 6 };
+        pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 20 };
         callback();
     };
 
@@ -991,7 +992,7 @@ export function SchedulePage() {
         // Lock scroll before any state changes
         const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
         const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
-        pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 6 };
+        pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 20 };
 
         setDraggingAppointmentId(null);
         setDragPreview(null);
@@ -1093,7 +1094,7 @@ export function SchedulePage() {
         if (state?.activated) {
             const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
             const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
-            pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 6 };
+            pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 20 };
         }
 
         if (state?.activated && touchDragPreviewRef.current) {
@@ -1735,7 +1736,7 @@ export function SchedulePage() {
             // Lock scroll position before any state changes
             const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
             const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
-            pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 6 };
+            pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 20 };
 
             const nextRender = resizeDraftRef.current ?? {
                 startMinutes: session.initialStartMinutes,
@@ -2207,7 +2208,7 @@ export function SchedulePage() {
                 onTouchMove={handleZoomTouchMove}
                 onTouchEnd={handleZoomTouchEnd}
             >
-                {loading ? (
+                {loading && appointments.length === 0 ? (
                     <ScheduleGridSkeleton />
                 ) : (
                     <div
