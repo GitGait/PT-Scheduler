@@ -555,27 +555,27 @@ export function SettingsPage() {
 
             <Card className="mb-4">
                 <CardHeader title="Patient Sheet Template" />
-                <p className="text-sm text-[#3c4043]">
+                <p className="text-sm text-[var(--color-text-primary)]">
                     Tab name: <span className="font-semibold">Patients</span>
                 </p>
-                <p className="mt-2 break-all rounded bg-[#f1f3f4] p-2 font-mono text-xs text-[#3c4043]">
+                <p className="mt-2 break-all rounded bg-[var(--color-surface-hover)] p-2 font-mono text-xs text-[var(--color-text-primary)]">
                     id,fullName,nicknames,phone,alternateContacts,address,lat,lng,status,notes
                 </p>
-                <p className="mt-2 text-xs text-[#5f6368]">
+                <p className="mt-2 text-xs text-[var(--color-text-secondary)]">
                     alternateContacts format: Name|Phone|Relationship; Name|Phone
                 </p>
                 <div className="mt-3 flex flex-col gap-1">
                     <a
                         href="/templates/patients_template.csv"
                         download
-                        className="inline-block text-sm text-[#1a73e8] hover:underline"
+                        className="inline-block text-sm text-[var(--color-primary)] hover:underline"
                     >
                         Download CSV template
                     </a>
                     <a
                         href="/templates/patients_sample_15.csv"
                         download
-                        className="inline-block text-sm text-[#1a73e8] hover:underline"
+                        className="inline-block text-sm text-[var(--color-primary)] hover:underline"
                     >
                         Download sample CSV (15 patients)
                     </a>
@@ -596,7 +596,7 @@ export function SettingsPage() {
 
             <Card className="mb-4">
                 <CardHeader title="Calendar Sync" subtitle="Push all local appointments to Google Calendar" />
-                <p className="text-sm text-[#5f6368] mb-3">
+                <p className="text-sm text-[var(--color-text-secondary)] mb-3">
                     This will create calendar events for all appointments that haven't been synced yet.
                     Other devices can then pull these from Google Calendar.
                 </p>
@@ -619,17 +619,17 @@ export function SettingsPage() {
                     </Button>
                 </div>
                 {availableCalendars && availableCalendars.length > 0 && (
-                    <div className="mt-3 p-3 bg-[#f1f3f4] rounded text-sm">
+                    <div className="mt-3 p-3 bg-[var(--color-surface-hover)] rounded text-sm">
                         <p className="font-medium mb-2">Your calendars:</p>
                         <ul className="space-y-1">
                             {availableCalendars.map((cal) => (
                                 <li key={cal.id} className="flex justify-between">
                                     <span>{cal.summary}</span>
-                                    <code className="text-xs bg-white px-1 rounded">{cal.id}</code>
+                                    <code className="text-xs bg-[var(--color-surface)] px-1 rounded">{cal.id}</code>
                                 </li>
                             ))}
                         </ul>
-                        <p className="mt-2 text-[#5f6368]">
+                        <p className="mt-2 text-[var(--color-text-secondary)]">
                             Use one of these IDs in the Calendar ID field above.
                         </p>
                     </div>
@@ -640,27 +640,27 @@ export function SettingsPage() {
                 <CardHeader title="Sync Queue" subtitle={`${pendingCount} pending items`} />
                 {pendingCount > 0 ? (
                     <div className="mt-3 space-y-2">
-                        <p className="text-sm text-[#5f6368]">Changes will sync when online</p>
+                        <p className="text-sm text-[var(--color-text-secondary)]">Changes will sync when online</p>
                         <Button size="sm" variant="secondary" onClick={() => void refreshPendingCount()}>
                             Refresh
                         </Button>
                     </div>
                 ) : (
-                    <p className="text-sm text-[#1e8e3e]">All changes synced</p>
+                    <p className="text-sm text-green-700 dark:text-green-300">All changes synced</p>
                 )}
             </Card>
 
             {(statusMessage || statusError) && (
                 <Card className="mb-4">
                     <CardHeader title="Status" />
-                    {statusMessage && <p className="text-sm text-[#1e8e3e]">{statusMessage}</p>}
-                    {statusError && <p className="text-sm text-[#d93025]">{statusError}</p>}
+                    {statusMessage && <p className="text-sm text-green-700 dark:text-green-300">{statusMessage}</p>}
+                    {statusError && <p className="text-sm text-red-600 dark:text-red-400">{statusError}</p>}
                 </Card>
             )}
 
             <Card>
                 <CardHeader title="About" />
-                <div className="space-y-2 text-sm text-[#5f6368]">
+                <div className="space-y-2 text-sm text-[var(--color-text-secondary)]">
                     <p>PT Scheduler v1.0.0</p>
                     <p>Home Health Physical Therapy</p>
                 </div>

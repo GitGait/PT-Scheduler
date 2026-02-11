@@ -53,7 +53,7 @@ export function PatientDetailPage() {
     if (!patient) {
         return (
             <div className="p-4 text-center">
-                <p className="text-[#5f6368]">Patient not found</p>
+                <p className="text-[var(--color-text-secondary)]">Patient not found</p>
                 <Button variant="secondary" className="mt-4" onClick={() => navigate("/patients")}>
                     Back to Patients
                 </Button>
@@ -147,16 +147,16 @@ export function PatientDetailPage() {
         return (
             <div className="pb-20 max-w-2xl mx-auto">
                 {/* Edit Header */}
-                <div className="bg-white p-4 border-b border-[#dadce0] sticky top-0 z-10">
+                <div className="bg-[var(--color-surface)] p-4 border-b border-[var(--color-border)] sticky top-0 z-10">
                     <div className="flex items-center justify-between">
                         <button
                             onClick={handleCancelEdit}
-                            className="text-[#5f6368] hover:text-[#202124]"
+                            className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
                             aria-label="Cancel editing"
                         >
                             <X className="w-6 h-6" />
                         </button>
-                        <h1 className="text-lg font-medium text-[#202124]">Edit Patient</h1>
+                        <h1 className="text-lg font-medium text-[var(--color-text-primary)]">Edit Patient</h1>
                         <Button
                             variant="primary"
                             size="sm"
@@ -170,7 +170,7 @@ export function PatientDetailPage() {
 
                 <div className="p-4 space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-[#5f6368] mb-1">
+                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                             Full Name *
                         </label>
                         <input
@@ -183,7 +183,7 @@ export function PatientDetailPage() {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-[#5f6368] mb-1">
+                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                             Nicknames
                         </label>
                         <input
@@ -196,7 +196,7 @@ export function PatientDetailPage() {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-[#5f6368] mb-1">
+                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                             Phone
                         </label>
                         <input
@@ -208,7 +208,7 @@ export function PatientDetailPage() {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-[#5f6368] mb-1">
+                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                             Alternate Contacts
                         </label>
                         <textarea
@@ -217,13 +217,13 @@ export function PatientDetailPage() {
                             className="w-full input-google resize-y py-2 min-h-[72px]"
                             placeholder="Name|Phone|Relationship; Name|Phone"
                         />
-                        <p className="text-xs text-[#5f6368] mt-1">
+                        <p className="text-xs text-[var(--color-text-secondary)] mt-1">
                             Format: Name|Phone|Relationship; Name|Phone
                         </p>
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-[#5f6368] mb-1">
+                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                             Address
                         </label>
                         <input
@@ -235,7 +235,7 @@ export function PatientDetailPage() {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-[#5f6368] mb-1">
+                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                             Status
                         </label>
                         <select
@@ -252,7 +252,7 @@ export function PatientDetailPage() {
                     </div>
 
                     <div>
-                        <label className="block text-sm font-medium text-[#5f6368] mb-1">
+                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                             Notes
                         </label>
                         <textarea
@@ -264,11 +264,11 @@ export function PatientDetailPage() {
                     </div>
 
                     {formError && (
-                        <p className="text-sm text-[#d93025]">{formError}</p>
+                        <p className="text-sm text-red-600 dark:text-red-400">{formError}</p>
                     )}
 
                     {/* Danger Zone */}
-                    <div className="pt-4 border-t border-[#dadce0]">
+                    <div className="pt-4 border-t border-[var(--color-border)]">
                         <Button
                             variant="danger"
                             onClick={() => void handleDelete()}
@@ -286,30 +286,30 @@ export function PatientDetailPage() {
     return (
         <div className="pb-20 max-w-2xl mx-auto">
             {/* Header */}
-            <div className="bg-white p-4 border-b border-[#dadce0]">
+            <div className="bg-[var(--color-surface)] p-4 border-b border-[var(--color-border)]">
                 <div className="flex items-center justify-between">
                     <button
                         onClick={() => navigate("/patients")}
-                        className="text-[#1a73e8] hover:underline"
+                        className="text-[var(--color-primary)] hover:underline"
                         aria-label="Back to patients"
                     >
                         ← Back
                     </button>
                     <button
                         onClick={handleStartEdit}
-                        className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#f1f3f4] text-[#5f6368]"
+                        className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)]"
                         aria-label="Edit patient"
                     >
                         <Edit2 className="w-5 h-5" />
                     </button>
                 </div>
-                <h1 className="text-xl font-medium text-[#202124] mt-2">{patient.fullName}</h1>
+                <h1 className="text-xl font-medium text-[var(--color-text-primary)] mt-2">{patient.fullName}</h1>
                 <span
                     className={`inline-block px-2 py-0.5 rounded text-xs font-medium mt-1 ${patient.status === "active"
-                            ? "bg-[#e6f4ea] text-[#1e8e3e]"
+                            ? "bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300"
                             : patient.status === "evaluation"
-                            ? "bg-[#fef7e0] text-[#ea8600]"
-                            : "bg-[#e8eaed] text-[#5f6368]"
+                            ? "bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400"
+                            : "bg-[var(--color-border-light)] text-[var(--color-text-secondary)]"
                         }`}
                 >
                     {patient.status}
@@ -324,18 +324,18 @@ export function PatientDetailPage() {
                         {patient.phone ? (
                             <a
                                 href={buildPhoneHref(patient.phone)!}
-                                className="flex items-center gap-2 text-[#1a73e8] hover:underline"
+                                className="flex items-center gap-2 text-[var(--color-primary)] hover:underline"
                             >
                                 <Phone className="w-4 h-4" />
                                 {patient.phone}
                             </a>
                         ) : (
-                            <p className="text-[#5f6368] text-sm">No phone number</p>
+                            <p className="text-[var(--color-text-secondary)] text-sm">No phone number</p>
                         )}
                         {patient.email && (
                             <a
                                 href={`mailto:${patient.email}`}
-                                className="flex items-center gap-2 text-[#1a73e8] hover:underline"
+                                className="flex items-center gap-2 text-[var(--color-primary)] hover:underline"
                             >
                                 ✉️ {patient.email}
                             </a>
@@ -350,17 +350,17 @@ export function PatientDetailPage() {
                         <div className="space-y-2">
                             {patient.alternateContacts.map((contact, index) => (
                                 <div key={index} className="flex items-center justify-between">
-                                    <span className="text-[#3c4043]">
+                                    <span className="text-[var(--color-text-primary)]">
                                         {contact.firstName}
                                         {contact.relationship && (
-                                            <span className="text-[#5f6368] text-sm ml-1">
+                                            <span className="text-[var(--color-text-secondary)] text-sm ml-1">
                                                 ({contact.relationship})
                                             </span>
                                         )}
                                     </span>
                                     <a
                                         href={`tel:${contact.phone}`}
-                                        className="text-[#1a73e8] hover:underline"
+                                        className="text-[var(--color-primary)] hover:underline"
                                     >
                                         {contact.phone}
                                     </a>
@@ -378,7 +378,7 @@ export function PatientDetailPage() {
                             href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(patient.address)}`}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="block text-[#3c4043] hover:text-[#1a73e8] hover:underline"
+                            className="block text-[var(--color-text-primary)] hover:text-[var(--color-primary)] hover:underline"
                         >
                             {patient.address}
                         </a>
@@ -400,7 +400,7 @@ export function PatientDetailPage() {
                 {patient.nicknames.length > 0 && (
                     <Card>
                         <CardHeader title="Nicknames" />
-                        <p className="text-[#3c4043]">{patient.nicknames.join(", ")}</p>
+                        <p className="text-[var(--color-text-primary)]">{patient.nicknames.join(", ")}</p>
                     </Card>
                 )}
 
@@ -408,7 +408,7 @@ export function PatientDetailPage() {
                 {patient.notes && (
                     <Card>
                         <CardHeader title="Notes" />
-                        <p className="text-[#3c4043] whitespace-pre-wrap">{patient.notes}</p>
+                        <p className="text-[var(--color-text-primary)] whitespace-pre-wrap">{patient.notes}</p>
                     </Card>
                 )}
 

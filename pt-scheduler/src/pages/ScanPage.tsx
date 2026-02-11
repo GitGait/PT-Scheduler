@@ -575,9 +575,9 @@ export function ScanPage() {
 
     const getTierBadge = (tier: MatchTier, confidence: number) => {
         const styles = {
-            auto: "bg-[#e6f4ea] text-[#1e8e3e]",
-            confirm: "bg-[#fef7e0] text-[#ea8600]",
-            manual: "bg-[#fce8e6] text-[#d93025]",
+            auto: "bg-green-50 dark:bg-green-950 text-green-700 dark:text-green-300",
+            confirm: "bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400",
+            manual: "bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400",
         };
         const labels = {
             auto: `Auto (${confidence}%)`,
@@ -593,7 +593,7 @@ export function ScanPage() {
 
     return (
         <div className="pb-20 p-4 max-w-2xl mx-auto">
-            <h1 className="text-xl font-medium text-[#202124] mb-4">Scan Schedule</h1>
+            <h1 className="text-xl font-medium text-[var(--color-text-primary)] mb-4">Scan Schedule</h1>
 
             {/* Upload Area */}
             <div
@@ -605,22 +605,22 @@ export function ScanPage() {
                 onDrop={handleDrop}
                 className={`
                     border-2 border-dashed rounded-xl p-8 text-center transition-colors
-                    ${isDragging ? "border-[#1a73e8] bg-[#e8f0fe]" : "border-[#dadce0] bg-[#f1f3f4]"}
+                    ${isDragging ? "border-[var(--color-primary)] bg-[var(--color-primary-light)]" : "border-[var(--color-border)] bg-[var(--color-surface-hover)]"}
                 `}
             >
                 {isProcessing ? (
                     <div>
-                        <div className="animate-spin w-10 h-10 border-3 border-[#1a73e8] border-t-transparent rounded-full mx-auto mb-3" />
-                        <p className="text-[#3c4043]">Processing image...</p>
-                        <p className="text-sm text-[#5f6368] mt-1">Extracting appointments with AI</p>
+                        <div className="animate-spin w-10 h-10 border-3 border-[var(--color-primary)] border-t-transparent rounded-full mx-auto mb-3" />
+                        <p className="text-[var(--color-text-primary)]">Processing image...</p>
+                        <p className="text-sm text-[var(--color-text-secondary)] mt-1">Extracting appointments with AI</p>
                     </div>
                 ) : (
                     <>
-                        <Upload className="w-12 h-12 mx-auto text-[#5f6368] mb-4" />
-                        <p className="text-[#3c4043] mb-2">
+                        <Upload className="w-12 h-12 mx-auto text-[var(--color-text-secondary)] mb-4" />
+                        <p className="text-[var(--color-text-primary)] mb-2">
                             Drag & drop a schedule screenshot
                         </p>
-                        <p className="text-sm text-[#5f6368] mb-4">or</p>
+                        <p className="text-sm text-[var(--color-text-secondary)] mb-4">or</p>
                         <div className="flex justify-center gap-3">
                             <label className="cursor-pointer">
                                 <Button variant="primary" as="span">
@@ -654,7 +654,7 @@ export function ScanPage() {
 
             {/* Error */}
             {error && (
-                <div className="mt-4 p-3 bg-[#fce8e6] border border-[#d93025] rounded-lg text-[#d93025] flex items-start gap-2">
+                <div className="mt-4 p-3 bg-red-50 dark:bg-red-950 border border-red-600 dark:border-red-400 rounded-lg text-red-600 dark:text-red-400 flex items-start gap-2">
                     <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
                     <span>{error}</span>
                 </div>
@@ -662,7 +662,7 @@ export function ScanPage() {
 
             {/* Import Success */}
             {importSuccess !== null && (
-                <div className="mt-4 p-4 bg-[#e6f4ea] border border-[#1e8e3e] rounded-lg text-[#1e8e3e]">
+                <div className="mt-4 p-4 bg-green-50 dark:bg-green-950 border border-green-600 dark:border-green-400 rounded-lg text-green-700 dark:text-green-300">
                     <div className="flex items-center gap-2 mb-2">
                         <Check className="w-5 h-5" />
                         <span className="font-medium">
@@ -670,7 +670,7 @@ export function ScanPage() {
                         </span>
                     </div>
                     {importRouteMessage && (
-                        <p className="text-sm mb-2 text-[#196d33]">{importRouteMessage}</p>
+                        <p className="text-sm mb-2 text-green-800 dark:text-green-400">{importRouteMessage}</p>
                     )}
                     <Button
                         variant="primary"
@@ -686,47 +686,47 @@ export function ScanPage() {
             {results.length > 0 && (
                 <div className="mt-6 space-y-4">
                     <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-medium text-[#202124]">
+                        <h2 className="text-lg font-medium text-[var(--color-text-primary)]">
                             Extracted Appointments ({results.length})
                         </h2>
-                        <div className="text-sm text-[#5f6368]">
+                        <div className="text-sm text-[var(--color-text-secondary)]">
                             {confirmedCount} confirmed, {pendingCount} pending
                         </div>
                     </div>
 
                     {results.map((result, index) => (
-                        <Card key={index} className={result.confirmed ? "border-l-4 border-l-[#1e8e3e]" : ""}>
+                        <Card key={index} className={result.confirmed ? "border-l-4 border-l-green-600" : ""}>
                             <div className="flex items-start justify-between gap-3">
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="font-medium text-[#202124]">
+                                        <span className="font-medium text-[var(--color-text-primary)]">
                                             {result.rawName}
                                         </span>
                                         {result.isMatching ? (
-                                            <span className="px-2 py-0.5 rounded text-xs font-medium bg-[#f1f3f4] text-[#5f6368]">
+                                            <span className="px-2 py-0.5 rounded text-xs font-medium bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)]">
                                                 Matching...
                                             </span>
                                         ) : (
                                             getTierBadge(result.tier, result.confidence)
                                         )}
                                     </div>
-                                    <p className="text-sm text-[#5f6368] mt-1">
+                                    <p className="text-sm text-[var(--color-text-secondary)] mt-1">
                                         {result.date} at {result.time} ({result.duration} min)
                                     </p>
                                     {result.visitType && (
-                                        <p className="text-sm text-[#5f6368] mt-1">
+                                        <p className="text-sm text-[var(--color-text-secondary)] mt-1">
                                             Visit type: <span className="font-medium">{result.visitType}</span>
                                         </p>
                                     )}
                                     {result.notes && (
-                                        <p className="text-sm text-[#5f6368] mt-1 italic">
+                                        <p className="text-sm text-[var(--color-text-secondary)] mt-1 italic">
                                             {result.notes}
                                         </p>
                                     )}
                                 </div>
 
                                 {result.confirmed && (
-                                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-[#1e8e3e] flex items-center justify-center">
+                                    <div className="flex-shrink-0 w-8 h-8 rounded-full bg-green-600 flex items-center justify-center">
                                         <Check className="w-4 h-4 text-white" />
                                     </div>
                                 )}
@@ -734,22 +734,22 @@ export function ScanPage() {
 
                             {/* Match result */}
                             {result.matchedPatientId && (
-                                <div className="mt-3 p-2 bg-[#f1f3f4] rounded flex items-center justify-between">
-                                    <span className="text-sm text-[#3c4043]">
+                                <div className="mt-3 p-2 bg-[var(--color-surface-hover)] rounded flex items-center justify-between">
+                                    <span className="text-sm text-[var(--color-text-primary)]">
                                         Matched: <span className="font-medium">{result.matchedPatientName}</span>
                                     </span>
                                     {!result.confirmed && (
                                         <div className="flex gap-2">
                                             <button
                                                 onClick={() => handleConfirm(index)}
-                                                className="p-1.5 rounded-full bg-[#1e8e3e] text-white hover:bg-[#137333] transition-colors"
+                                                className="p-1.5 rounded-full bg-green-600 text-white hover:bg-green-700 transition-colors"
                                                 aria-label="Confirm match"
                                             >
                                                 <Check className="w-4 h-4" />
                                             </button>
                                             <button
                                                 onClick={() => handleReject(index)}
-                                                className="p-1.5 rounded-full bg-[#d93025] text-white hover:bg-[#b31412] transition-colors"
+                                                className="p-1.5 rounded-full bg-red-600 text-white hover:bg-red-700 transition-colors"
                                                 aria-label="Reject match"
                                             >
                                                 <X className="w-4 h-4" />
@@ -764,13 +764,13 @@ export function ScanPage() {
                                 <div className="mt-3">
                                     {result.alternatives.length > 0 && !result.matchedPatientId && (
                                         <div className="mb-2">
-                                            <p className="text-sm text-[#5f6368] mb-1">Possible matches:</p>
+                                            <p className="text-sm text-[var(--color-text-secondary)] mb-1">Possible matches:</p>
                                             <div className="flex flex-wrap gap-2">
                                                 {result.alternatives.map((alt) => (
                                                     <button
                                                         key={alt.id}
                                                         onClick={() => handleSelectPatient(index, alt.id, alt.name)}
-                                                        className="px-3 py-1 text-sm bg-[#e8f0fe] text-[#1a73e8] rounded-full hover:bg-[#d2e3fc] transition-colors"
+                                                        className="px-3 py-1 text-sm bg-[var(--color-primary-light)] text-[var(--color-primary)] rounded-full hover:bg-[var(--color-primary-light)] transition-colors"
                                                     >
                                                         {alt.name} ({alt.confidence}%)
                                                     </button>
@@ -780,7 +780,7 @@ export function ScanPage() {
                                     )}
 
                                     <div>
-                                        <p className="text-sm text-[#5f6368] mb-1">
+                                        <p className="text-sm text-[var(--color-text-secondary)] mb-1">
                                             {result.matchedPatientId ? "Or select different patient:" : "Select patient:"}
                                         </p>
                                         <select
@@ -807,7 +807,7 @@ export function ScanPage() {
                             )}
 
                             {result.uncertain && (
-                                <p className="text-[#ea8600] text-sm mt-2 flex items-center gap-1">
+                                <p className="text-amber-600 dark:text-amber-400 text-sm mt-2 flex items-center gap-1">
                                     <AlertCircle className="w-4 h-4" />
                                     Low OCR confidence - please verify
                                 </p>
@@ -844,8 +844,8 @@ export function ScanPage() {
             {/* Instructions when no results */}
             {results.length === 0 && !isProcessing && !importSuccess && (
                 <div className="mt-8 space-y-4">
-                    <h2 className="text-lg font-medium text-[#202124]">How it works</h2>
-                    <ol className="list-decimal list-inside space-y-2 text-[#3c4043]">
+                    <h2 className="text-lg font-medium text-[var(--color-text-primary)]">How it works</h2>
+                    <ol className="list-decimal list-inside space-y-2 text-[var(--color-text-primary)]">
                         <li>Take a screenshot of your schedule (from any source)</li>
                         <li>Upload or drag the image above</li>
                         <li>AI extracts patient names, dates, and times</li>

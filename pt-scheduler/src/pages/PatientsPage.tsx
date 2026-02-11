@@ -1541,23 +1541,23 @@ export function PatientsPage() {
     return (
         <div className="pb-20 max-w-2xl mx-auto">
             {/* Search Header */}
-            <div className="sticky top-0 bg-white z-10 px-4 py-3 border-b border-[#dadce0]">
+            <div className="sticky top-0 bg-[var(--color-surface)] z-10 px-4 py-3 border-b border-[var(--color-border)]">
                 <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#5f6368]" />
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--color-text-secondary)]" />
                     <input
                         type="search"
                         placeholder="Search patients..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 bg-[#f1f3f4] border-none rounded-lg text-[#202124] placeholder-[#5f6368] focus:outline-none focus:ring-2 focus:ring-[#1a73e8]"
+                        className="w-full pl-10 pr-4 py-2 bg-[var(--color-surface-hover)] border-none rounded-lg text-[var(--color-text-primary)] placeholder-[var(--color-text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"
                     />
                 </div>
                 <div className="flex gap-2 mt-3">
                     <button
                         onClick={() => setShowDischarged(false)}
                         className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${!showDischarged
-                                ? "bg-[#e8f0fe] text-[#1a73e8]"
-                                : "bg-[#f1f3f4] text-[#5f6368] hover:bg-[#e8eaed]"
+                                ? "bg-[var(--color-primary-light)] text-[var(--color-primary)]"
+                                : "bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border-light)]"
                             }`}
                     >
                         Current ({patients.filter((p) => p.status !== "discharged").length})
@@ -1565,8 +1565,8 @@ export function PatientsPage() {
                     <button
                         onClick={() => setShowDischarged(true)}
                         className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${showDischarged
-                                ? "bg-[#e8f0fe] text-[#1a73e8]"
-                                : "bg-[#f1f3f4] text-[#5f6368] hover:bg-[#e8eaed]"
+                                ? "bg-[var(--color-primary-light)] text-[var(--color-primary)]"
+                                : "bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border-light)]"
                             }`}
                     >
                         Discharged ({patients.filter((p) => p.status === "discharged").length})
@@ -1596,11 +1596,11 @@ export function PatientsPage() {
                             }
                         }}
                         className={`rounded border-2 border-dashed p-4 text-center ${
-                            isCsvDragging ? "border-[#1a73e8] bg-[#e8f0fe]" : "border-[#dadce0] bg-[#f8f9fa]"
+                            isCsvDragging ? "border-[var(--color-primary)] bg-[var(--color-primary-light)]" : "border-[var(--color-border)] bg-[var(--color-skeleton-shine)]"
                         }`}
                     >
-                        <p className="text-sm text-[#3c4043]">Drop CSV file here</p>
-                        <p className="text-xs text-[#5f6368] mt-1 mb-3">
+                        <p className="text-sm text-[var(--color-text-primary)]">Drop CSV file here</p>
+                        <p className="text-xs text-[var(--color-text-secondary)] mt-1 mb-3">
                             Header CSVs open field mapping. Headerless row-text CSVs are parsed with AI automatically.
                         </p>
                         <label className="inline-block cursor-pointer">
@@ -1640,19 +1640,19 @@ export function PatientsPage() {
                             </Button>
                         </div>
                         {duplicateCleanupStatus && (
-                            <div className="mt-3 rounded border border-[#dadce0] bg-white p-3 text-left">
-                                <p className="text-xs text-[#3c4043]">
+                            <div className="mt-3 rounded border border-[var(--color-border)] bg-[var(--color-surface)] p-3 text-left">
+                                <p className="text-xs text-[var(--color-text-primary)]">
                                     Last duplicate cleanup:{" "}
                                     <span className="font-medium">
                                         {formatCleanupStatusTime(duplicateCleanupStatus.completedAt)}
                                     </span>
                                 </p>
-                                <p className="text-xs text-[#5f6368] mt-1">
+                                <p className="text-xs text-[var(--color-text-secondary)] mt-1">
                                     Local removed: {duplicateCleanupStatus.localRemoved}. Sheets removed:{" "}
                                     {duplicateCleanupStatus.sheetRemoved}. Queued:{" "}
                                     {duplicateCleanupStatus.queuedActions}.
                                 </p>
-                                <p className="text-xs text-[#5f6368] mt-1">
+                                <p className="text-xs text-[var(--color-text-secondary)] mt-1">
                                     {duplicateCleanupStatus.sheetSyncSummary}
                                 </p>
                             </div>
@@ -1662,14 +1662,14 @@ export function PatientsPage() {
                         <a
                             href="/templates/patients_template.csv"
                             download
-                            className="text-sm text-[#1a73e8] hover:underline"
+                            className="text-sm text-[var(--color-primary)] hover:underline"
                         >
                             Download CSV template
                         </a>
                         <a
                             href="/templates/patients_sample_15.csv"
                             download
-                            className="text-sm text-[#1a73e8] hover:underline"
+                            className="text-sm text-[var(--color-primary)] hover:underline"
                         >
                             Download sample CSV (15 patients)
                         </a>
@@ -1677,12 +1677,12 @@ export function PatientsPage() {
                 </Card>
 
                 {saveMessage && (
-                    <div className="rounded border border-[#1e8e3e] bg-[#e6f4ea] p-3 text-sm text-[#1e8e3e]">
+                    <div className="rounded border border-green-600 dark:border-green-400 bg-green-50 dark:bg-green-950 p-3 text-sm text-green-700 dark:text-green-300">
                         {saveMessage}
                     </div>
                 )}
                 {saveWarning && (
-                    <div className="rounded border border-[#ea8600] bg-[#fef7e0] p-3 text-sm text-[#b06000]">
+                    <div className="rounded border border-amber-500 dark:border-amber-400 bg-amber-50 dark:bg-amber-950 p-3 text-sm text-amber-700 dark:text-amber-300">
                         {saveWarning}
                     </div>
                 )}
@@ -1754,36 +1754,36 @@ export function PatientsPage() {
                     onClick={() => setShowCsvMappingModal(false)}
                 >
                     <div
-                        className="bg-white rounded-lg shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto animate-slide-in"
+                        className="bg-[var(--color-surface)] rounded-lg shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto animate-slide-in"
                         onClick={(event) => event.stopPropagation()}
                     >
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-[#dadce0] sticky top-0 bg-white">
-                            <h2 className="text-lg font-medium text-[#202124]">CSV Field Mapping</h2>
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)] sticky top-0 bg-[var(--color-surface)]">
+                            <h2 className="text-lg font-medium text-[var(--color-text-primary)]">CSV Field Mapping</h2>
                             <button
                                 onClick={() => setShowCsvMappingModal(false)}
-                                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#f1f3f4]"
+                                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-hover)]"
                                 aria-label="Close CSV mapping"
                             >
-                                <X className="w-5 h-5 text-[#5f6368]" />
+                                <X className="w-5 h-5 text-[var(--color-text-secondary)]" />
                             </button>
                         </div>
 
                         <div className="p-6 space-y-4">
-                            <p className="text-sm text-[#3c4043]">
+                            <p className="text-sm text-[var(--color-text-primary)]">
                                 File: <span className="font-medium">{csvImportPayload.fileName}</span> •{" "}
                                 {csvImportPayload.rows.length} row
                                 {csvImportPayload.rows.length === 1 ? "" : "s"}
                             </p>
-                            <p className="text-xs text-[#5f6368]">
+                            <p className="text-xs text-[var(--color-text-secondary)]">
                                 Confirm which CSV column should fill each patient field.
                             </p>
 
                             {isMappingCsv && (
-                                <p className="text-sm text-[#1a73e8]">AI is analyzing headers and sample rows...</p>
+                                <p className="text-sm text-[var(--color-primary)]">AI is analyzing headers and sample rows...</p>
                             )}
 
                             {csvMappingError && (
-                                <p className="text-sm text-[#b06000] bg-[#fef7e0] border border-[#ea8600] rounded p-3">
+                                <p className="text-sm text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950 border border-amber-500 dark:border-amber-400 rounded p-3">
                                     {csvMappingError}
                                 </p>
                             )}
@@ -1793,11 +1793,11 @@ export function PatientsPage() {
                                     const confidence = csvMappingConfidence[field.key];
                                     return (
                                         <div key={field.key}>
-                                            <label className="block text-sm font-medium text-[#5f6368] mb-1">
+                                            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                                                 {field.label}
                                                 {field.required ? " *" : ""}
                                                 {typeof confidence === "number" && (
-                                                    <span className="ml-2 text-xs text-[#1a73e8]">
+                                                    <span className="ml-2 text-xs text-[var(--color-primary)]">
                                                         {Math.round(confidence * 100)}%
                                                     </span>
                                                 )}
@@ -1822,7 +1822,7 @@ export function PatientsPage() {
                             </div>
                         </div>
 
-                        <div className="flex justify-end gap-2 px-6 py-4 border-t border-[#dadce0] sticky bottom-0 bg-white">
+                        <div className="flex justify-end gap-2 px-6 py-4 border-t border-[var(--color-border)] sticky bottom-0 bg-[var(--color-surface)]">
                             <Button
                                 variant="ghost"
                                 onClick={() => setShowCsvMappingModal(false)}
@@ -1849,22 +1849,22 @@ export function PatientsPage() {
                     onClick={handleCloseAdd}
                 >
                     <div
-                        className="bg-white rounded-lg shadow-2xl w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto animate-slide-in"
+                        className="bg-[var(--color-surface)] rounded-lg shadow-2xl w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto animate-slide-in"
                         onClick={(event) => event.stopPropagation()}
                     >
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-[#dadce0] sticky top-0 bg-white">
-                            <h2 className="text-lg font-medium text-[#202124]">Add Patient</h2>
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)] sticky top-0 bg-[var(--color-surface)]">
+                            <h2 className="text-lg font-medium text-[var(--color-text-primary)]">Add Patient</h2>
                             <button
                                 onClick={handleCloseAdd}
-                                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#f1f3f4]"
+                                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-hover)]"
                             >
-                                <X className="w-5 h-5 text-[#5f6368]" />
+                                <X className="w-5 h-5 text-[var(--color-text-secondary)]" />
                             </button>
                         </div>
 
                         <div className="p-6 space-y-4">
                             <div>
-                                <label className="block text-sm font-medium text-[#5f6368] mb-1">
+                                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                                     Intake Text (AI Extract)
                                 </label>
                                 <textarea
@@ -1885,7 +1885,7 @@ export function PatientsPage() {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-[#5f6368] mb-1">
+                                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                                     Full Name *
                                 </label>
                                 <input
@@ -1899,7 +1899,7 @@ export function PatientsPage() {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-[#5f6368] mb-1">
+                                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                                     Nicknames
                                 </label>
                                 <input
@@ -1909,13 +1909,13 @@ export function PatientsPage() {
                                     className="w-full input-google"
                                     placeholder="Janie, Jan (comma separated)"
                                 />
-                                <p className="text-xs text-[#5f6368] mt-1">
+                                <p className="text-xs text-[var(--color-text-secondary)] mt-1">
                                     Comma-separated list for matching
                                 </p>
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-[#5f6368] mb-1">
+                                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                                     Phone
                                 </label>
                                 <input
@@ -1928,7 +1928,7 @@ export function PatientsPage() {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-[#5f6368] mb-1">
+                                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                                     Address
                                 </label>
                                 <input
@@ -1941,7 +1941,7 @@ export function PatientsPage() {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-[#5f6368] mb-1">
+                                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                                     Email
                                 </label>
                                 <input
@@ -1951,13 +1951,13 @@ export function PatientsPage() {
                                     className="w-full input-google"
                                     placeholder="name@example.com"
                                 />
-                                <p className="text-xs text-[#5f6368] mt-1">
+                                <p className="text-xs text-[var(--color-text-secondary)] mt-1">
                                     Stored locally and appended to notes for Google Sheets.
                                 </p>
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-[#5f6368] mb-1">
+                                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                                     Alternate Contacts
                                 </label>
                                 <textarea
@@ -1966,13 +1966,13 @@ export function PatientsPage() {
                                     className="w-full input-google resize-y py-2 min-h-[72px]"
                                     placeholder="Name|Phone|Relationship; Name|Phone"
                                 />
-                                <p className="text-xs text-[#5f6368] mt-1">
+                                <p className="text-xs text-[var(--color-text-secondary)] mt-1">
                                     Format: Name|Phone|Relationship; Name|Phone
                                 </p>
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-[#5f6368] mb-1">
+                                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                                     Status
                                 </label>
                                 <select
@@ -1989,7 +1989,7 @@ export function PatientsPage() {
                             </div>
 
                             <div>
-                                <label className="block text-sm font-medium text-[#5f6368] mb-1">
+                                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                                     Notes
                                 </label>
                                 <textarea
@@ -2002,11 +2002,11 @@ export function PatientsPage() {
                             </div>
 
                             {formError && (
-                                <p className="text-sm text-[#d93025]">{formError}</p>
+                                <p className="text-sm text-red-600 dark:text-red-400">{formError}</p>
                             )}
                         </div>
 
-                        <div className="flex justify-end gap-2 px-6 py-4 border-t border-[#dadce0] sticky bottom-0 bg-white">
+                        <div className="flex justify-end gap-2 px-6 py-4 border-t border-[var(--color-border)] sticky bottom-0 bg-[var(--color-surface)]">
                             <Button variant="ghost" onClick={handleCloseAdd} disabled={isSaving}>
                                 Cancel
                             </Button>

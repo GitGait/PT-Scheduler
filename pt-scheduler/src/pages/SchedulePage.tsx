@@ -2059,14 +2059,28 @@ export function SchedulePage() {
         };
     }, []);
 
-    // Current time line position
-    const currentTimePosition = useMemo(() => {
+    // Current time line position - updates every minute
+    const [currentTimePosition, setCurrentTimePosition] = useState<number | null>(() => {
         const now = new Date();
         const currentMinutes = now.getHours() * 60 + now.getMinutes();
         if (currentMinutes < DAY_START_MINUTES || currentMinutes > DAY_END_MINUTES) {
             return null;
         }
         return ((currentMinutes - DAY_START_MINUTES) / SLOT_MINUTES) * SLOT_HEIGHT_PX;
+    });
+
+    useEffect(() => {
+        const updateTimePosition = () => {
+            const now = new Date();
+            const currentMinutes = now.getHours() * 60 + now.getMinutes();
+            if (currentMinutes < DAY_START_MINUTES || currentMinutes > DAY_END_MINUTES) {
+                setCurrentTimePosition(null);
+            } else {
+                setCurrentTimePosition(((currentMinutes - DAY_START_MINUTES) / SLOT_MINUTES) * SLOT_HEIGHT_PX);
+            }
+        };
+        const interval = setInterval(updateTimePosition, 60_000);
+        return () => clearInterval(interval);
     }, []);
 
     // Check if today is in the current week view
@@ -2173,8 +2187,8 @@ export function SchedulePage() {
 
             {/* Info banner when copying */}
             {selectedCopyAppointment && !draggingAppointmentId && (
-                <div className="px-4 py-2 bg-[#e0f2f1] border-b border-[var(--color-border)]">
-                    <p className="text-sm text-[#00897b]">
+                <div className="px-4 py-2 bg-teal-50 dark:bg-teal-950 border-b border-[var(--color-border)]">
+                    <p className="text-sm text-teal-700 dark:text-teal-300">
                         Copying {getPatientName(selectedCopyAppointment.patientId)}. Click a time slot to place the copy.
                     </p>
                 </div>
@@ -2452,7 +2466,7 @@ export function SchedulePage() {
                                                         }
                                                         className={`pointer-events-auto absolute rounded-md overflow-hidden text-white text-xs cursor-grab active:cursor-grabbing group appointment-chip ${
                                                             isActiveMove || isActiveResize
-                                                                ? 'ring-2 ring-[#1a73e8] ring-offset-1 shadow-lg !transform-none'
+                                                                ? 'ring-2 ring-[var(--color-primary)] ring-offset-1 shadow-lg !transform-none'
                                                                 : ''
                                                         }`}
                                                         style={{
@@ -2659,7 +2673,7 @@ export function SchedulePage() {
 
                                                     return (
                                                         <div
-                                                            className="absolute rounded border-2 border-dashed border-[#1a73e8] bg-[#e8f0fe]/50"
+                                                            className="absolute rounded border-2 border-dashed border-[var(--color-primary)] bg-[var(--color-primary-light)]/50"
                                                             style={{
                                                                 top: previewTopPx,
                                                                 height: previewHeightPx,
@@ -2707,47 +2721,47 @@ export function SchedulePage() {
                     onClick={handleCloseDayMap}
                 >
                     <div
-                        className="bg-white rounded-lg shadow-2xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden animate-slide-in"
+                        className="bg-[var(--color-surface)] rounded-lg shadow-2xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden animate-slide-in"
                         onClick={(event) => event.stopPropagation()}
                     >
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-[#dadce0]">
+                        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
                             <div>
-                                <h2 className="text-base font-medium text-[#202124]">Day Map</h2>
-                                <p className="text-xs text-[#5f6368]">{selectedDate}</p>
+                                <h2 className="text-base font-medium text-[var(--color-text-primary)]">Day Map</h2>
+                                <p className="text-xs text-[var(--color-text-secondary)]">{selectedDate}</p>
                             </div>
                             <button
                                 onClick={handleCloseDayMap}
-                                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#f1f3f4]"
+                                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-hover)]"
                                 aria-label="Close day map"
                             >
-                                <X className="w-5 h-5 text-[#5f6368]" />
+                                <X className="w-5 h-5 text-[var(--color-text-secondary)]" />
                             </button>
                         </div>
 
                         <div className="p-4 space-y-3">
                             {isDayMapLoading && (
-                                <p className="text-sm text-[#5f6368]">Building map...</p>
+                                <p className="text-sm text-[var(--color-text-secondary)]">Building map...</p>
                             )}
 
                             {dayMapError && (
-                                <p className="text-sm text-[#b3261e] bg-[#fce8e6] border border-[#f6c7c3] rounded px-3 py-2">
+                                <p className="text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded px-3 py-2">
                                     {dayMapError}
                                 </p>
                             )}
 
                             {dayMapInfoMessage && (
-                                <p className="text-sm text-[#1e8e3e] bg-[#e6f4ea] border border-[#ceead6] rounded px-3 py-2">
+                                <p className="text-sm text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded px-3 py-2">
                                     {dayMapInfoMessage}
                                 </p>
                             )}
 
                             <div
                                 ref={dayMapContainerRef}
-                                className="w-full h-[52vh] min-h-[320px] rounded border border-[#dadce0]"
+                                className="w-full h-[52vh] min-h-[320px] rounded border border-[var(--color-border)]"
                             />
                         </div>
 
-                        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-[#dadce0]">
+                        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-[var(--color-border)]">
                             <Button
                                 variant="secondary"
                                 onClick={() => {
@@ -2774,28 +2788,28 @@ export function SchedulePage() {
                     onClick={cancelAddAppointment}
                 >
                     <div
-                        className="bg-white rounded-lg shadow-2xl w-full max-w-md mx-4 animate-slide-in"
+                        className="bg-[var(--color-surface)] rounded-lg shadow-2xl w-full max-w-md mx-4 animate-slide-in"
                         onClick={(event) => event.stopPropagation()}
                     >
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-[#dadce0]">
-                            <h2 className="text-lg font-medium text-[#202124]">New Appointment</h2>
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)]">
+                            <h2 className="text-lg font-medium text-[var(--color-text-primary)]">New Appointment</h2>
                             <button
                                 onClick={cancelAddAppointment}
-                                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#f1f3f4]"
+                                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-hover)]"
                             >
-                                <X className="w-5 h-5 text-[#5f6368]" />
+                                <X className="w-5 h-5 text-[var(--color-text-secondary)]" />
                             </button>
                         </div>
 
                         <div className="p-6 space-y-4">
                             {patients.length === 0 ? (
-                                <p className="text-sm text-[#d93025]">
+                                <p className="text-sm text-red-600 dark:text-red-400">
                                     Add a patient first before creating appointments.
                                 </p>
                             ) : (
                                 <>
                                     <div>
-                                        <label className="block text-sm font-medium text-[#5f6368] mb-1">
+                                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                                             Patient
                                         </label>
                                         <select
@@ -2813,7 +2827,7 @@ export function SchedulePage() {
 
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
-                                            <label className="block text-sm font-medium text-[#5f6368] mb-1">
+                                            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                                                 Date
                                             </label>
                                             <input
@@ -2824,7 +2838,7 @@ export function SchedulePage() {
                                             />
                                         </div>
                                         <div>
-                                            <label className="block text-sm font-medium text-[#5f6368] mb-1">
+                                            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                                                 Start Time
                                             </label>
                                             <input
@@ -2838,7 +2852,7 @@ export function SchedulePage() {
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-[#5f6368] mb-1">
+                                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                                             Duration (minutes)
                                         </label>
                                         <select
@@ -2855,13 +2869,13 @@ export function SchedulePage() {
                                     </div>
 
                                     {addError && (
-                                        <p className="text-sm text-[#d93025]">{addError}</p>
+                                        <p className="text-sm text-red-600 dark:text-red-400">{addError}</p>
                                     )}
                                 </>
                             )}
                         </div>
 
-                        <div className="flex justify-end gap-2 px-6 py-4 border-t border-[#dadce0]">
+                        <div className="flex justify-end gap-2 px-6 py-4 border-t border-[var(--color-border)]">
                             <Button variant="ghost" onClick={cancelAddAppointment} disabled={isSaving}>
                                 Cancel
                             </Button>
@@ -2881,7 +2895,7 @@ export function SchedulePage() {
             <button
                 onClick={() => openAddAppointment()}
                 disabled={patients.length === 0}
-                className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-[#1a73e8] text-white shadow-lg hover:shadow-xl hover:bg-[#1557b0] transition-all flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-[var(--color-primary)] text-white shadow-lg hover:shadow-xl hover:bg-[var(--color-primary-hover)] transition-all flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
                 aria-label="Add appointment"
             >
                 <Plus className="w-6 h-6" />
@@ -2889,7 +2903,7 @@ export function SchedulePage() {
 
             {/* Error toast */}
             {autoArrangeError && (
-                <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-[#323232] text-white px-4 py-3 rounded shadow-lg text-sm">
+                <div className="fixed bottom-24 left-1/2 -translate-x-1/2 bg-gray-800 dark:bg-gray-700 text-white px-4 py-3 rounded shadow-lg text-sm">
                     {autoArrangeError}
                 </div>
             )}
@@ -2901,11 +2915,11 @@ export function SchedulePage() {
                     onClick={() => setMapsMenuAddress(null)}
                 >
                     <div
-                        className="bg-white rounded-t-xl shadow-2xl w-full max-w-md mx-4 mb-0 animate-slide-in safe-area-pb"
+                        className="bg-[var(--color-surface)] rounded-t-xl shadow-2xl w-full max-w-md mx-4 mb-0 animate-slide-in safe-area-pb"
                         onClick={(e) => e.stopPropagation()}
                     >
-                        <div className="p-4 border-b border-[#dadce0]">
-                            <h3 className="text-center text-sm font-medium text-[#5f6368]">
+                        <div className="p-4 border-b border-[var(--color-border)]">
+                            <h3 className="text-center text-sm font-medium text-[var(--color-text-secondary)]">
                                 Open in Maps
                             </h3>
                         </div>
@@ -2915,7 +2929,7 @@ export function SchedulePage() {
                                     window.open(buildAppleMapsHref(mapsMenuAddress)!, '_blank');
                                     setMapsMenuAddress(null);
                                 }}
-                                className="w-full py-3 px-4 text-left text-[#1a73e8] hover:bg-[#f1f3f4] rounded-lg font-medium"
+                                className="w-full py-3 px-4 text-left text-[var(--color-primary)] hover:bg-[var(--color-surface-hover)] rounded-lg font-medium"
                             >
                                 Apple Maps
                             </button>
@@ -2924,15 +2938,15 @@ export function SchedulePage() {
                                     window.open(buildGoogleMapsHref(mapsMenuAddress)!, '_blank');
                                     setMapsMenuAddress(null);
                                 }}
-                                className="w-full py-3 px-4 text-left text-[#1a73e8] hover:bg-[#f1f3f4] rounded-lg font-medium"
+                                className="w-full py-3 px-4 text-left text-[var(--color-primary)] hover:bg-[var(--color-surface-hover)] rounded-lg font-medium"
                             >
                                 Google Maps
                             </button>
                         </div>
-                        <div className="p-2 border-t border-[#dadce0]">
+                        <div className="p-2 border-t border-[var(--color-border)]">
                             <button
                                 onClick={() => setMapsMenuAddress(null)}
-                                className="w-full py-3 px-4 text-center text-[#5f6368] hover:bg-[#f1f3f4] rounded-lg font-medium"
+                                className="w-full py-3 px-4 text-center text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] rounded-lg font-medium"
                             >
                                 Cancel
                             </button>

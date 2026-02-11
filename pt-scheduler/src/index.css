@@ -53,7 +53,7 @@
     --color-border-light: #5f6368;
     --color-text-primary: #e8eaed;
     --color-text-secondary: #9aa0a6;
-    --color-text-tertiary: #80868b;
+    --color-text-tertiary: #9ca3ab;
     --color-surface: #202124;
     --color-surface-hover: #3c4043;
     --color-surface-elevated: #292a2d;
@@ -84,7 +84,7 @@
   --color-border-light: #5f6368;
   --color-text-primary: #e8eaed;
   --color-text-secondary: #9aa0a6;
-  --color-text-tertiary: #80868b;
+  --color-text-tertiary: #9ca3ab;
   --color-surface: #202124;
   --color-surface-hover: #3c4043;
   --color-surface-elevated: #292a2d;
@@ -423,7 +423,7 @@ button:not(.btn-sm), a:not(.btn-sm), input[type="checkbox"], input[type="radio"]
   padding: 0 12px;
   border: 1px solid var(--color-border);
   border-radius: 4px;
-  font-size: 14px;
+  font-size: max(16px, 0.875rem); /* 16px minimum prevents iOS zoom on focus */
   color: var(--color-text-primary);
   background-color: var(--color-surface);
   transition: border-color var(--duration-normal), box-shadow var(--duration-normal), background-color var(--duration-normal);

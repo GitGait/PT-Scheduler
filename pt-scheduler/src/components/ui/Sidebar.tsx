@@ -240,17 +240,17 @@ function MiniCalendar({ selectedDate, onDateSelect }: MiniCalendarProps) {
         <span className="text-sm font-medium text-[var(--color-text-primary)]">
           {format(viewMonth, "MMMM yyyy")}
         </span>
-        <div className="flex gap-1">
+        <div className="flex gap-0.5">
           <button
             onClick={() => setViewMonth(subMonths(viewMonth, 1))}
-            className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-hover)]"
+            className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-hover)]"
             aria-label="Previous month"
           >
             <ChevronLeft className="w-4 h-4 text-[var(--color-text-secondary)]" />
           </button>
           <button
             onClick={() => setViewMonth(addMonths(viewMonth, 1))}
-            className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-hover)]"
+            className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-hover)]"
             aria-label="Next month"
           >
             <ChevronRight className="w-4 h-4 text-[var(--color-text-secondary)]" />

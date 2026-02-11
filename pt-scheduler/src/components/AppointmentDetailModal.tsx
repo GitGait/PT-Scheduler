@@ -128,19 +128,19 @@ export function AppointmentDetailModal({
             onClick={onClose}
         >
             <div
-                className="bg-white rounded-lg shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto animate-slide-in"
+                className="bg-[var(--color-surface)] rounded-lg shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto animate-slide-in"
                 onClick={(event) => event.stopPropagation()}
             >
                 {/* Header */}
-                <div className="flex items-center justify-between px-6 py-4 border-b border-[#dadce0] sticky top-0 bg-white">
-                    <h2 className="text-lg font-medium text-[#202124]">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)] sticky top-0 bg-[var(--color-surface)]">
+                    <h2 className="text-lg font-medium text-[var(--color-text-primary)]">
                         Appointment Details
                     </h2>
                     <button
                         onClick={onClose}
-                        className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[#f1f3f4]"
+                        className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-hover)]"
                     >
-                        <X className="w-5 h-5 text-[#5f6368]" />
+                        <X className="w-5 h-5 text-[var(--color-text-secondary)]" />
                     </button>
                 </div>
 
@@ -148,10 +148,10 @@ export function AppointmentDetailModal({
                 <div className="p-6 space-y-6">
                     {/* Patient Name */}
                     <div>
-                        <h3 className="text-xl font-medium text-[#202124]">
+                        <h3 className="text-xl font-medium text-[var(--color-text-primary)]">
                             {patient?.fullName || "Unknown Patient"}
                         </h3>
-                        <p className="text-sm text-[#5f6368] mt-1">
+                        <p className="text-sm text-[var(--color-text-secondary)] mt-1">
                             <Clock className="w-4 h-4 inline mr-1" />
                             {formatDate(appointment.date)} at {formatTime(appointment.startTime)}
                             {" "}({appointment.duration} min)
@@ -160,7 +160,7 @@ export function AppointmentDetailModal({
 
                     {/* Phone */}
                     <div>
-                        <label className="flex items-center gap-2 text-sm font-medium text-[#5f6368] mb-2">
+                        <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                             <Phone className="w-4 h-4" />
                             Phone Number
                         </label>
@@ -175,7 +175,7 @@ export function AppointmentDetailModal({
 
                     {/* Address */}
                     <div>
-                        <label className="flex items-center gap-2 text-sm font-medium text-[#5f6368] mb-2">
+                        <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                             <MapPin className="w-4 h-4" />
                             Address
                         </label>
@@ -190,7 +190,7 @@ export function AppointmentDetailModal({
 
                     {/* Visit Type */}
                     <div>
-                        <label className="flex items-center gap-2 text-sm font-medium text-[#5f6368] mb-2">
+                        <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                             <Tag className="w-4 h-4" />
                             Visit Type
                         </label>
@@ -204,8 +204,8 @@ export function AppointmentDetailModal({
                                         onClick={() => setVisitType(config.code)}
                                         className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-left transition-all ${
                                             isSelected
-                                                ? "border-[#1a73e8] ring-2 ring-[#1a73e8]/20"
-                                                : "border-[#dadce0] hover:border-[#5f6368]"
+                                                ? "border-[var(--color-primary)] ring-2 ring-[var(--color-primary)]/20"
+                                                : "border-[var(--color-border)] hover:border-[var(--color-text-secondary)]"
                                         }`}
                                     >
                                         <span
@@ -213,10 +213,10 @@ export function AppointmentDetailModal({
                                             style={{ backgroundColor: config.bg }}
                                         />
                                         <span className="flex flex-col min-w-0">
-                                            <span className="text-xs font-medium text-[#202124] truncate">
+                                            <span className="text-xs font-medium text-[var(--color-text-primary)] truncate">
                                                 {config.code ?? "None"}
                                             </span>
-                                            <span className="text-[10px] text-[#5f6368] truncate">
+                                            <span className="text-[10px] text-[var(--color-text-secondary)] truncate">
                                                 {config.label}
                                             </span>
                                         </span>
@@ -228,7 +228,7 @@ export function AppointmentDetailModal({
 
                     {/* Notes */}
                     <div>
-                        <label className="flex items-center gap-2 text-sm font-medium text-[#5f6368] mb-2">
+                        <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                             <FileText className="w-4 h-4" />
                             Appointment Notes
                         </label>
@@ -244,7 +244,7 @@ export function AppointmentDetailModal({
 
                     {/* Error message */}
                     {error && (
-                        <p className="text-sm text-[#d93025] bg-red-50 p-3 rounded">
+                        <p className="text-sm text-red-600 dark:text-red-400 bg-red-50 p-3 rounded">
                             {error}
                         </p>
                     )}
@@ -258,7 +258,7 @@ export function AppointmentDetailModal({
                 </div>
 
                 {/* Footer */}
-                <div className="flex justify-end gap-2 px-6 py-4 border-t border-[#dadce0] sticky bottom-0 bg-white">
+                <div className="flex justify-end gap-2 px-6 py-4 border-t border-[var(--color-border)] sticky bottom-0 bg-[var(--color-surface)]">
                     <Button variant="ghost" onClick={onClose} disabled={isSaving}>
                         Cancel
                     </Button>

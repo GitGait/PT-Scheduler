@@ -81,20 +81,20 @@ export function AppointmentActionSheet({
             onClick={onClose}
         >
             <div
-                className="bg-white rounded-t-xl shadow-2xl w-full max-w-md mx-4 mb-0 animate-slide-up safe-area-pb max-h-[80vh] overflow-y-auto"
+                className="bg-[var(--color-surface)] rounded-t-xl shadow-2xl w-full max-w-md mx-4 mb-0 animate-slide-up safe-area-pb max-h-[80vh] overflow-y-auto"
                 onClick={(e) => e.stopPropagation()}
             >
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-[#dadce0] sticky top-0 bg-white">
-                    <h3 className="text-base font-medium text-[#202124] truncate pr-4">
+                <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)] sticky top-0 bg-[var(--color-surface)]">
+                    <h3 className="text-base font-medium text-[var(--color-text-primary)] truncate pr-4">
                         {patientName}
                     </h3>
                     <button
                         onClick={onClose}
-                        className="p-2 rounded-full hover:bg-[#f1f3f4] transition-colors"
+                        className="p-2 rounded-full hover:bg-[var(--color-surface-hover)] transition-colors"
                         aria-label="Close"
                     >
-                        <X className="w-5 h-5 text-[#5f6368]" />
+                        <X className="w-5 h-5 text-[var(--color-text-secondary)]" />
                     </button>
                 </div>
 
@@ -106,25 +106,25 @@ export function AppointmentActionSheet({
                             <a
                                 href={phoneHref}
                                 onClick={onClose}
-                                className="flex-1 flex items-center gap-4 py-3 px-4 text-left text-[#202124] hover:bg-[#f1f3f4] rounded-lg transition-colors"
+                                className="flex-1 flex items-center gap-4 py-3 px-4 text-left text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] rounded-lg transition-colors"
                             >
-                                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#e8f0fe]">
-                                    <Phone className="w-5 h-5 text-[#1a73e8]" />
+                                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--color-primary-light)]">
+                                    <Phone className="w-5 h-5 text-[var(--color-primary)]" />
                                 </div>
                                 <div className="flex flex-col">
                                     <span className="font-medium">Call Patient</span>
-                                    <span className="text-sm text-[#5f6368]">{formatPhoneDisplay(patient?.phone)}</span>
+                                    <span className="text-sm text-[var(--color-text-secondary)]">{formatPhoneDisplay(patient?.phone)}</span>
                                 </div>
                             </a>
                             <button
                                 onClick={() => copyToClipboard(patient?.phone ?? '', 'phone')}
-                                className="p-2.5 mr-2 rounded-full hover:bg-[#f1f3f4] transition-colors"
+                                className="p-2.5 mr-2 rounded-full hover:bg-[var(--color-surface-hover)] transition-colors"
                                 aria-label="Copy phone number"
                             >
                                 {copiedKey === 'phone' ? (
-                                    <Check className="w-4 h-4 text-[#1e8e3e]" />
+                                    <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
                                 ) : (
-                                    <Copy className="w-4 h-4 text-[#5f6368]" />
+                                    <Copy className="w-4 h-4 text-[var(--color-text-secondary)]" />
                                 )}
                             </button>
                         </div>
@@ -135,14 +135,14 @@ export function AppointmentActionSheet({
                         <a
                             href={smsHref}
                             onClick={onClose}
-                            className="w-full flex items-center gap-4 py-3 px-4 text-left text-[#202124] hover:bg-[#f1f3f4] rounded-lg transition-colors"
+                            className="w-full flex items-center gap-4 py-3 px-4 text-left text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] rounded-lg transition-colors"
                         >
-                            <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#e8f0fe]">
-                                <MessageSquare className="w-5 h-5 text-[#1a73e8]" />
+                            <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--color-primary-light)]">
+                                <MessageSquare className="w-5 h-5 text-[var(--color-primary)]" />
                             </div>
                             <div className="flex flex-col">
                                 <span className="font-medium">Text Patient</span>
-                                <span className="text-sm text-[#5f6368]">{formatPhoneDisplay(patient?.phone)}</span>
+                                <span className="text-sm text-[var(--color-text-secondary)]">{formatPhoneDisplay(patient?.phone)}</span>
                             </div>
                         </a>
                     )}
@@ -162,25 +162,25 @@ export function AppointmentActionSheet({
                                         <a
                                             href={altPhoneHref}
                                             onClick={onClose}
-                                            className="flex-1 flex items-center gap-4 py-3 px-4 text-left text-[#202124] hover:bg-[#f1f3f4] rounded-lg transition-colors"
+                                            className="flex-1 flex items-center gap-4 py-3 px-4 text-left text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] rounded-lg transition-colors"
                                         >
-                                            <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#fef7e0]">
-                                                <Phone className="w-5 h-5 text-[#f9ab00]" />
+                                            <div className="w-10 h-10 flex items-center justify-center rounded-full bg-amber-100 dark:bg-amber-950">
+                                                <Phone className="w-5 h-5 text-amber-500 dark:text-amber-400" />
                                             </div>
                                             <div className="flex flex-col">
                                                 <span className="font-medium">Call {contactLabel}</span>
-                                                <span className="text-sm text-[#5f6368]">{formatPhoneDisplay(contact.phone)}</span>
+                                                <span className="text-sm text-[var(--color-text-secondary)]">{formatPhoneDisplay(contact.phone)}</span>
                                             </div>
                                         </a>
                                         <button
                                             onClick={() => copyToClipboard(contact.phone, altCopyKey)}
-                                            className="p-2.5 mr-2 rounded-full hover:bg-[#f1f3f4] transition-colors"
+                                            className="p-2.5 mr-2 rounded-full hover:bg-[var(--color-surface-hover)] transition-colors"
                                             aria-label={`Copy ${contactLabel} phone number`}
                                         >
                                             {copiedKey === altCopyKey ? (
-                                                <Check className="w-4 h-4 text-[#1e8e3e]" />
+                                                <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
                                             ) : (
-                                                <Copy className="w-4 h-4 text-[#5f6368]" />
+                                                <Copy className="w-4 h-4 text-[var(--color-text-secondary)]" />
                                             )}
                                         </button>
                                     </div>
@@ -191,14 +191,14 @@ export function AppointmentActionSheet({
                                     <a
                                         href={altSmsHref}
                                         onClick={onClose}
-                                        className="w-full flex items-center gap-4 py-3 px-4 text-left text-[#202124] hover:bg-[#f1f3f4] rounded-lg transition-colors"
+                                        className="w-full flex items-center gap-4 py-3 px-4 text-left text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] rounded-lg transition-colors"
                                     >
-                                        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#fef7e0]">
-                                            <MessageSquare className="w-5 h-5 text-[#f9ab00]" />
+                                        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-amber-100 dark:bg-amber-950">
+                                            <MessageSquare className="w-5 h-5 text-amber-500 dark:text-amber-400" />
                                         </div>
                                         <div className="flex flex-col">
                                             <span className="font-medium">Text {contactLabel}</span>
-                                            <span className="text-sm text-[#5f6368]">{formatPhoneDisplay(contact.phone)}</span>
+                                            <span className="text-sm text-[var(--color-text-secondary)]">{formatPhoneDisplay(contact.phone)}</span>
                                         </div>
                                     </a>
                                 )}
@@ -214,32 +214,32 @@ export function AppointmentActionSheet({
                                     onNavigate();
                                     onClose();
                                 }}
-                                className="flex-1 flex items-center gap-4 py-3 px-4 text-left text-[#202124] hover:bg-[#f1f3f4] rounded-lg transition-colors"
+                                className="flex-1 flex items-center gap-4 py-3 px-4 text-left text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] rounded-lg transition-colors"
                             >
-                                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#e6f4ea]">
-                                    <Navigation className="w-5 h-5 text-[#1e8e3e]" />
+                                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-green-100 dark:bg-green-950">
+                                    <Navigation className="w-5 h-5 text-green-600 dark:text-green-400" />
                                 </div>
                                 <div className="flex flex-col">
                                     <span className="font-medium">Navigate to Address</span>
-                                    <span className="text-sm text-[#5f6368] truncate max-w-[250px]">{patient?.address}</span>
+                                    <span className="text-sm text-[var(--color-text-secondary)] truncate max-w-[250px]">{patient?.address}</span>
                                 </div>
                             </button>
                             <button
                                 onClick={() => copyToClipboard(patient?.address ?? '', 'address')}
-                                className="p-2.5 mr-2 rounded-full hover:bg-[#f1f3f4] transition-colors"
+                                className="p-2.5 mr-2 rounded-full hover:bg-[var(--color-surface-hover)] transition-colors"
                                 aria-label="Copy address"
                             >
                                 {copiedKey === 'address' ? (
-                                    <Check className="w-4 h-4 text-[#1e8e3e]" />
+                                    <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
                                 ) : (
-                                    <Copy className="w-4 h-4 text-[#5f6368]" />
+                                    <Copy className="w-4 h-4 text-[var(--color-text-secondary)]" />
                                 )}
                             </button>
                         </div>
                     )}
 
                     {/* Divider */}
-                    <div className="my-2 border-t border-[#dadce0]" />
+                    <div className="my-2 border-t border-[var(--color-border)]" />
 
                     {/* View / Edit Details */}
                     <button
@@ -247,10 +247,10 @@ export function AppointmentActionSheet({
                             onViewEdit();
                             onClose();
                         }}
-                        className="w-full flex items-center gap-4 py-3 px-4 text-left text-[#202124] hover:bg-[#f1f3f4] rounded-lg transition-colors"
+                        className="w-full flex items-center gap-4 py-3 px-4 text-left text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] rounded-lg transition-colors"
                     >
-                        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#f1f3f4]">
-                            <Edit3 className="w-5 h-5 text-[#5f6368]" />
+                        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--color-surface-hover)]">
+                            <Edit3 className="w-5 h-5 text-[var(--color-text-secondary)]" />
                         </div>
                         <span className="font-medium">View / Edit Details</span>
                     </button>
@@ -261,10 +261,10 @@ export function AppointmentActionSheet({
                             onMove();
                             onClose();
                         }}
-                        className="w-full flex items-center gap-4 py-3 px-4 text-left text-[#202124] hover:bg-[#f1f3f4] rounded-lg transition-colors"
+                        className="w-full flex items-center gap-4 py-3 px-4 text-left text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] rounded-lg transition-colors"
                     >
-                        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#f3e8fd]">
-                            <Move className="w-5 h-5 text-[#8e24aa]" />
+                        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-purple-100 dark:bg-purple-950">
+                            <Move className="w-5 h-5 text-purple-600 dark:text-purple-400" />
                         </div>
                         <span className="font-medium">Move Appointment</span>
                     </button>
@@ -275,10 +275,10 @@ export function AppointmentActionSheet({
                             onCopy();
                             onClose();
                         }}
-                        className="w-full flex items-center gap-4 py-3 px-4 text-left text-[#202124] hover:bg-[#f1f3f4] rounded-lg transition-colors"
+                        className="w-full flex items-center gap-4 py-3 px-4 text-left text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] rounded-lg transition-colors"
                     >
-                        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#e0f2f1]">
-                            <Copy className="w-5 h-5 text-[#00897b]" />
+                        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-teal-100 dark:bg-teal-950">
+                            <Copy className="w-5 h-5 text-teal-600 dark:text-teal-400" />
                         </div>
                         <span className="font-medium">Copy Appointment</span>
                     </button>
@@ -289,20 +289,20 @@ export function AppointmentActionSheet({
                             onDelete();
                             onClose();
                         }}
-                        className="w-full flex items-center gap-4 py-3 px-4 text-left text-[#202124] hover:bg-[#fce8e6] rounded-lg transition-colors"
+                        className="w-full flex items-center gap-4 py-3 px-4 text-left text-[var(--color-text-primary)] hover:bg-red-50 dark:hover:bg-red-950 rounded-lg transition-colors"
                     >
-                        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[#fce8e6]">
-                            <Trash2 className="w-5 h-5 text-[#d93025]" />
+                        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-red-50 dark:bg-red-950">
+                            <Trash2 className="w-5 h-5 text-red-600 dark:text-red-400" />
                         </div>
-                        <span className="font-medium text-[#d93025]">Delete Appointment</span>
+                        <span className="font-medium text-red-600 dark:text-red-400">Delete Appointment</span>
                     </button>
                 </div>
 
                 {/* Cancel button */}
-                <div className="p-2 border-t border-[#dadce0]">
+                <div className="p-2 border-t border-[var(--color-border)]">
                     <button
                         onClick={onClose}
-                        className="w-full py-3 px-4 text-center text-[#5f6368] hover:bg-[#f1f3f4] rounded-lg font-medium transition-colors"
+                        className="w-full py-3 px-4 text-center text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)] rounded-lg font-medium transition-colors"
                     >
                         Cancel
                     </button>
