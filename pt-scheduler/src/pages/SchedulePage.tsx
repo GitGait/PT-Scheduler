@@ -2485,7 +2485,7 @@ export function SchedulePage() {
                                                         {/* Larger text and spacing in day view for better readability */}
                                                         <div
                                                             className={`absolute left-2 right-1.5 top-0 bottom-0 overflow-hidden leading-snug ${
-                                                                isDayView ? 'text-[13px]' : 'text-[10px]'
+                                                                isDayView ? 'text-[14px]' : 'text-[12px]'
                                                             }`}
                                                             style={{
                                                                 display: 'flex',
@@ -2496,25 +2496,25 @@ export function SchedulePage() {
                                                             }}
                                                         >
                                                             <div className={`font-semibold truncate leading-[1.2] w-full overflow-hidden drop-shadow-sm ${
-                                                                isDayView ? 'text-[15px] min-h-[18px]' : 'text-[11px] min-h-[13px]'
+                                                                isDayView ? 'text-[16px] min-h-[20px]' : 'text-[13px] min-h-[16px]'
                                                             }`}>
                                                                 {getPatientName(appointment.patientId)}
                                                             </div>
                                                             {visitType && (
                                                                 <div className={`opacity-95 truncate w-full overflow-hidden font-medium tracking-wide ${
-                                                                    isDayView ? 'text-[13px] min-h-[16px]' : 'text-[10px] min-h-[12px]'
+                                                                    isDayView ? 'text-[14px] min-h-[17px]' : 'text-[12px] min-h-[14px]'
                                                                 }`}>
                                                                     [{visitType}]
                                                                 </div>
                                                             )}
                                                             <div className={`opacity-90 truncate w-full overflow-hidden ${
-                                                                isDayView ? 'text-[13px] min-h-[16px]' : 'text-[10px] min-h-[12px]'
+                                                                isDayView ? 'text-[14px] min-h-[17px]' : 'text-[12px] min-h-[14px]'
                                                             }`}>
                                                                 {minutesToTimeString(startMinutes)} ({displayDuration}m)
                                                             </div>
                                                             {showMilesRow && legInfo?.miles != null && (
                                                                 <div className={`inline-flex items-center gap-1 opacity-90 truncate max-w-full overflow-hidden ${
-                                                                    isDayView ? 'text-[13px] min-h-[16px]' : 'text-[10px] min-h-[12px]'
+                                                                    isDayView ? 'text-[14px] min-h-[17px]' : 'text-[12px] min-h-[14px]'
                                                                 }`}>
                                                                     <Car className={isDayView ? 'w-3.5 h-3.5 shrink-0' : 'w-2.5 h-2.5 shrink-0'} />
                                                                     <span className="truncate">
@@ -2525,7 +2525,7 @@ export function SchedulePage() {
                                                             )}
                                                             {showPhoneRow && patient?.phone && (
                                                                 <div className={`inline-flex w-fit max-w-full items-center gap-1 overflow-hidden whitespace-nowrap text-ellipsis opacity-90 ${
-                                                                    isDayView ? 'text-[13px] min-h-[16px]' : 'text-[10px] min-h-[12px]'
+                                                                    isDayView ? 'text-[14px] min-h-[17px]' : 'text-[12px] min-h-[14px]'
                                                                 }`}>
                                                                     <Phone className={isDayView ? 'w-3.5 h-3.5 shrink-0' : 'w-2.5 h-2.5 shrink-0'} />
                                                                     <span className="truncate">{patient.phone}</span>
@@ -2533,7 +2533,7 @@ export function SchedulePage() {
                                                             )}
                                                             {showAddressRow && patient?.address && (
                                                                 <div className={`inline-flex w-fit max-w-full items-center gap-1 overflow-hidden whitespace-nowrap text-ellipsis opacity-90 ${
-                                                                    isDayView ? 'text-[13px] min-h-[16px]' : 'text-[10px] min-h-[12px]'
+                                                                    isDayView ? 'text-[14px] min-h-[17px]' : 'text-[12px] min-h-[14px]'
                                                                 }`}>
                                                                     <MapPin className={isDayView ? 'w-3.5 h-3.5 shrink-0' : 'w-2.5 h-2.5 shrink-0'} />
                                                                     <span className="truncate">{patient.address.split(',')[0]}</span>
@@ -2543,7 +2543,7 @@ export function SchedulePage() {
                                                                 <div
                                                                     key={idx}
                                                                     className={`inline-flex w-fit max-w-full items-center gap-1 overflow-hidden whitespace-nowrap text-ellipsis opacity-85 ${
-                                                                        isDayView ? 'text-[13px] min-h-[16px]' : 'text-[10px] min-h-[12px]'
+                                                                        isDayView ? 'text-[14px] min-h-[17px]' : 'text-[12px] min-h-[14px]'
                                                                     }`}
                                                                 >
                                                                     <Phone className={isDayView ? 'w-3.5 h-3.5 shrink-0' : 'w-2.5 h-2.5 shrink-0'} />
