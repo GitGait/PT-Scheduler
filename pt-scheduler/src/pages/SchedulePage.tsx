@@ -884,6 +884,13 @@ export function SchedulePage() {
         event: DragEvent<HTMLDivElement>,
         appointmentId: string
     ) => {
+        // Lock scroll position BEFORE any state changes that trigger re-renders.
+        // State updates (draggingAppointmentId, moveAppointmentId, dragPreview)
+        // cause re-renders that can reset scroll position in the flex layout.
+        const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
+        const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
+        pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 20 };
+
         event.dataTransfer.setData("text/plain", appointmentId);
         event.dataTransfer.effectAllowed = "move";
         setDraggingAppointmentId(appointmentId);
@@ -1060,6 +1067,11 @@ export function SchedulePage() {
 
         touchDragTimerRef.current = window.setTimeout(() => {
             if (touchDragRef.current && !touchDragRef.current.activated) {
+                // Lock scroll position BEFORE state changes that trigger re-renders
+                const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
+                const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
+                pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 20 };
+
                 touchDragRef.current.activated = true;
                 setDraggingAppointmentId(appointmentId);
                 // Don't set moveAppointmentId here — that's only for the
