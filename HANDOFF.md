@@ -5,14 +5,18 @@
 ## Last Session: 2026-02-11
 
 ### What Was Done
-- **Fixed scroll position reset when dragging appointment chips** (persistent issue from prior session)
-  - Root cause: `loadByRange()` set `loading: true`, which swapped the entire calendar grid for `<ScheduleGridSkeleton/>`. This destroyed the scroll container's DOM content and reset `scrollTop` to 0. The previous fix (rendersLeft: 6) was insufficient because side effects (geocoding, distance calc) consumed the render budget before the grid was restored.
-  - Fix 1 (primary): Only show skeleton on initial load — changed `{loading ? skeleton : grid}` to `{loading && appointments.length === 0 ? skeleton : grid}` in SchedulePage.tsx line 2210
-  - Fix 2: `loadByRange` in appointmentStore.ts now only sets `loading: true` when no appointments exist (initial load), keeping existing appointments visible during refreshes
-  - Fix 3: Increased `rendersLeft` from 6 to 20 across all 5 scroll preservation points
-  - Fix 4: `handleAppointmentDragEnd` now calls `event.preventDefault()` to prevent browser-default scroll behavior
-  - Commit: `629ac0d`
-  - Deployed to Vercel production
+- **Comprehensive dark mode fix across all pages and components**
+  - Replaced hardcoded hex colors (#202124, #5f6368, #dadce0, #f1f3f4, #1a73e8, #d93025, #1e8e3e, etc.) with CSS custom properties (`--color-*`) and Tailwind `dark:` variants
+  - Files fixed: AppointmentActionSheet.tsx, AppointmentDetailModal.tsx, SchedulePage.tsx, PatientsPage.tsx, PatientDetailPage.tsx, ScanPage.tsx, SettingsPage.tsx, Sidebar.tsx, index.css
+  - Error/success/warning banners now use Tailwind color classes with dark variants
+  - Status badges, icon circles, and decorative elements all theme-aware
+- **Fixed stale current time indicator** in SchedulePage.tsx
+  - Was `useMemo` with empty deps (never updated). Changed to `useState` + `useEffect` with 60-second interval
+- **Fixed dark mode contrast** — `--color-text-tertiary` changed from `#80868b` to `#9ca3ab` in both dark theme blocks
+- **Increased mini-calendar touch targets** — nav buttons from w-6 h-6 to w-9 h-9
+- **Fixed iOS Safari input zoom** — `.input-google` font-size changed from `14px` to `max(16px, 0.875rem)`
+- Commit: `67d0f55`
+- Deployed to Vercel production
 
 ### Blocking Issue
 - **Distance Matrix API returns `REQUEST_DENIED`** — the API is NOT enabled in Google Cloud Console
@@ -22,13 +26,18 @@
 
 ### Recent Commits
 ```
+67d0f55 Fix dark mode theming across all pages and components
 629ac0d Fix scroll position reset when dragging appointment chips
 09eeb74 Add copy & paste appointment chips feature
 cfd818f Add copy buttons for phone numbers and addresses in action sheet
 2eb3138 Fix distance calculations using Haversine instead of Distance Matrix API
 1a43724 Fix chip positioning and scroll reset after drag-drop
-19393d1 Fix appointment chip positioning - remove position:relative override
 ```
+
+### Remaining Hardcoded Colors (Acceptable)
+- SchedulePage.tsx: Leaflet map marker colors (JS values for map pins, not UI theme)
+- SchedulePage.tsx: Touch drag ghost gradient (inline style, can't use Tailwind)
+- SchedulePage.tsx: Google Calendar event bgColor (comes from API response)
 
 ### Known Issues / Next Steps
 - Enable Distance Matrix API in Google Cloud Console (blocking real driving distances)

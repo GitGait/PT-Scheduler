@@ -84,7 +84,11 @@ const todayIso = (): string => toIsoDate(new Date());
 
 const getWeekDates = (selectedDate: string): string[] => {
     const start = parseIsoDate(selectedDate);
-    start.setDate(start.getDate() - start.getDay());
+    // Start week on Monday: getDay() returns 0 for Sun, 1 for Mon, etc.
+    // For Mon-Sun we need offset: Sun(0)→-6, Mon(1)→0, Tue(2)→-1, ...
+    const dow = start.getDay();
+    const mondayOffset = dow === 0 ? -6 : 1 - dow;
+    start.setDate(start.getDate() + mondayOffset);
 
     return Array.from({ length: 7 }, (_, index) => {
         const day = new Date(start);
@@ -370,7 +374,7 @@ export function SchedulePage() {
             // Preserve scroll position when sync replaces appointments
             const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
             const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
-            pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 20 };
+            pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 10 };
             void loadByRange(weekStart, weekEnd);
         };
 
@@ -889,7 +893,7 @@ export function SchedulePage() {
         // cause re-renders that can reset scroll position in the flex layout.
         const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
         const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
-        pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 20 };
+        pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 10 };
 
         event.dataTransfer.setData("text/plain", appointmentId);
         event.dataTransfer.effectAllowed = "move";
@@ -930,12 +934,16 @@ export function SchedulePage() {
 
     // Robust scroll preservation that survives async re-renders (DB updates, state changes)
     const pendingScrollRestoreRef = useRef<{ top: number; left: number; rendersLeft: number } | null>(null);
+    const programmaticScrollRef = useRef(false);
 
     useLayoutEffect(() => {
         const pending = pendingScrollRestoreRef.current;
         if (pending && zoomContainerRef.current) {
+            programmaticScrollRef.current = true;
             zoomContainerRef.current.scrollTop = pending.top;
             zoomContainerRef.current.scrollLeft = pending.left;
+            // Reset flag after browser processes the scroll event
+            setTimeout(() => { programmaticScrollRef.current = false; }, 80);
             pending.rendersLeft--;
             if (pending.rendersLeft <= 0) {
                 pendingScrollRestoreRef.current = null;
@@ -943,11 +951,24 @@ export function SchedulePage() {
         }
     });
 
+    // Cancel scroll restoration when the USER scrolls (not our programmatic restore)
+    useEffect(() => {
+        const container = zoomContainerRef.current;
+        if (!container) return;
+        const handleUserScroll = () => {
+            if (!programmaticScrollRef.current && pendingScrollRestoreRef.current) {
+                pendingScrollRestoreRef.current = null;
+            }
+        };
+        container.addEventListener('scroll', handleUserScroll, { passive: true });
+        return () => container.removeEventListener('scroll', handleUserScroll);
+    }, []);
+
     const preserveScrollPosition = (callback: () => void) => {
         const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
         const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
         // Persist restoration across multiple re-renders to catch async DB updates
-        pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 20 };
+        pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 10 };
         callback();
     };
 
@@ -999,7 +1020,7 @@ export function SchedulePage() {
         // Lock scroll before any state changes
         const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
         const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
-        pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 20 };
+        pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 10 };
 
         setDraggingAppointmentId(null);
         setDragPreview(null);
@@ -1070,7 +1091,7 @@ export function SchedulePage() {
                 // Lock scroll position BEFORE state changes that trigger re-renders
                 const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
                 const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
-                pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 20 };
+                pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 10 };
 
                 touchDragRef.current.activated = true;
                 setDraggingAppointmentId(appointmentId);
@@ -1106,7 +1127,7 @@ export function SchedulePage() {
         if (state?.activated) {
             const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
             const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
-            pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 20 };
+            pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 10 };
         }
 
         if (state?.activated && touchDragPreviewRef.current) {
@@ -1748,7 +1769,7 @@ export function SchedulePage() {
             // Lock scroll position before any state changes
             const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
             const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
-            pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 20 };
+            pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 10 };
 
             const nextRender = resizeDraftRef.current ?? {
                 startMinutes: session.initialStartMinutes,
@@ -2488,7 +2509,7 @@ export function SchedulePage() {
                                                             left: leftStyle,
                                                             width: widthStyle,
                                                             background: getVisitTypeGradient(visitType),
-                                                            touchAction: 'none',
+                                                            touchAction: 'auto',
                                                             opacity: draggingAppointmentId === appointment.id ? 0.4 : undefined,
                                                         }}
                                                         title={`${getPatientName(appointment.patientId)}${patient?.phone ? ` - ${patient.phone}` : ''}${patient?.address ? ` - ${patient.address}` : ''}`}
@@ -2572,10 +2593,11 @@ export function SchedulePage() {
                                                                 handleResizeStart(event as unknown as MouseEvent<HTMLButtonElement>, appointment, "top");
                                                             }}
                                                             onTouchStart={(event) => handleResizeTouchStart(event, appointment, "top")}
+                                                            onTouchMove={handleResizeTouchEnd}
                                                             onTouchEnd={handleResizeTouchEnd}
                                                             onTouchCancel={handleResizeTouchEnd}
                                                             className={`absolute left-0 right-0 top-0 cursor-ns-resize pointer-events-auto ${isDayView ? 'h-8' : 'h-4'}`}
-                                                            style={{ touchAction: 'none' }}
+                                                            style={{ touchAction: 'auto' }}
                                                         />
                                                         {/* Bottom resize handle */}
                                                         <div
@@ -2584,10 +2606,11 @@ export function SchedulePage() {
                                                                 handleResizeStart(event as unknown as MouseEvent<HTMLButtonElement>, appointment, "bottom");
                                                             }}
                                                             onTouchStart={(event) => handleResizeTouchStart(event, appointment, "bottom")}
+                                                            onTouchMove={handleResizeTouchEnd}
                                                             onTouchEnd={handleResizeTouchEnd}
                                                             onTouchCancel={handleResizeTouchEnd}
                                                             className={`absolute left-0 right-0 bottom-0 cursor-ns-resize pointer-events-auto ${isDayView ? 'h-8' : 'h-4'}`}
-                                                            style={{ touchAction: 'none' }}
+                                                            style={{ touchAction: 'auto' }}
                                                         />
 
                                                     </div>
@@ -2985,7 +3008,9 @@ export function SchedulePage() {
                         onNavigate={() => {
                             if (actionPatient?.address) {
                                 if (isIOS()) {
-                                    setMapsMenuAddress(actionPatient.address);
+                                    // Use location.href so iOS intercepts and opens Maps app
+                                    // without creating a blank in-app browser overlay
+                                    window.location.href = buildAppleMapsHref(actionPatient.address)!;
                                 } else {
                                     window.open(buildGoogleMapsHref(actionPatient.address)!, '_blank');
                                 }
