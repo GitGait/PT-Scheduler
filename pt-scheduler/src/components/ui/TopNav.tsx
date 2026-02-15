@@ -72,7 +72,8 @@ export function TopNav({ onMenuClick, showMenuButton = true }: TopNavProps) {
   useEffect(() => {
     const restore = async () => {
       const restored = await tryRestoreSignIn();
-      setGoogleSignedIn(restored);
+      // Don't let a failed restore (tokenClient not ready yet) override a valid token
+      setGoogleSignedIn(restored || isSignedIn());
     };
     void restore();
   }, []);
