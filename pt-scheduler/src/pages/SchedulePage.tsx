@@ -395,13 +395,14 @@ export function SchedulePage() {
             const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
             pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 10 };
             void loadByRange(weekStart, weekEnd);
+            void loadOnHold();
         };
 
         window.addEventListener(APPOINTMENTS_SYNCED_EVENT, handleAppointmentsSynced);
         return () => {
             window.removeEventListener(APPOINTMENTS_SYNCED_EVENT, handleAppointmentsSynced);
         };
-    }, [loadByRange, weekStart, weekEnd]);
+    }, [loadByRange, loadOnHold, weekStart, weekEnd]);
 
     useEffect(() => {
         let cancelled = false;

@@ -85,7 +85,9 @@ export const useAppointmentStore = create<AppointmentState & AppointmentActions>
         const isInitialLoad = get().appointments.length === 0;
         set({ loading: isInitialLoad, error: null });
         try {
-            const appointments = await appointmentDB.byRange(startDate, endDate);
+            const allInRange = await appointmentDB.byRange(startDate, endDate);
+            // On-hold appointments live exclusively in onHoldAppointments
+            const appointments = allInRange.filter((a) => a.status !== "on-hold");
             set({ appointments, loading: false });
         } catch (err) {
             set({
