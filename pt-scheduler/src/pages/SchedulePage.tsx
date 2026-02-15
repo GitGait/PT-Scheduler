@@ -663,9 +663,12 @@ export function SchedulePage() {
 
                     if (Object.keys(updates).length > 0) {
                         setDrivingDistances(prev => ({ ...prev, ...updates }));
+                    } else {
+                        console.warn('[DistanceMatrix] API returned 0 distances for', locations.length, 'locations on', date);
                     }
                 } catch (err) {
-                    console.error('Failed to fetch driving distances:', err);
+                    const message = err instanceof Error ? err.message : String(err);
+                    console.error(`[DistanceMatrix] Failed for ${date} (${locations.length} locations):`, message);
                 } finally {
                     distanceFetchInFlightRef.current = null;
                 }
@@ -2557,8 +2560,8 @@ export function SchedulePage() {
                                                                 }`}>
                                                                     <Car className={isDayView ? 'w-3.5 h-3.5 shrink-0' : 'w-2.5 h-2.5 shrink-0'} />
                                                                     <span className="truncate">
-                                                                        {legInfo.miles.toFixed(1)} mi
-                                                                        {legInfo.minutes != null && ` (${legInfo.minutes} min)`}
+                                                                        {legInfo.isRealDistance ? '' : '~'}{legInfo.miles.toFixed(1)} mi
+                                                                        {legInfo.minutes != null && ` (${legInfo.isRealDistance ? '' : '~'}${legInfo.minutes} min)`}
                                                                     </span>
                                                                 </div>
                                                             )}

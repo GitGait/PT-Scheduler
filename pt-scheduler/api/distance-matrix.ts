@@ -73,8 +73,9 @@ export default async function handler(
             const data = await response.json();
 
             if (data.status !== "OK") {
+                console.error("[DistanceMatrix] Google API status:", data.status, "error_message:", data.error_message);
                 res.status(502).json({
-                    error: `Google Maps error: ${data.status}`,
+                    error: `Google Maps error: ${data.status} - ${data.error_message || "unknown"}`,
                     code: "UPSTREAM_ERROR"
                 });
                 return;
@@ -102,7 +103,7 @@ export default async function handler(
                 const element = rows[i].elements[i];
 
                 if (element.status !== "OK") {
-                    // Skip failed elements but continue processing
+                    console.warn(`[DistanceMatrix] Element ${i} status: ${element.status} (${locations[i].id} -> ${locations[i + 1].id})`);
                     continue;
                 }
 
