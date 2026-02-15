@@ -1,7 +1,14 @@
 import { create } from "zustand";
 
 const toIsoDate = (date: Date): string => date.toISOString().split("T")[0];
-const todayIso = (): string => toIsoDate(new Date());
+const defaultDate = (): string => {
+    const today = new Date();
+    // If Sunday, default to next Monday
+    if (today.getDay() === 0) {
+        today.setDate(today.getDate() + 1);
+    }
+    return toIsoDate(today);
+};
 
 const ENABLED_CALENDARS_KEY = "ptScheduler.enabledCalendars";
 
@@ -63,7 +70,7 @@ interface ScheduleActions {
 }
 
 export const useScheduleStore = create<ScheduleState & ScheduleActions>((set, get) => ({
-    selectedDate: todayIso(),
+    selectedDate: defaultDate(),
     sidebarOpen: !isMobileDevice(), // Start closed on mobile
     googleCalendars: [],
     enabledCalendars: loadEnabledCalendars(),
