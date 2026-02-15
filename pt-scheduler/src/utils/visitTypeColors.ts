@@ -71,8 +71,8 @@ export const VISIT_TYPE_CONFIGS: VisitTypeConfig[] = [
     {
         code: "NOMNC",
         label: "NOMNC",
-        bg: "#7cb342",
-        gradient: "linear-gradient(135deg, #7cb342 0%, #558b2f 100%)",
+        bg: "#795548",
+        gradient: "linear-gradient(135deg, #795548 0%, #5d4037 100%)",
     },
     {
         code: "PT33",
@@ -83,8 +83,8 @@ export const VISIT_TYPE_CONFIGS: VisitTypeConfig[] = [
     {
         code: null,
         label: "Unspecified",
-        bg: "#78909c",
-        gradient: "linear-gradient(135deg, #78909c 0%, #546e7a 100%)",
+        bg: "#b0bec5",
+        gradient: "linear-gradient(135deg, #b0bec5 0%, #90a4ae 100%)",
     },
 ];
 
