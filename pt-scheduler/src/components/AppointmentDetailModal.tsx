@@ -3,7 +3,7 @@ import { X, Phone, MapPin, Clock, FileText, Save, Loader2, Tag, Users, Plus, Tra
 import { Button } from "./ui/Button";
 import type { Appointment, Patient, VisitType } from "../types";
 import type { AlternateContact } from "../utils/validation";
-import { VISIT_TYPE_CONFIGS } from "../utils/visitTypeColors";
+import { VisitTypeSelect } from "./ui/VisitTypeSelect";
 
 interface AppointmentDetailModalProps {
     appointment: Appointment;
@@ -268,17 +268,7 @@ export function AppointmentDetailModal({
                             <Tag className="w-4 h-4" />
                             Visit Type
                         </label>
-                        <select
-                            value={visitType ?? ""}
-                            onChange={(e) => setVisitType(e.target.value === "" ? null : e.target.value as VisitType)}
-                            className="w-full input-google"
-                        >
-                            {VISIT_TYPE_CONFIGS.map((config) => (
-                                <option key={config.code ?? "none"} value={config.code ?? ""}>
-                                    {config.code ? `${config.code} — ${config.label}` : "None"}
-                                </option>
-                            ))}
-                        </select>
+                        <VisitTypeSelect value={visitType} onChange={setVisitType} />
                     </div>
 
                     {/* Notes */}

@@ -23,7 +23,8 @@ import { geocodeAddress } from "../api/geocode";
 import { getDistanceMatrix } from "../api/distance";
 import { db } from "../db/schema";
 import type { Appointment, Patient, VisitType } from "../types";
-import { getVisitTypeGradient, VISIT_TYPE_CONFIGS } from "../utils/visitTypeColors";
+import { getVisitTypeGradient } from "../utils/visitTypeColors";
+import { VisitTypeSelect } from "../components/ui/VisitTypeSelect";
 import "leaflet/dist/leaflet.css";
 import {
     ChevronLeft,
@@ -2912,17 +2913,7 @@ export function SchedulePage() {
                                         <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                                             Visit Type
                                         </label>
-                                        <select
-                                            value={newVisitType ?? ""}
-                                            onChange={(e) => setNewVisitType(e.target.value === "" ? null : e.target.value as VisitType)}
-                                            className="w-full input-google"
-                                        >
-                                            {VISIT_TYPE_CONFIGS.map((config) => (
-                                                <option key={config.code ?? "none"} value={config.code ?? ""}>
-                                                    {config.code ? `${config.code} — ${config.label}` : "None"}
-                                                </option>
-                                            ))}
-                                        </select>
+                                        <VisitTypeSelect value={newVisitType} onChange={setNewVisitType} />
                                     </div>
 
                                     {addError && (
