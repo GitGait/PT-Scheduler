@@ -2430,7 +2430,7 @@ export function SchedulePage() {
                                         style={{ height: SLOT_HEIGHT_PX }}
                                     >
                                         {slotIndex % 4 === 0 && (
-                                            <span className="absolute -top-2 right-2 text-[10px] text-[var(--color-text-tertiary)]">
+                                            <span className="absolute top-0 right-2 text-[10px] leading-none text-[var(--color-text-tertiary)]">
                                                 {formatAxisTime(slotMinutes)}
                                             </span>
                                         )}
