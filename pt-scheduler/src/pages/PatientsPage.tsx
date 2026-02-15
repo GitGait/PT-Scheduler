@@ -658,9 +658,9 @@ export function PatientsPage() {
         }
     }, [searchQuery, search, loadAll]);
 
-    const filteredPatients = patients.filter((p) =>
-        showDischarged ? p.status === "discharged" : p.status !== "discharged"
-    );
+    const filteredPatients = patients
+        .filter((p) => showDischarged ? p.status === "discharged" : p.status !== "discharged")
+        .sort((a, b) => a.fullName.localeCompare(b.fullName));
 
     const handleOpenAdd = () => {
         setFormData(emptyForm);
