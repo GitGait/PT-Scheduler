@@ -4,6 +4,11 @@ import { Button } from "./ui/Button";
 import type { Appointment, Patient, VisitType } from "../types";
 import type { AlternateContact } from "../utils/validation";
 import { VisitTypeSelect } from "./ui/VisitTypeSelect";
+import {
+    isPersonalEvent,
+    PERSONAL_CATEGORIES,
+    getPersonalCategoryLabel,
+} from "../utils/personalEventColors";
 
 interface AppointmentDetailModalProps {
     appointment: Appointment;
@@ -29,9 +34,13 @@ export function AppointmentDetailModal({
     const [notes, setNotes] = useState("");
     const [visitType, setVisitType] = useState<VisitType>(null);
     const [altContacts, setAltContacts] = useState<AlternateContact[]>([]);
+    const [personalTitle, setPersonalTitle] = useState("");
+    const [personalCategory, setPersonalCategory] = useState("other");
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
+
+    const isPersonal = isPersonalEvent(appointment);
 
     // Initialize form values when modal opens or patient/appointment changes
     useEffect(() => {
@@ -42,6 +51,8 @@ export function AppointmentDetailModal({
         }
         setNotes(appointment.notes || "");
         setVisitType(appointment.visitType ?? null);
+        setPersonalTitle(appointment.title || "");
+        setPersonalCategory(appointment.personalCategory || "other");
         setError(null);
         setSuccessMessage(null);
     }, [patient, appointment, isOpen]);
@@ -51,7 +62,7 @@ export function AppointmentDetailModal({
     }
 
     const handleSave = async () => {
-        if (!patient) {
+        if (!isPersonal && !patient) {
             setError("Patient not found");
             return;
         }
@@ -61,50 +72,67 @@ export function AppointmentDetailModal({
         setSuccessMessage(null);
 
         try {
-            // Filter out empty alternate contacts
-            const cleanedContacts = altContacts.filter(c => c.firstName.trim() && c.phone.trim());
+            if (isPersonal) {
+                const titleChanged = personalTitle !== (appointment.title || "");
+                const categoryChanged = personalCategory !== (appointment.personalCategory || "other");
+                const notesChanged = notes !== (appointment.notes || "");
 
-            // Check if patient data changed
-            const altContactsChanged = JSON.stringify(cleanedContacts) !== JSON.stringify(patient.alternateContacts ?? []);
-            const patientChanged = phone !== patient.phone || address !== patient.address || altContactsChanged;
-            const visitTypeChanged = visitType !== (appointment.visitType ?? null);
-            const appointmentChanged = notes !== (appointment.notes || "") || visitTypeChanged;
+                if (titleChanged || categoryChanged || notesChanged) {
+                    await onSaveAppointment(appointment.id, {
+                        title: personalTitle.trim() || undefined,
+                        personalCategory,
+                        notes: notes || undefined,
+                    });
+                    setSuccessMessage("Changes saved successfully!");
+                    setTimeout(() => {
+                        onClose();
+                    }, 1000);
+                } else {
+                    onClose();
+                }
+            } else {
+                // Filter out empty alternate contacts
+                const cleanedContacts = altContacts.filter(c => c.firstName.trim() && c.phone.trim());
 
-            if (patientChanged) {
-                // Update patient locally
-                await onSavePatient(patient.id, {
-                    phone,
-                    address,
-                    alternateContacts: cleanedContacts,
-                });
+                // Check if patient data changed
+                const altContactsChanged = JSON.stringify(cleanedContacts) !== JSON.stringify(patient!.alternateContacts ?? []);
+                const patientChanged = phone !== patient!.phone || address !== patient!.address || altContactsChanged;
+                const visitTypeChanged = visitType !== (appointment.visitType ?? null);
+                const appointmentChanged = notes !== (appointment.notes || "") || visitTypeChanged;
 
-                // Sync to Google Sheets if available
-                if (onSyncToSheet) {
-                    const updatedPatient: Patient = {
-                        ...patient,
+                if (patientChanged) {
+                    await onSavePatient(patient!.id, {
                         phone,
                         address,
                         alternateContacts: cleanedContacts,
-                    };
-                    await onSyncToSheet(updatedPatient);
+                    });
+
+                    if (onSyncToSheet) {
+                        const updatedPatient: Patient = {
+                            ...patient!,
+                            phone,
+                            address,
+                            alternateContacts: cleanedContacts,
+                        };
+                        await onSyncToSheet(updatedPatient);
+                    }
                 }
-            }
 
-            if (appointmentChanged) {
-                // Update appointment
-                await onSaveAppointment(appointment.id, {
-                    notes: notes || undefined,
-                    visitType: visitType,
-                });
-            }
+                if (appointmentChanged) {
+                    await onSaveAppointment(appointment.id, {
+                        notes: notes || undefined,
+                        visitType: visitType,
+                    });
+                }
 
-            if (patientChanged || appointmentChanged) {
-                setSuccessMessage("Changes saved successfully!");
-                setTimeout(() => {
+                if (patientChanged || appointmentChanged) {
+                    setSuccessMessage("Changes saved successfully!");
+                    setTimeout(() => {
+                        onClose();
+                    }, 1000);
+                } else {
                     onClose();
-                }, 1000);
-            } else {
-                onClose();
+                }
             }
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to save changes");
@@ -143,7 +171,7 @@ export function AppointmentDetailModal({
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)] sticky top-0 bg-[var(--color-surface)]">
                     <h2 className="text-lg font-medium text-[var(--color-text-primary)]">
-                        Appointment Details
+                        {isPersonal ? "Event Details" : "Appointment Details"}
                     </h2>
                     <button
                         onClick={onClose}
@@ -155,10 +183,12 @@ export function AppointmentDetailModal({
 
                 {/* Content */}
                 <div className="p-6 space-y-6">
-                    {/* Patient Name */}
+                    {/* Header: Name + Time */}
                     <div>
                         <h3 className="text-xl font-medium text-[var(--color-text-primary)]">
-                            {patient?.fullName || "Unknown Patient"}
+                            {isPersonal
+                                ? (appointment.title || getPersonalCategoryLabel(appointment.personalCategory))
+                                : (patient?.fullName || "Unknown Patient")}
                         </h3>
                         <p className="text-sm text-[var(--color-text-secondary)] mt-1">
                             <Clock className="w-4 h-4 inline mr-1" />
@@ -167,120 +197,160 @@ export function AppointmentDetailModal({
                         </p>
                     </div>
 
-                    {/* Phone */}
-                    <div>
-                        <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                            <Phone className="w-4 h-4" />
-                            Phone Number
-                        </label>
-                        <input
-                            type="tel"
-                            value={phone}
-                            onChange={(e) => setPhone(e.target.value)}
-                            placeholder="Enter phone number"
-                            className="w-full input-google"
-                        />
-                    </div>
+                    {isPersonal ? (
+                        <>
+                            {/* Title */}
+                            <div>
+                                <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                                    <FileText className="w-4 h-4" />
+                                    Title
+                                </label>
+                                <input
+                                    type="text"
+                                    value={personalTitle}
+                                    onChange={(e) => setPersonalTitle(e.target.value)}
+                                    placeholder="e.g., Lunch with Sarah"
+                                    className="w-full input-google"
+                                />
+                            </div>
 
-                    {/* Address */}
-                    <div>
-                        <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                            <MapPin className="w-4 h-4" />
-                            Address
-                        </label>
-                        <input
-                            type="text"
-                            value={address}
-                            onChange={(e) => setAddress(e.target.value)}
-                            placeholder="Enter address"
-                            className="w-full input-google"
-                        />
-                    </div>
+                            {/* Category */}
+                            <div>
+                                <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                                    <Tag className="w-4 h-4" />
+                                    Category
+                                </label>
+                                <select
+                                    value={personalCategory}
+                                    onChange={(e) => setPersonalCategory(e.target.value)}
+                                    className="w-full input-google"
+                                >
+                                    {PERSONAL_CATEGORIES.map((cat) => (
+                                        <option key={cat} value={cat}>
+                                            {getPersonalCategoryLabel(cat)}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        </>
+                    ) : (
+                        <>
+                            {/* Phone */}
+                            <div>
+                                <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                                    <Phone className="w-4 h-4" />
+                                    Phone Number
+                                </label>
+                                <input
+                                    type="tel"
+                                    value={phone}
+                                    onChange={(e) => setPhone(e.target.value)}
+                                    placeholder="Enter phone number"
+                                    className="w-full input-google"
+                                />
+                            </div>
 
-                    {/* Alternate Contacts */}
-                    <div>
-                        <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                            <Users className="w-4 h-4" />
-                            Alternate Contacts
-                        </label>
-                        <div className="space-y-3">
-                            {altContacts.map((contact, index) => (
-                                <div key={index} className="flex gap-2 items-start">
-                                    <div className="flex-1 grid grid-cols-3 gap-2">
-                                        <input
-                                            type="text"
-                                            value={contact.firstName}
-                                            onChange={(e) => {
-                                                const updated = [...altContacts];
-                                                updated[index] = { ...updated[index], firstName: e.target.value };
-                                                setAltContacts(updated);
-                                            }}
-                                            placeholder="Name"
-                                            className="input-google text-sm"
-                                        />
-                                        <input
-                                            type="tel"
-                                            value={contact.phone}
-                                            onChange={(e) => {
-                                                const updated = [...altContacts];
-                                                updated[index] = { ...updated[index], phone: e.target.value };
-                                                setAltContacts(updated);
-                                            }}
-                                            placeholder="Phone"
-                                            className="input-google text-sm"
-                                        />
-                                        <input
-                                            type="text"
-                                            value={contact.relationship || ""}
-                                            onChange={(e) => {
-                                                const updated = [...altContacts];
-                                                updated[index] = { ...updated[index], relationship: e.target.value };
-                                                setAltContacts(updated);
-                                            }}
-                                            placeholder="Relation"
-                                            className="input-google text-sm"
-                                        />
-                                    </div>
+                            {/* Address */}
+                            <div>
+                                <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                                    <MapPin className="w-4 h-4" />
+                                    Address
+                                </label>
+                                <input
+                                    type="text"
+                                    value={address}
+                                    onChange={(e) => setAddress(e.target.value)}
+                                    placeholder="Enter address"
+                                    className="w-full input-google"
+                                />
+                            </div>
+
+                            {/* Alternate Contacts */}
+                            <div>
+                                <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                                    <Users className="w-4 h-4" />
+                                    Alternate Contacts
+                                </label>
+                                <div className="space-y-3">
+                                    {altContacts.map((contact, index) => (
+                                        <div key={index} className="flex gap-2 items-start">
+                                            <div className="flex-1 grid grid-cols-3 gap-2">
+                                                <input
+                                                    type="text"
+                                                    value={contact.firstName}
+                                                    onChange={(e) => {
+                                                        const updated = [...altContacts];
+                                                        updated[index] = { ...updated[index], firstName: e.target.value };
+                                                        setAltContacts(updated);
+                                                    }}
+                                                    placeholder="Name"
+                                                    className="input-google text-sm"
+                                                />
+                                                <input
+                                                    type="tel"
+                                                    value={contact.phone}
+                                                    onChange={(e) => {
+                                                        const updated = [...altContacts];
+                                                        updated[index] = { ...updated[index], phone: e.target.value };
+                                                        setAltContacts(updated);
+                                                    }}
+                                                    placeholder="Phone"
+                                                    className="input-google text-sm"
+                                                />
+                                                <input
+                                                    type="text"
+                                                    value={contact.relationship || ""}
+                                                    onChange={(e) => {
+                                                        const updated = [...altContacts];
+                                                        updated[index] = { ...updated[index], relationship: e.target.value };
+                                                        setAltContacts(updated);
+                                                    }}
+                                                    placeholder="Relation"
+                                                    className="input-google text-sm"
+                                                />
+                                            </div>
+                                            <button
+                                                type="button"
+                                                onClick={() => setAltContacts(altContacts.filter((_, i) => i !== index))}
+                                                className="p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-950 transition-colors mt-1"
+                                                aria-label="Remove contact"
+                                            >
+                                                <Trash2 className="w-4 h-4 text-red-500 dark:text-red-400" />
+                                            </button>
+                                        </div>
+                                    ))}
                                     <button
                                         type="button"
-                                        onClick={() => setAltContacts(altContacts.filter((_, i) => i !== index))}
-                                        className="p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-950 transition-colors mt-1"
-                                        aria-label="Remove contact"
+                                        onClick={() => setAltContacts([...altContacts, { firstName: "", phone: "" }])}
+                                        className="flex items-center gap-2 text-sm text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] transition-colors py-1"
                                     >
-                                        <Trash2 className="w-4 h-4 text-red-500 dark:text-red-400" />
+                                        <Plus className="w-4 h-4" />
+                                        Add Contact
                                     </button>
                                 </div>
-                            ))}
-                            <button
-                                type="button"
-                                onClick={() => setAltContacts([...altContacts, { firstName: "", phone: "" }])}
-                                className="flex items-center gap-2 text-sm text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] transition-colors py-1"
-                            >
-                                <Plus className="w-4 h-4" />
-                                Add Contact
-                            </button>
-                        </div>
-                    </div>
+                            </div>
 
-                    {/* Visit Type */}
-                    <div>
-                        <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
-                            <Tag className="w-4 h-4" />
-                            Visit Type
-                        </label>
-                        <VisitTypeSelect value={visitType} onChange={setVisitType} />
-                    </div>
+                            {/* Visit Type */}
+                            <div>
+                                <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                                    <Tag className="w-4 h-4" />
+                                    Visit Type
+                                </label>
+                                <VisitTypeSelect value={visitType} onChange={setVisitType} />
+                            </div>
+                        </>
+                    )}
 
                     {/* Notes */}
                     <div>
                         <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                             <FileText className="w-4 h-4" />
-                            Appointment Notes
+                            {isPersonal ? "Notes" : "Appointment Notes"}
                         </label>
                         <textarea
                             value={notes}
                             onChange={(e) => setNotes(e.target.value)}
-                            placeholder="Add notes for this appointment..."
+                            placeholder={isPersonal ? "Add notes..." : "Add notes for this appointment..."}
                             rows={4}
                             className="w-full input-google resize-none"
                             style={{ height: "auto", minHeight: "100px" }}

@@ -4,6 +4,7 @@
 
 import { getAccessToken } from "./auth";
 import type { Appointment } from "../types";
+import { PERSONAL_PATIENT_ID } from "../utils/personalEventColors";
 
 const CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3";
 
@@ -54,6 +55,9 @@ const CALENDAR_METADATA_KEYS = {
     status: "ptSchedulerStatus",
     durationMinutes: "ptSchedulerDurationMinutes",
     visitType: "ptSchedulerVisitType",
+    isPersonal: "ptSchedulerIsPersonal",
+    personalCategory: "ptSchedulerPersonalCategory",
+    personalTitle: "ptSchedulerPersonalTitle",
 } as const;
 
 /**
@@ -317,21 +321,34 @@ function buildCalendarEvent(
     const endDate = new Date(startDate.getTime() + appointment.duration * 60000);
     const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
 
+    const isPersonal = appointment.patientId === PERSONAL_PATIENT_ID;
+
+    const privateMetadata: Record<string, string> = {
+        [CALENDAR_METADATA_KEYS.appointmentId]: appointment.id,
+        [CALENDAR_METADATA_KEYS.patientId]: appointment.patientId,
+        [CALENDAR_METADATA_KEYS.status]: appointment.status,
+        [CALENDAR_METADATA_KEYS.durationMinutes]: String(appointment.duration),
+    };
+
+    if (isPersonal) {
+        privateMetadata[CALENDAR_METADATA_KEYS.isPersonal] = "true";
+        privateMetadata[CALENDAR_METADATA_KEYS.personalCategory] = appointment.personalCategory ?? "";
+        privateMetadata[CALENDAR_METADATA_KEYS.personalTitle] = appointment.title ?? "";
+    } else {
+        privateMetadata[CALENDAR_METADATA_KEYS.patientName] = patientName;
+        privateMetadata[CALENDAR_METADATA_KEYS.patientPhone] = patientPhone ?? "";
+        privateMetadata[CALENDAR_METADATA_KEYS.patientAddress] = address ?? "";
+        privateMetadata[CALENDAR_METADATA_KEYS.visitType] = appointment.visitType ?? "";
+    }
+
     return {
-        summary: `PT: ${patientName}`,
-        location: address,
+        summary: isPersonal
+            ? (appointment.title || appointment.personalCategory || "Personal Event")
+            : `PT: ${patientName}`,
+        location: isPersonal ? undefined : address,
         description: appointment.notes || undefined,
         extendedProperties: {
-            private: {
-                [CALENDAR_METADATA_KEYS.appointmentId]: appointment.id,
-                [CALENDAR_METADATA_KEYS.patientId]: appointment.patientId,
-                [CALENDAR_METADATA_KEYS.patientName]: patientName,
-                [CALENDAR_METADATA_KEYS.patientPhone]: patientPhone ?? "",
-                [CALENDAR_METADATA_KEYS.patientAddress]: address ?? "",
-                [CALENDAR_METADATA_KEYS.status]: appointment.status,
-                [CALENDAR_METADATA_KEYS.durationMinutes]: String(appointment.duration),
-                [CALENDAR_METADATA_KEYS.visitType]: appointment.visitType ?? "",
-            },
+            private: privateMetadata,
         },
         start: {
             dateTime: startDate.toISOString(),

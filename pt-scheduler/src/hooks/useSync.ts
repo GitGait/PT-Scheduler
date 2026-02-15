@@ -21,6 +21,7 @@ import { reconcilePatientsFromSheetSnapshot } from "../db/patientSheetSync";
 import { syncQueueDB } from "../db/operations";
 import type { AppointmentStatus, SyncQueueItem, VisitType } from "../types";
 import { VISIT_TYPE_CODES } from "../types";
+import { PERSONAL_PATIENT_ID, parsePersonalCategory } from "../utils/personalEventColors";
 
 const MAX_BATCH_SIZE = 5;
 const BATCH_DELAY_MS = 2500;
@@ -39,6 +40,9 @@ const CALENDAR_METADATA_KEYS = {
     status: "ptSchedulerStatus",
     durationMinutes: "ptSchedulerDurationMinutes",
     visitType: "ptSchedulerVisitType",
+    isPersonal: "ptSchedulerIsPersonal",
+    personalCategory: "ptSchedulerPersonalCategory",
+    personalTitle: "ptSchedulerPersonalTitle",
 } as const;
 
 export interface SyncConfig {
@@ -126,57 +130,63 @@ export function useSync(config: SyncConfig | null) {
 
                 const appointmentIdFromMetadata = metadata[CALENDAR_METADATA_KEYS.appointmentId];
                 const appointmentId = appointmentIdFromMetadata || `gcal-${event.googleEventId}`;
-                const patientName =
-                    metadata[CALENDAR_METADATA_KEYS.patientName]?.trim() ||
-                    extractPatientNameFromEventSummary(event.summary) ||
-                    "Unknown Patient";
-                let patientId =
-                    metadata[CALENDAR_METADATA_KEYS.patientId] ??
-                    (await resolvePatientIdFromEventSummary(event.summary));
 
-                if (!patientId) {
-                    patientId = buildImportedPatientId(patientName, event.googleEventId);
-                }
+                // Detect personal events from metadata
+                const isPersonalEvent = metadata[CALENDAR_METADATA_KEYS.isPersonal] === "true";
 
-                const patientPhone = metadata[CALENDAR_METADATA_KEYS.patientPhone]?.trim() || "";
-                const patientAddress =
-                    metadata[CALENDAR_METADATA_KEYS.patientAddress]?.trim() ||
-                    event.location?.trim() ||
-                    "";
-
-                const existingPatient = await db.patients.get(patientId);
-                if (!existingPatient) {
-                    await db.patients.add({
-                        id: patientId,
-                        fullName: patientName,
-                        nicknames: [],
-                        phone: patientPhone,
-                        alternateContacts: [],
-                        address: patientAddress,
-                        status: "active",
-                        notes: `Imported from Google Calendar event ${event.googleEventId}`,
-                        createdAt: new Date(),
-                        updatedAt: new Date(),
-                    });
-                    importedPatientsAny = true;
+                let patientId: string;
+                if (isPersonalEvent) {
+                    patientId = PERSONAL_PATIENT_ID;
                 } else {
-                    const nextFullName =
-                        existingPatient.fullName.trim() || patientName || "Unknown Patient";
-                    const nextPhone = existingPatient.phone?.trim() || patientPhone;
-                    const nextAddress = existingPatient.address?.trim() || patientAddress;
+                    const patientName =
+                        metadata[CALENDAR_METADATA_KEYS.patientName]?.trim() ||
+                        extractPatientNameFromEventSummary(event.summary) ||
+                        "Unknown Patient";
+                    patientId =
+                        metadata[CALENDAR_METADATA_KEYS.patientId] ??
+                        (await resolvePatientIdFromEventSummary(event.summary)) ??
+                        buildImportedPatientId(patientName, event.googleEventId);
 
-                    if (
-                        nextFullName !== existingPatient.fullName ||
-                        nextPhone !== existingPatient.phone ||
-                        nextAddress !== existingPatient.address
-                    ) {
-                        await db.patients.update(existingPatient.id, {
-                            fullName: nextFullName,
-                            phone: nextPhone,
-                            address: nextAddress,
+                    const patientPhone = metadata[CALENDAR_METADATA_KEYS.patientPhone]?.trim() || "";
+                    const patientAddress =
+                        metadata[CALENDAR_METADATA_KEYS.patientAddress]?.trim() ||
+                        event.location?.trim() ||
+                        "";
+
+                    const existingPatient = await db.patients.get(patientId);
+                    if (!existingPatient) {
+                        await db.patients.add({
+                            id: patientId,
+                            fullName: patientName,
+                            nicknames: [],
+                            phone: patientPhone,
+                            alternateContacts: [],
+                            address: patientAddress,
+                            status: "active",
+                            notes: `Imported from Google Calendar event ${event.googleEventId}`,
+                            createdAt: new Date(),
                             updatedAt: new Date(),
                         });
                         importedPatientsAny = true;
+                    } else {
+                        const nextFullName =
+                            existingPatient.fullName.trim() || patientName || "Unknown Patient";
+                        const nextPhone = existingPatient.phone?.trim() || patientPhone;
+                        const nextAddress = existingPatient.address?.trim() || patientAddress;
+
+                        if (
+                            nextFullName !== existingPatient.fullName ||
+                            nextPhone !== existingPatient.phone ||
+                            nextAddress !== existingPatient.address
+                        ) {
+                            await db.patients.update(existingPatient.id, {
+                                fullName: nextFullName,
+                                phone: nextPhone,
+                                address: nextAddress,
+                                updatedAt: new Date(),
+                            });
+                            importedPatientsAny = true;
+                        }
                     }
                 }
 
@@ -191,7 +201,7 @@ export function useSync(config: SyncConfig | null) {
                     continue;
                 }
 
-                const appointmentRecord = {
+                const appointmentRecord: Record<string, unknown> = {
                     id: appointmentId,
                     patientId,
                     date: appointmentDate,
@@ -206,10 +216,17 @@ export function useSync(config: SyncConfig | null) {
                     updatedAt: new Date(),
                 };
 
+                if (isPersonalEvent) {
+                    appointmentRecord.personalCategory = parsePersonalCategory(
+                        metadata[CALENDAR_METADATA_KEYS.personalCategory]
+                    );
+                    appointmentRecord.title = metadata[CALENDAR_METADATA_KEYS.personalTitle] || event.summary || "";
+                }
+
                 if (existing) {
                     await db.appointments.update(appointmentId, appointmentRecord);
                 } else {
-                    await db.appointments.add(appointmentRecord);
+                    await db.appointments.add(appointmentRecord as import("../types").Appointment);
                 }
                 importedAny = true;
 
@@ -304,10 +321,16 @@ export function useSync(config: SyncConfig | null) {
                     continue;
                 }
 
-                const patient = await db.patients.get(appointment.patientId);
-                const patientName = patient?.fullName ?? "Unknown";
-                const address = patient?.address;
-                const patientPhone = patient?.phone;
+                let patientName = "Unknown";
+                let address: string | undefined;
+                let patientPhone: string | undefined;
+
+                if (appointment.patientId !== PERSONAL_PATIENT_ID) {
+                    const patient = await db.patients.get(appointment.patientId);
+                    patientName = patient?.fullName ?? "Unknown";
+                    address = patient?.address;
+                    patientPhone = patient?.phone;
+                }
 
                 const eventId = await createCalendarEvent(
                     config.calendarId,
@@ -645,10 +668,15 @@ async function processSyncItem(item: SyncQueueItem, config: SyncConfig): Promise
 
             if (action === "create") {
                 if (!appointment) return;
-                const patient = await db.patients.get(appointment.patientId);
-                const patientName = patient?.fullName ?? "Unknown";
-                const address = patient?.address;
-                const patientPhone = patient?.phone;
+                let patientName = "Unknown";
+                let address: string | undefined;
+                let patientPhone: string | undefined;
+                if (appointment.patientId !== PERSONAL_PATIENT_ID) {
+                    const patient = await db.patients.get(appointment.patientId);
+                    patientName = patient?.fullName ?? "Unknown";
+                    address = patient?.address;
+                    patientPhone = patient?.phone;
+                }
                 const eventId = await createCalendarEvent(
                     config.calendarId,
                     appointment,
@@ -670,10 +698,15 @@ async function processSyncItem(item: SyncQueueItem, config: SyncConfig): Promise
                 });
             } else if (action === "update") {
                 if (!appointment) return;
-                const patient = await db.patients.get(appointment.patientId);
-                const patientName = patient?.fullName ?? "Unknown";
-                const address = patient?.address;
-                const patientPhone = patient?.phone;
+                let patientName = "Unknown";
+                let address: string | undefined;
+                let patientPhone: string | undefined;
+                if (appointment.patientId !== PERSONAL_PATIENT_ID) {
+                    const patient = await db.patients.get(appointment.patientId);
+                    patientName = patient?.fullName ?? "Unknown";
+                    address = patient?.address;
+                    patientPhone = patient?.phone;
+                }
                 const calEvent =
                     (appointment.calendarEventId
                         ? await db.calendarEvents.get(appointment.calendarEventId)

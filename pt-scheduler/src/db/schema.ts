@@ -66,6 +66,17 @@ export class PTSchedulerDB extends Dexie {
                         }
                     });
             });
+
+        // Version 3: Add optional personalCategory and title fields to appointments
+        // No new indexes needed - these are optional fields on existing records
+        this.version(3).stores({
+            patients: "id, fullName, status",
+            appointments: "id, patientId, date, status, syncStatus, visitType",
+            recurringBlocks: "id, patientId, dayOfWeek",
+            calendarEvents: "id, appointmentId, googleEventId",
+            syncQueue: "++id, timestamp, status, nextRetryAt",
+            routeCache: "id, date, expiresAt",
+        });
     }
 }
 

@@ -24,6 +24,13 @@ import { getDistanceMatrix } from "../api/distance";
 import { db } from "../db/schema";
 import type { Appointment, Patient, VisitType } from "../types";
 import { getVisitTypeGradient } from "../utils/visitTypeColors";
+import {
+    PERSONAL_PATIENT_ID,
+    PERSONAL_CATEGORIES,
+    isPersonalEvent,
+    getPersonalCategoryGradient,
+    getPersonalCategoryLabel,
+} from "../utils/personalEventColors";
 import { VisitTypeSelect } from "../components/ui/VisitTypeSelect";
 import "leaflet/dist/leaflet.css";
 import {
@@ -61,6 +68,8 @@ interface ClearedWeekAppointmentSnapshot {
     duration: number;
     status: Appointment["status"];
     notes?: string;
+    personalCategory?: string;
+    title?: string;
 }
 
 interface ClearedWeekSnapshot {
@@ -246,6 +255,9 @@ export function SchedulePage() {
     const [newStartTime, setNewStartTime] = useState("09:00");
     const [newDuration, setNewDuration] = useState(60);
     const [newVisitType, setNewVisitType] = useState<VisitType>(null);
+    const [newIsPersonalEvent, setNewIsPersonalEvent] = useState(false);
+    const [newPersonalCategory, setNewPersonalCategory] = useState("lunch");
+    const [newPersonalTitle, setNewPersonalTitle] = useState("");
     const [addError, setAddError] = useState<string | null>(null);
     const [autoArrangeError, setAutoArrangeError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
@@ -820,7 +832,10 @@ export function SchedulePage() {
         return `${patient.fullName} "${nickname.trim()}"`;
     };
 
-    const getPatientName = (patientId: string) => {
+    const getPatientName = (patientId: string, appointment?: Appointment) => {
+        if (patientId === PERSONAL_PATIENT_ID && appointment) {
+            return appointment.title || getPersonalCategoryLabel(appointment.personalCategory);
+        }
         const patient = getPatient(patientId);
         if (!patient) {
             return "Unknown Patient";
@@ -836,6 +851,9 @@ export function SchedulePage() {
         if (prefillTime) {
             setNewStartTime(prefillTime);
         }
+        setNewIsPersonalEvent(false);
+        setNewPersonalCategory("lunch");
+        setNewPersonalTitle("");
         setAddError(null);
         setIsAddOpen(true);
     };
@@ -846,7 +864,7 @@ export function SchedulePage() {
     };
 
     const handleCreateAppointment = async () => {
-        if (!newPatientId) {
+        if (!newIsPersonalEvent && !newPatientId) {
             setAddError("Please select a patient.");
             return;
         }
@@ -870,21 +888,39 @@ export function SchedulePage() {
         setAddError(null);
 
         try {
-            await create({
-                patientId: newPatientId,
-                date: newAppointmentDate,
-                startTime: newStartTime,
-                duration: newDuration,
-                visitType: newVisitType,
-                status: "scheduled",
-                syncStatus: "local",
-                notes: undefined,
-            });
+            if (newIsPersonalEvent) {
+                await create({
+                    patientId: PERSONAL_PATIENT_ID,
+                    date: newAppointmentDate,
+                    startTime: newStartTime,
+                    duration: newDuration,
+                    visitType: null,
+                    personalCategory: newPersonalCategory,
+                    title: newPersonalTitle.trim() || undefined,
+                    status: "scheduled",
+                    syncStatus: "local",
+                    notes: undefined,
+                });
+            } else {
+                await create({
+                    patientId: newPatientId,
+                    date: newAppointmentDate,
+                    startTime: newStartTime,
+                    duration: newDuration,
+                    visitType: newVisitType,
+                    status: "scheduled",
+                    syncStatus: "local",
+                    notes: undefined,
+                });
+            }
             setSelectedDate(newAppointmentDate);
             setIsAddOpen(false);
             setNewStartTime("09:00");
             setNewDuration(60);
             setNewVisitType(null);
+            setNewIsPersonalEvent(false);
+            setNewPersonalCategory("lunch");
+            setNewPersonalTitle("");
             triggerSync();
         } catch (err) {
             setAddError(err instanceof Error ? err.message : "Failed to add appointment.");
@@ -1013,6 +1049,8 @@ export function SchedulePage() {
                 startTime,
                 duration: source.duration,
                 visitType: source.visitType,
+                personalCategory: source.personalCategory,
+                title: source.title,
                 notes: source.notes,
                 status: 'scheduled',
             });
@@ -1115,13 +1153,19 @@ export function SchedulePage() {
                     touchDragPreviewRef.current = preview;
                 }
                 // Show floating ghost at finger position
-                if (touchDragRef.current) {
-                    const patient = patients.find((p) => p.id === existing?.patientId);
+                if (touchDragRef.current && existing) {
+                    let ghostName = 'Appointment';
+                    if (isPersonalEvent(existing)) {
+                        ghostName = existing.title || getPersonalCategoryLabel(existing.personalCategory);
+                    } else {
+                        const patient = patients.find((p) => p.id === existing.patientId);
+                        ghostName = patient?.fullName ?? 'Appointment';
+                    }
                     setTouchDragGhost({
                         x: touchDragRef.current.startX,
                         y: touchDragRef.current.startY,
-                        name: patient ? `${patient.lastName}, ${patient.firstName}` : 'Appointment',
-                        duration: existing?.duration ?? 30,
+                        name: ghostName,
+                        duration: existing.duration,
                     });
                 }
                 if (navigator.vibrate) navigator.vibrate(30);
@@ -1284,9 +1328,9 @@ export function SchedulePage() {
     };
 
     const handleDeleteAppointment = async (appointment: Appointment) => {
-        const patientName = getPatientName(appointment.patientId);
+        const patientName = getPatientName(appointment.patientId, appointment);
         const confirmed = window.confirm(
-            `Delete appointment for ${patientName} on ${appointment.date} at ${appointment.startTime}?`
+            `Delete ${isPersonalEvent(appointment) ? '' : 'appointment for '}${patientName} on ${appointment.date} at ${appointment.startTime}?`
         );
         if (!confirmed) {
             return;
@@ -1334,6 +1378,13 @@ export function SchedulePage() {
         }));
 
         try {
+            // Personal events stay pinned — only rearrange patient appointments
+            const patientAppointments = dayAppointments.filter((a) => !isPersonalEvent(a));
+
+            if (patientAppointments.length === 0) {
+                return;
+            }
+
             // Start optimized routes at 9:00 AM
             const OPTIMIZE_START_MINUTES = 9 * 60;
             const dayStartMinutes = OPTIMIZE_START_MINUTES;
@@ -1345,7 +1396,7 @@ export function SchedulePage() {
             }> = [];
             const withoutCoordinates: Appointment[] = [];
 
-            for (const appointment of dayAppointments) {
+            for (const appointment of patientAppointments) {
                 const coords = await resolvePatientCoordinatesForRouting(appointment.patientId);
                 if (coords) {
                     withCoordinates.push({
@@ -1448,6 +1499,8 @@ export function SchedulePage() {
                     duration: appointment.duration,
                     status: appointment.status,
                     notes: appointment.notes,
+                    personalCategory: appointment.personalCategory,
+                    title: appointment.title,
                 })),
             };
 
@@ -1570,6 +1623,10 @@ export function SchedulePage() {
             let unresolvedCount = 0;
 
             for (const appointment of activeDayAppointments) {
+                // Skip personal events — they don't have addresses to map
+                if (isPersonalEvent(appointment)) {
+                    continue;
+                }
                 if (seenPatientIds.has(appointment.patientId)) {
                     continue;
                 }
@@ -2222,7 +2279,7 @@ export function SchedulePage() {
             {selectedMoveAppointment && !draggingAppointmentId && (
                 <div className="px-4 py-2 bg-[var(--color-primary-light)] border-b border-[var(--color-border)]">
                     <p className="text-sm text-[var(--color-primary)]">
-                        Moving {getPatientName(selectedMoveAppointment.patientId)}. Click a time slot to place it.
+                        Moving {getPatientName(selectedMoveAppointment.patientId, selectedMoveAppointment)}. Click a time slot to place it.
                     </p>
                 </div>
             )}
@@ -2231,7 +2288,7 @@ export function SchedulePage() {
             {selectedCopyAppointment && !draggingAppointmentId && (
                 <div className="px-4 py-2 bg-teal-50 dark:bg-teal-950 border-b border-[var(--color-border)]">
                     <p className="text-sm text-teal-700 dark:text-teal-300">
-                        Copying {getPatientName(selectedCopyAppointment.patientId)}. Click a time slot to place the copy.
+                        Copying {getPatientName(selectedCopyAppointment.patientId, selectedCopyAppointment)}. Click a time slot to place the copy.
                     </p>
                 </div>
             )}
@@ -2482,13 +2539,23 @@ export function SchedulePage() {
                                                     draggingAppointmentId === appointment.id;
                                                 const isActiveResize =
                                                     resizingAppointmentId === appointment.id;
-                                                const patient = getPatient(appointment.patientId);
-                                                const legInfo = legInfoByAppointmentId[appointment.id];
+                                                const isPersonal = isPersonalEvent(appointment);
+                                                const patient = isPersonal ? undefined : getPatient(appointment.patientId);
+                                                const legInfo = isPersonal ? undefined : legInfoByAppointmentId[appointment.id];
                                                 const visitType = appointment.visitType;
-                                                const showMilesRow = heightPx >= 46;
-                                                const showPhoneRow = heightPx >= 58;
-                                                const showAddressRow = heightPx >= 72;
-                                                const showAlternateContactRows = heightPx >= 88;
+                                                const chipGradient = isPersonal
+                                                    ? getPersonalCategoryGradient(appointment.personalCategory)
+                                                    : getVisitTypeGradient(visitType);
+                                                const chipName = isPersonal
+                                                    ? (appointment.title || getPersonalCategoryLabel(appointment.personalCategory))
+                                                    : getPatientName(appointment.patientId);
+                                                const chipSubtitle = isPersonal
+                                                    ? getPersonalCategoryLabel(appointment.personalCategory)
+                                                    : (visitType ? `[${visitType}]` : null);
+                                                const showMilesRow = !isPersonal && heightPx >= 46;
+                                                const showPhoneRow = !isPersonal && heightPx >= 58;
+                                                const showAddressRow = !isPersonal && heightPx >= 72;
+                                                const showAlternateContactRows = !isPersonal && heightPx >= 88;
 
                                                 return (
                                                     <div
@@ -2517,11 +2584,14 @@ export function SchedulePage() {
                                                             height: heightPx,
                                                             left: leftStyle,
                                                             width: widthStyle,
-                                                            background: getVisitTypeGradient(visitType),
+                                                            background: chipGradient,
                                                             touchAction: 'auto',
                                                             opacity: draggingAppointmentId === appointment.id ? 0.4 : undefined,
                                                         }}
-                                                        title={`${getPatientName(appointment.patientId)}${patient?.phone ? ` - ${patient.phone}` : ''}${patient?.address ? ` - ${patient.address}` : ''}`}
+                                                        title={isPersonal
+                                                            ? chipName
+                                                            : `${getPatientName(appointment.patientId)}${patient?.phone ? ` - ${patient.phone}` : ''}${patient?.address ? ` - ${patient.address}` : ''}`
+                                                        }
                                                     >
                                                         {/* Main content area - full width, draggable from anywhere */}
                                                         {/* Larger text and spacing in day view for better readability */}
@@ -2540,13 +2610,13 @@ export function SchedulePage() {
                                                             <div className={`font-semibold truncate leading-[1.2] w-full overflow-hidden drop-shadow-sm ${
                                                                 isDayView ? 'text-[16px] min-h-[20px]' : 'text-[13px] min-h-[16px]'
                                                             }`}>
-                                                                {getPatientName(appointment.patientId)}
+                                                                {chipName}
                                                             </div>
-                                                            {visitType && (
+                                                            {chipSubtitle && (
                                                                 <div className={`opacity-95 truncate w-full overflow-hidden font-medium tracking-wide ${
                                                                     isDayView ? 'text-[14px] min-h-[17px]' : 'text-[12px] min-h-[14px]'
                                                                 }`}>
-                                                                    [{visitType}]
+                                                                    {isPersonal ? chipSubtitle : `[${visitType}]`}
                                                                 </div>
                                                             )}
                                                             <div className={`opacity-90 truncate w-full overflow-hidden ${
@@ -2846,28 +2916,88 @@ export function SchedulePage() {
                         </div>
 
                         <div className="p-6 space-y-4">
-                            {patients.length === 0 ? (
+                            {/* Patient / Personal toggle */}
+                            <div className="flex rounded-lg overflow-hidden border border-[var(--color-border)]">
+                                <button
+                                    type="button"
+                                    onClick={() => setNewIsPersonalEvent(false)}
+                                    className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                                        !newIsPersonalEvent
+                                            ? 'bg-[var(--color-primary)] text-white'
+                                            : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]'
+                                    }`}
+                                >
+                                    Patient
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setNewIsPersonalEvent(true)}
+                                    className={`flex-1 py-2 text-sm font-medium transition-colors ${
+                                        newIsPersonalEvent
+                                            ? 'bg-[var(--color-primary)] text-white'
+                                            : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]'
+                                    }`}
+                                >
+                                    Personal
+                                </button>
+                            </div>
+
+                            {!newIsPersonalEvent && patients.length === 0 ? (
                                 <p className="text-sm text-red-600 dark:text-red-400">
                                     Add a patient first before creating appointments.
                                 </p>
                             ) : (
                                 <>
-                                    <div>
-                                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                                            Patient
-                                        </label>
-                                        <select
-                                            value={newPatientId}
-                                            onChange={(e) => setNewPatientId(e.target.value)}
-                                            className="w-full input-google"
-                                        >
-                                            {[...patients].sort((a, b) => a.fullName.localeCompare(b.fullName)).map((patient) => (
-                                                <option key={patient.id} value={patient.id}>
-                                                    {patient.fullName}
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
+                                    {newIsPersonalEvent ? (
+                                        <>
+                                            <div>
+                                                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                                                    Category
+                                                </label>
+                                                <select
+                                                    value={newPersonalCategory}
+                                                    onChange={(e) => setNewPersonalCategory(e.target.value)}
+                                                    className="w-full input-google"
+                                                >
+                                                    {PERSONAL_CATEGORIES.map((cat) => (
+                                                        <option key={cat} value={cat}>
+                                                            {getPersonalCategoryLabel(cat)}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+
+                                            <div>
+                                                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                                                    Title (optional)
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    value={newPersonalTitle}
+                                                    onChange={(e) => setNewPersonalTitle(e.target.value)}
+                                                    placeholder="e.g., Lunch with Sarah"
+                                                    className="w-full input-google"
+                                                />
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div>
+                                            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                                                Patient
+                                            </label>
+                                            <select
+                                                value={newPatientId}
+                                                onChange={(e) => setNewPatientId(e.target.value)}
+                                                className="w-full input-google"
+                                            >
+                                                {[...patients].sort((a, b) => a.fullName.localeCompare(b.fullName)).map((patient) => (
+                                                    <option key={patient.id} value={patient.id}>
+                                                        {patient.fullName}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
 
                                     <div className="grid grid-cols-2 gap-4">
                                         <div>
@@ -2912,12 +3042,14 @@ export function SchedulePage() {
                                         </select>
                                     </div>
 
-                                    <div>
-                                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                                            Visit Type
-                                        </label>
-                                        <VisitTypeSelect value={newVisitType} onChange={setNewVisitType} />
-                                    </div>
+                                    {!newIsPersonalEvent && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                                                Visit Type
+                                            </label>
+                                            <VisitTypeSelect value={newVisitType} onChange={setNewVisitType} />
+                                        </div>
+                                    )}
 
                                     {addError && (
                                         <p className="text-sm text-red-600 dark:text-red-400">{addError}</p>
@@ -2933,7 +3065,7 @@ export function SchedulePage() {
                             <Button
                                 variant="primary"
                                 onClick={() => void handleCreateAppointment()}
-                                disabled={isSaving || patients.length === 0}
+                                disabled={isSaving || (!newIsPersonalEvent && patients.length === 0)}
                             >
                                 {isSaving ? "Saving..." : "Save"}
                             </Button>
@@ -2945,8 +3077,7 @@ export function SchedulePage() {
             {/* Floating Action Button */}
             <button
                 onClick={() => openAddAppointment()}
-                disabled={patients.length === 0}
-                className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-[var(--color-primary)] text-white shadow-lg hover:shadow-xl hover:bg-[var(--color-primary-hover)] transition-all flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed"
+                className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-[var(--color-primary)] text-white shadow-lg hover:shadow-xl hover:bg-[var(--color-primary-hover)] transition-all flex items-center justify-center"
                 aria-label="Add appointment"
             >
                 <Plus className="w-6 h-6" />

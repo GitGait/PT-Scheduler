@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { Phone, MessageSquare, Navigation, Edit3, Move, Trash2, X, Copy, Check } from "lucide-react";
 import type { Appointment, Patient } from "../types";
+import { isPersonalEvent, getPersonalCategoryLabel } from "../utils/personalEventColors";
 
 interface AppointmentActionSheetProps {
     appointment: Appointment;
@@ -67,10 +68,13 @@ export function AppointmentActionSheet({
         return null;
     }
 
-    const patientName = patient?.fullName ?? "Unknown Patient";
-    const hasPhone = Boolean(patient?.phone);
-    const hasAddress = Boolean(patient?.address);
-    const alternateContacts = patient?.alternateContacts ?? [];
+    const isPersonal = isPersonalEvent(appointment);
+    const headerName = isPersonal
+        ? (appointment.title || getPersonalCategoryLabel(appointment.personalCategory))
+        : (patient?.fullName ?? "Unknown Patient");
+    const hasPhone = !isPersonal && Boolean(patient?.phone);
+    const hasAddress = !isPersonal && Boolean(patient?.address);
+    const alternateContacts = isPersonal ? [] : (patient?.alternateContacts ?? []);
 
     const phoneHref = buildPhoneHref(patient?.phone);
     const smsHref = buildSmsHref(patient?.phone);
@@ -87,7 +91,7 @@ export function AppointmentActionSheet({
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-[var(--color-border)] sticky top-0 bg-[var(--color-surface)]">
                     <h3 className="text-base font-medium text-[var(--color-text-primary)] truncate pr-4">
-                        {patientName}
+                        {headerName}
                     </h3>
                     <button
                         onClick={onClose}
