@@ -23,7 +23,7 @@ import { geocodeAddress } from "../api/geocode";
 import { getDistanceMatrix } from "../api/distance";
 import { db } from "../db/schema";
 import type { Appointment, Patient, VisitType } from "../types";
-import { getVisitTypeGradient } from "../utils/visitTypeColors";
+import { getVisitTypeGradient, VISIT_TYPE_CONFIGS } from "../utils/visitTypeColors";
 import "leaflet/dist/leaflet.css";
 import {
     ChevronLeft,
@@ -244,6 +244,7 @@ export function SchedulePage() {
     const [newAppointmentDate, setNewAppointmentDate] = useState(todayIso);
     const [newStartTime, setNewStartTime] = useState("09:00");
     const [newDuration, setNewDuration] = useState(60);
+    const [newVisitType, setNewVisitType] = useState<VisitType>(null);
     const [addError, setAddError] = useState<string | null>(null);
     const [autoArrangeError, setAutoArrangeError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
@@ -868,6 +869,7 @@ export function SchedulePage() {
                 date: newAppointmentDate,
                 startTime: newStartTime,
                 duration: newDuration,
+                visitType: newVisitType,
                 status: "scheduled",
                 syncStatus: "local",
                 notes: undefined,
@@ -876,6 +878,7 @@ export function SchedulePage() {
             setIsAddOpen(false);
             setNewStartTime("09:00");
             setNewDuration(60);
+            setNewVisitType(null);
             triggerSync();
         } catch (err) {
             setAddError(err instanceof Error ? err.message : "Failed to add appointment.");
@@ -2901,6 +2904,42 @@ export function SchedulePage() {
                                                 </option>
                                             ))}
                                         </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                                            Visit Type
+                                        </label>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            {VISIT_TYPE_CONFIGS.map((config) => {
+                                                const isSelected = newVisitType === config.code;
+                                                return (
+                                                    <button
+                                                        key={config.code ?? "none"}
+                                                        type="button"
+                                                        onClick={() => setNewVisitType(config.code)}
+                                                        className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-left transition-all ${
+                                                            isSelected
+                                                                ? "border-[var(--color-primary)] ring-2 ring-[var(--color-primary)]/20"
+                                                                : "border-[var(--color-border)] hover:border-[var(--color-text-secondary)]"
+                                                        }`}
+                                                    >
+                                                        <span
+                                                            className="w-3 h-3 rounded-full shrink-0"
+                                                            style={{ backgroundColor: config.bg }}
+                                                        />
+                                                        <span className="flex flex-col min-w-0">
+                                                            <span className="text-xs font-medium text-[var(--color-text-primary)] truncate">
+                                                                {config.code ?? "None"}
+                                                            </span>
+                                                            <span className="text-[10px] text-[var(--color-text-secondary)] truncate">
+                                                                {config.label}
+                                                            </span>
+                                                        </span>
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
 
                                     {addError && (
