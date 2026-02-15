@@ -146,6 +146,17 @@ export function SettingsPage() {
         };
     }, [hasClientId]);
 
+    // Listen for auth state changes from TopNav sign-in
+    useEffect(() => {
+        const handleAuthChange = () => {
+            setSignedIn(isSignedIn());
+        };
+        window.addEventListener(AUTH_STATE_CHANGED_EVENT, handleAuthChange);
+        return () => {
+            window.removeEventListener(AUTH_STATE_CHANGED_EVENT, handleAuthChange);
+        };
+    }, []);
+
     const ensureAuthReady = async (): Promise<boolean> => {
         if (!hasClientId) {
             setAuthReady(false);

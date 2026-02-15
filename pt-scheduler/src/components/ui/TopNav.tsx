@@ -95,6 +95,7 @@ export function TopNav({ onMenuClick, showMenuButton = true }: TopNavProps) {
     try {
       await signIn();
       setGoogleSignedIn(true);
+      window.dispatchEvent(new Event(AUTH_STATE_CHANGED_EVENT));
     } catch (err) {
       console.error("Sign-in failed:", err);
       const message = err instanceof Error ? err.message : "Sign-in failed";
