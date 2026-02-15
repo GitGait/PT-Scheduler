@@ -8,6 +8,7 @@ import { db } from "../db/schema";
 
 interface AppointmentState {
     appointments: Appointment[];
+    onHoldAppointments: Appointment[];
     selectedDate: string; // YYYY-MM-DD
     loading: boolean;
     error: string | null;
@@ -17,11 +18,14 @@ interface AppointmentActions {
     loadByDate: (date: string) => Promise<void>;
     loadByRange: (startDate: string, endDate: string) => Promise<void>;
     loadByPatient: (patientId: string) => Promise<void>;
+    loadOnHold: () => Promise<void>;
     setSelectedDate: (date: string) => void;
     create: (appt: Omit<Appointment, "id" | "createdAt" | "updatedAt">) => Promise<string>;
     update: (id: string, changes: Partial<Omit<Appointment, "id" | "createdAt">>) => Promise<void>;
     delete: (id: string) => Promise<void>;
     markComplete: (id: string) => Promise<void>;
+    putOnHold: (id: string) => Promise<void>;
+    restoreFromHold: (id: string) => Promise<Appointment | undefined>;
     clearError: () => void;
 }
 
@@ -56,6 +60,7 @@ async function enqueueAppointmentSync(
 
 export const useAppointmentStore = create<AppointmentState & AppointmentActions>((set, get) => ({
     appointments: [],
+    onHoldAppointments: [],
     selectedDate: today(),
     loading: false,
     error: null,
@@ -212,6 +217,38 @@ export const useAppointmentStore = create<AppointmentState & AppointmentActions>
         } catch (err) {
             set({ error: err instanceof Error ? err.message : "Failed to delete appointment" });
         }
+    },
+
+    loadOnHold: async () => {
+        try {
+            const held = await appointmentDB.byStatus("on-hold");
+            set({ onHoldAppointments: held });
+        } catch (err) {
+            console.error("Failed to load on-hold appointments:", err);
+        }
+    },
+
+    putOnHold: async (id: string) => {
+        const { update } = get();
+        await update(id, { status: "on-hold" as AppointmentStatus });
+        // Move from appointments to onHoldAppointments
+        const appointment = get().appointments.find((a) => a.id === id);
+        if (appointment) {
+            set((state) => ({
+                appointments: state.appointments.filter((a) => a.id !== id),
+                onHoldAppointments: [...state.onHoldAppointments, { ...appointment, status: "on-hold" as AppointmentStatus }],
+            }));
+        }
+    },
+
+    restoreFromHold: async (id: string) => {
+        const held = get().onHoldAppointments.find((a) => a.id === id);
+        if (!held) return undefined;
+        await get().update(id, { status: "scheduled" as AppointmentStatus });
+        set((state) => ({
+            onHoldAppointments: state.onHoldAppointments.filter((a) => a.id !== id),
+        }));
+        return { ...held, status: "scheduled" as AppointmentStatus };
     },
 
     markComplete: async (id: string) => {

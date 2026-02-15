@@ -57,6 +57,7 @@ interface ScheduleState {
     enabledCalendars: Record<string, boolean>; // calendarId -> enabled
     externalEvents: ExternalCalendarEvent[];
     loadingCalendars: boolean;
+    pendingRestoreFromHoldId: string | null;
 }
 
 interface ScheduleActions {
@@ -67,6 +68,7 @@ interface ScheduleActions {
     toggleCalendar: (calendarId: string) => void;
     setExternalEvents: (events: ExternalCalendarEvent[]) => void;
     setLoadingCalendars: (loading: boolean) => void;
+    setPendingRestoreFromHoldId: (id: string | null) => void;
 }
 
 export const useScheduleStore = create<ScheduleState & ScheduleActions>((set, get) => ({
@@ -76,6 +78,7 @@ export const useScheduleStore = create<ScheduleState & ScheduleActions>((set, ge
     enabledCalendars: loadEnabledCalendars(),
     externalEvents: [],
     loadingCalendars: false,
+    pendingRestoreFromHoldId: null,
 
     setSelectedDate: (date) => {
         const isoDate = typeof date === "string" ? date : toIsoDate(date);
@@ -118,5 +121,9 @@ export const useScheduleStore = create<ScheduleState & ScheduleActions>((set, ge
 
     setLoadingCalendars: (loading) => {
         set({ loadingCalendars: loading });
+    },
+
+    setPendingRestoreFromHoldId: (id) => {
+        set({ pendingRestoreFromHoldId: id });
     },
 }));

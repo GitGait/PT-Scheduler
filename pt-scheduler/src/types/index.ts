@@ -41,7 +41,7 @@ export interface Patient {
   updatedAt: Date;
 }
 
-export type AppointmentStatus = "scheduled" | "completed" | "cancelled" | "no-show";
+export type AppointmentStatus = "scheduled" | "completed" | "cancelled" | "no-show" | "on-hold";
 export type SyncStatus = "local" | "pending" | "synced" | "error";
 
 // Single source of truth for visit type codes

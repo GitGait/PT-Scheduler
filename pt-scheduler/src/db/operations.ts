@@ -162,6 +162,11 @@ export const appointmentDB = {
         return db.appointments.where("patientId").equals(patientId).toArray();
     },
 
+    /** Get appointments by status */
+    async byStatus(status: string): Promise<Appointment[]> {
+        return db.appointments.where("status").equals(status).toArray();
+    },
+
     /** Mark appointment as synced with calendar */
     async markSynced(id: string, calendarEventId: string): Promise<void> {
         await db.appointments.update(id, {

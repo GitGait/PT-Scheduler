@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, ChevronDown } from "lucide-react";
+import { ChevronLeft, ChevronRight, ChevronDown, PauseCircle } from "lucide-react";
 import {
   format,
   startOfMonth,
@@ -13,9 +13,10 @@ import {
   isSameDay,
   isToday,
 } from "date-fns";
-import { useScheduleStore } from "../../stores";
+import { useScheduleStore, useAppointmentStore, usePatientStore } from "../../stores";
 import { listCalendars } from "../../api/calendar";
 import { isSignedIn } from "../../api/auth";
+import { isPersonalEvent, getPersonalCategoryLabel } from "../../utils/personalEventColors";
 
 interface SidebarProps {
   isOpen: boolean;
@@ -36,10 +37,15 @@ export function Sidebar({
     toggleCalendar,
     loadingCalendars,
     setLoadingCalendars,
+    setPendingRestoreFromHoldId,
   } = useScheduleStore();
+
+  const { onHoldAppointments, restoreFromHold } = useAppointmentStore();
+  const { patients } = usePatientStore();
 
   const [myCalendarsOpen, setMyCalendarsOpen] = useState(false);
   const [otherCalendarsOpen, setOtherCalendarsOpen] = useState(false);
+  const [onHoldOpen, setOnHoldOpen] = useState(false);
 
   // Fetch calendars when sidebar opens and when app regains focus.
   useEffect(() => {
@@ -87,6 +93,22 @@ export function Sidebar({
       window.removeEventListener("focus", handleFocus);
     };
   }, [isOpen, setGoogleCalendars, setLoadingCalendars]);
+
+  // Auto-expand on-hold section when items exist, collapse when empty
+  useEffect(() => {
+    setOnHoldOpen(onHoldAppointments.length > 0);
+  }, [onHoldAppointments.length]);
+
+  const patientById = useMemo(() => {
+    const map = new Map<string, (typeof patients)[number]>();
+    for (const p of patients) map.set(p.id, p);
+    return map;
+  }, [patients]);
+
+  const handleRestoreFromHold = async (appointmentId: string) => {
+    await restoreFromHold(appointmentId);
+    setPendingRestoreFromHoldId(appointmentId);
+  };
 
   // Split calendars into "my" (primary + owned) and "other" (subscribed)
   const { myCalendars, otherCalendars } = useMemo(() => {
@@ -193,6 +215,44 @@ export function Sidebar({
                     <span className="text-sm text-[var(--color-text-primary)] truncate">{cal.summary}</span>
                   </label>
                 ))}
+              </div>
+            )}
+          </div>
+        )}
+        {/* On Hold Section */}
+        {onHoldAppointments.length > 0 && (
+          <div>
+            <button
+              onClick={() => setOnHoldOpen(!onHoldOpen)}
+              className="flex items-center gap-2 w-full text-left py-2 text-sm font-medium text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] rounded px-2 -mx-2"
+            >
+              <ChevronDown className={`w-4 h-4 transition-transform ${onHoldOpen ? "" : "-rotate-90"}`} />
+              <PauseCircle className="w-4 h-4 text-amber-500" />
+              <span>On hold</span>
+              <span className="ml-auto text-xs bg-amber-100 dark:bg-amber-900 text-amber-700 dark:text-amber-300 rounded-full px-1.5 py-0.5 font-medium">
+                {onHoldAppointments.length}
+              </span>
+            </button>
+            {onHoldOpen && (
+              <div className="ml-2 space-y-1 mt-1">
+                {onHoldAppointments.map((apt) => {
+                  const patient = patientById.get(apt.patientId);
+                  const name = isPersonalEvent(apt)
+                    ? (apt.title || getPersonalCategoryLabel(apt.personalCategory))
+                    : (patient?.fullName ?? "Unknown");
+                  return (
+                    <button
+                      key={apt.id}
+                      onClick={() => void handleRestoreFromHold(apt.id)}
+                      className="w-full text-left p-2 rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors border-l-3 border-amber-400 dark:border-amber-500"
+                    >
+                      <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">{name}</p>
+                      <p className="text-xs text-[var(--color-text-secondary)]">
+                        {apt.date} &middot; {apt.visitType || "Personal"}
+                      </p>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>

@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Phone, MessageSquare, Navigation, Edit3, Move, Trash2, X, Copy, Check } from "lucide-react";
+import { Phone, MessageSquare, Navigation, Edit3, Move, Trash2, X, Copy, Check, PauseCircle } from "lucide-react";
 import type { Appointment, Patient } from "../types";
 import { isPersonalEvent, getPersonalCategoryLabel } from "../utils/personalEventColors";
 
@@ -12,6 +12,7 @@ interface AppointmentActionSheetProps {
     onViewEdit: () => void;
     onMove: () => void;
     onCopy: () => void;
+    onHold: () => void;
     onDelete: () => void;
 }
 
@@ -54,6 +55,7 @@ export function AppointmentActionSheet({
     onViewEdit,
     onMove,
     onCopy,
+    onHold,
     onDelete,
 }: AppointmentActionSheetProps) {
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -286,6 +288,22 @@ export function AppointmentActionSheet({
                         </div>
                         <span className="font-medium">Copy Appointment</span>
                     </button>
+
+                    {/* Put on Hold */}
+                    {appointment.status !== "on-hold" && (
+                        <button
+                            onClick={() => {
+                                onHold();
+                                onClose();
+                            }}
+                            className="w-full flex items-center gap-4 py-3 px-4 text-left text-[var(--color-text-primary)] hover:bg-amber-50 dark:hover:bg-amber-950 rounded-lg transition-colors"
+                        >
+                            <div className="w-10 h-10 flex items-center justify-center rounded-full bg-amber-100 dark:bg-amber-950">
+                                <PauseCircle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                            </div>
+                            <span className="font-medium text-amber-600 dark:text-amber-400">Put on Hold</span>
+                        </button>
+                    )}
 
                     {/* Delete Appointment */}
                     <button

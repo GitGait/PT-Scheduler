@@ -248,6 +248,8 @@ export function SchedulePage() {
         enabledCalendars,
         externalEvents,
         setExternalEvents,
+        pendingRestoreFromHoldId,
+        setPendingRestoreFromHoldId,
     } = useScheduleStore();
     const [isAddOpen, setIsAddOpen] = useState(false);
     const [newPatientId, setNewPatientId] = useState("");
@@ -353,7 +355,7 @@ export function SchedulePage() {
     const dayMapLayerRef = useRef<import("leaflet").LayerGroup | null>(null);
 
     const { patients, loadAll, update: updatePatient } = usePatientStore();
-    const { appointments, loading, loadByRange, markComplete, create, update, delete: deleteAppointment } =
+    const { appointments, loading, loadByRange, markComplete, create, update, delete: deleteAppointment, loadOnHold, putOnHold } =
         useAppointmentStore();
 
     const weekDates = useMemo(() => getWeekDates(selectedDate), [selectedDate]);
@@ -380,7 +382,8 @@ export function SchedulePage() {
     useEffect(() => {
         if (!weekStart || !weekEnd) return;
         void loadByRange(weekStart, weekEnd);
-    }, [loadByRange, weekStart, weekEnd]);
+        void loadOnHold();
+    }, [loadByRange, loadOnHold, weekStart, weekEnd]);
 
     useEffect(() => {
         const handleAppointmentsSynced = () => {
@@ -487,6 +490,7 @@ export function SchedulePage() {
     const appointmentCountsByDay = useMemo(() => {
         const counts: Record<string, number> = {};
         for (const apt of appointments) {
+            if (apt.status === "on-hold") continue;
             counts[apt.date] = (counts[apt.date] ?? 0) + 1;
         }
         return counts;
@@ -494,7 +498,7 @@ export function SchedulePage() {
 
     const selectedDayAppointments = useMemo(() => {
         return appointments
-            .filter((apt) => apt.date === selectedDate)
+            .filter((apt) => apt.date === selectedDate && apt.status !== "on-hold")
             .sort((a, b) => a.startTime.localeCompare(b.startTime));
     }, [appointments, selectedDate]);
 
@@ -525,6 +529,7 @@ export function SchedulePage() {
         }
 
         for (const appointment of appointments) {
+            if (appointment.status === "on-hold") continue;
             if (grouped[appointment.date]) {
                 grouped[appointment.date].push(appointment);
             }
@@ -1382,6 +1387,14 @@ export function SchedulePage() {
         await deleteAppointment(appointment.id);
         triggerSync();
     };
+
+    // Watch for restore-from-hold requests from the Sidebar (via schedule store)
+    useEffect(() => {
+        if (!pendingRestoreFromHoldId) return;
+        // Enter move mode for the restored appointment
+        setMoveAppointmentId(pendingRestoreFromHoldId);
+        setPendingRestoreFromHoldId(null);
+    }, [pendingRestoreFromHoldId, setPendingRestoreFromHoldId]);
 
     const handleAutoArrangeDay = async (date: string) => {
         const dayAppointments = (appointmentsByDay[date] ?? [])
@@ -3222,6 +3235,9 @@ export function SchedulePage() {
                         }}
                         onCopy={() => {
                             setCopyAppointmentId(actionSheetAppointmentId);
+                        }}
+                        onHold={() => {
+                            void putOnHold(actionSheetAppointmentId);
                         }}
                         onDelete={() => {
                             void handleDeleteAppointment(actionAppointment);
