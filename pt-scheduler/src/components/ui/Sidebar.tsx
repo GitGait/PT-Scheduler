@@ -213,8 +213,8 @@ function MiniCalendar({ selectedDate, onDateSelect }: MiniCalendarProps) {
   const weeks = useMemo(() => {
     const monthStart = startOfMonth(viewMonth);
     const monthEnd = endOfMonth(viewMonth);
-    const calStart = startOfWeek(monthStart);
-    const calEnd = endOfWeek(monthEnd);
+    const calStart = startOfWeek(monthStart, { weekStartsOn: 1 });
+    const calEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
 
     const rows: Date[][] = [];
     let day = calStart;
@@ -231,7 +231,7 @@ function MiniCalendar({ selectedDate, onDateSelect }: MiniCalendarProps) {
     return rows;
   }, [viewMonth]);
 
-  const weekDays = ["S", "M", "T", "W", "T", "F", "S"];
+  const weekDays = ["M", "T", "W", "T", "F", "S", "S"];
 
   return (
     <div className="mini-calendar">

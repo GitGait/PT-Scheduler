@@ -15,6 +15,7 @@ import {
     ChevronDown,
     Camera,
     FileText,
+    UserPlus,
 } from "lucide-react";
 
 interface OCRResult extends ExtractedAppointment {
@@ -134,7 +135,7 @@ function parseVisitTypeAndName(input: {
 
 export function ScanPage() {
     const navigate = useNavigate();
-    const { patients, loadAll: loadPatients } = usePatientStore();
+    const { patients, loadAll: loadPatients, add: addPatient } = usePatientStore();
     const { create: createAppointment, update: updateAppointment } = useAppointmentStore();
 
     const [isDragging, setIsDragging] = useState(false);
@@ -482,7 +483,7 @@ export function ScanPage() {
     };
 
     const handleImportConfirmed = async () => {
-        const confirmedResults = results.filter((r) => r.confirmed && r.matchedPatientId);
+        const confirmedResults = results.filter((r) => r.confirmed);
 
         if (confirmedResults.length === 0) {
             setError("No confirmed appointments to import.");
@@ -502,6 +503,21 @@ export function ScanPage() {
             }> = [];
 
             for (const result of confirmedResults) {
+                let patientId = result.matchedPatientId;
+
+                // If no matched patient, create a new one from the OCR name
+                if (!patientId) {
+                    patientId = await addPatient({
+                        fullName: result.rawName,
+                        nicknames: [],
+                        phone: "",
+                        alternateContacts: [],
+                        address: "",
+                        status: "active",
+                        notes: "Created from scan import",
+                    });
+                }
+
                 const normalizedImport = parseVisitTypeAndName({
                     rawName: result.rawName,
                     visitType: result.visitType,
@@ -516,7 +532,7 @@ export function ScanPage() {
                     .trim();
 
                 const appointmentId = await createAppointment({
-                    patientId: result.matchedPatientId!,
+                    patientId,
                     date: result.date,
                     startTime: result.time,
                     duration: result.duration,
@@ -528,7 +544,7 @@ export function ScanPage() {
 
                 importedAppointments.push({
                     appointmentId,
-                    patientId: result.matchedPatientId!,
+                    patientId,
                     date: result.date,
                     startTime: result.time,
                     duration: result.duration,
@@ -571,7 +587,7 @@ export function ScanPage() {
         }
     };
 
-    const confirmedCount = results.filter((r) => r.confirmed && r.matchedPatientId).length;
+    const confirmedCount = results.filter((r) => r.confirmed).length;
     const pendingCount = results.filter((r) => !r.confirmed && r.tier !== "auto").length;
 
     const getTierBadge = (tier: MatchTier, confidence: number) => {
@@ -797,6 +813,7 @@ export function ScanPage() {
                                             <option value="">Choose a patient...</option>
                                             {patients
                                                 .filter((p) => p.status === "active")
+                                                .sort((a, b) => a.fullName.localeCompare(b.fullName))
                                                 .map((p) => (
                                                     <option key={p.id} value={p.id}>
                                                         {p.fullName}
@@ -804,6 +821,23 @@ export function ScanPage() {
                                                 ))}
                                         </select>
                                     </div>
+
+                                    {/* Import as new patient for unmatched names */}
+                                    {!result.matchedPatientId && (
+                                        <button
+                                            onClick={() => {
+                                                setResults((prev) =>
+                                                    prev.map((r, i) =>
+                                                        i === index ? { ...r, confirmed: true } : r
+                                                    )
+                                                );
+                                            }}
+                                            className="mt-2 flex items-center gap-2 text-sm text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] transition-colors py-1.5 px-3 rounded-lg border border-[var(--color-border)] hover:bg-[var(--color-surface-hover)]"
+                                        >
+                                            <UserPlus className="w-4 h-4" />
+                                            Import as New Patient
+                                        </button>
+                                    )}
                                 </div>
                             )}
 
