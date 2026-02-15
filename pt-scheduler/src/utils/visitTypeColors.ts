@@ -45,6 +45,36 @@ export const VISIT_TYPE_CONFIGS: VisitTypeConfig[] = [
         gradient: "linear-gradient(135deg, #039be5 0%, #0288d1 100%)",
     },
     {
+        code: "PT05",
+        label: "ROC/Recert",
+        bg: "#d81b60",
+        gradient: "linear-gradient(135deg, #d81b60 0%, #ad1457 100%)",
+    },
+    {
+        code: "PT06",
+        label: "Recert",
+        bg: "#ff6d00",
+        gradient: "linear-gradient(135deg, #ff6d00 0%, #e65100 100%)",
+    },
+    {
+        code: "PT10",
+        label: "Supervisory Visit",
+        bg: "#ffab00",
+        gradient: "linear-gradient(135deg, #ffab00 0%, #ff8f00 100%)",
+    },
+    {
+        code: "PT15",
+        label: "Resumption of Care",
+        bg: "#00bcd4",
+        gradient: "linear-gradient(135deg, #00bcd4 0%, #0097a7 100%)",
+    },
+    {
+        code: "NOMNC",
+        label: "NOMNC",
+        bg: "#7cb342",
+        gradient: "linear-gradient(135deg, #7cb342 0%, #558b2f 100%)",
+    },
+    {
         code: "PT33",
         label: "PT Reassessment",
         bg: "#607d8b",

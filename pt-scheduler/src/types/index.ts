@@ -45,7 +45,7 @@ export type AppointmentStatus = "scheduled" | "completed" | "cancelled" | "no-sh
 export type SyncStatus = "local" | "pending" | "synced" | "error";
 
 // Single source of truth for visit type codes
-export const VISIT_TYPE_CODES = ["PT00", "PT01", "PT02", "PT11", "PT18", "PT19", "PT33"] as const;
+export const VISIT_TYPE_CODES = ["PT00", "PT01", "PT02", "PT05", "PT06", "PT10", "PT11", "PT15", "PT18", "PT19", "PT33", "NOMNC"] as const;
 export type VisitTypeCode = typeof VISIT_TYPE_CODES[number];
 export type VisitType = VisitTypeCode | null;
 
