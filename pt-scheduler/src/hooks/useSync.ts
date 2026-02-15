@@ -19,7 +19,8 @@ import {
 import { db } from "../db/schema";
 import { reconcilePatientsFromSheetSnapshot } from "../db/patientSheetSync";
 import { syncQueueDB } from "../db/operations";
-import type { AppointmentStatus, SyncQueueItem } from "../types";
+import type { AppointmentStatus, SyncQueueItem, VisitType } from "../types";
+import { VISIT_TYPE_CODES } from "../types";
 
 const MAX_BATCH_SIZE = 5;
 const BATCH_DELAY_MS = 2500;
@@ -37,6 +38,7 @@ const CALENDAR_METADATA_KEYS = {
     patientAddress: "ptSchedulerPatientAddress",
     status: "ptSchedulerStatus",
     durationMinutes: "ptSchedulerDurationMinutes",
+    visitType: "ptSchedulerVisitType",
 } as const;
 
 export interface SyncConfig {
@@ -179,6 +181,7 @@ export function useSync(config: SyncConfig | null) {
                 }
 
                 const status = parseAppointmentStatus(metadata[CALENDAR_METADATA_KEYS.status]);
+                const visitType = parseVisitType(metadata[CALENDAR_METADATA_KEYS.visitType]);
                 const existing = await db.appointments.get(appointmentId);
 
                 // Skip overwriting appointments with pending local changes.
@@ -195,6 +198,7 @@ export function useSync(config: SyncConfig | null) {
                     startTime: appointmentStartTime,
                     duration: Number.isFinite(durationMinutes) ? durationMinutes : 60,
                     status,
+                    visitType,
                     syncStatus: "synced" as const,
                     calendarEventId: event.googleEventId,
                     notes: event.description,
@@ -552,6 +556,13 @@ function parseAppointmentStatus(value?: string): AppointmentStatus {
         return value;
     }
     return "scheduled";
+}
+
+function parseVisitType(value?: string): VisitType {
+    if (value && (VISIT_TYPE_CODES as readonly string[]).includes(value)) {
+        return value as VisitType;
+    }
+    return null;
 }
 
 function extractPatientNameFromEventSummary(summary: string): string | null {

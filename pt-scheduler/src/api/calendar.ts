@@ -53,6 +53,7 @@ const CALENDAR_METADATA_KEYS = {
     patientAddress: "ptSchedulerPatientAddress",
     status: "ptSchedulerStatus",
     durationMinutes: "ptSchedulerDurationMinutes",
+    visitType: "ptSchedulerVisitType",
 } as const;
 
 /**
@@ -329,6 +330,7 @@ function buildCalendarEvent(
                 [CALENDAR_METADATA_KEYS.patientAddress]: address ?? "",
                 [CALENDAR_METADATA_KEYS.status]: appointment.status,
                 [CALENDAR_METADATA_KEYS.durationMinutes]: String(appointment.duration),
+                [CALENDAR_METADATA_KEYS.visitType]: appointment.visitType ?? "",
             },
         },
         start: {
