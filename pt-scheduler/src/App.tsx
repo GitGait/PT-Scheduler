@@ -4,6 +4,7 @@ import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { Sidebar } from "./components/ui/Sidebar";
 import { TopNav } from "./components/ui/TopNav";
 import { useSync } from "./hooks/useSync";
+import { useAutoDischarge } from "./hooks/useAutoDischarge";
 import { useSyncStore, useScheduleStore } from "./stores";
 import {
   SchedulePage,
@@ -69,6 +70,7 @@ function App() {
   );
 
   useSync(syncConfig);
+  useAutoDischarge();
 
   return (
     <ErrorBoundary>
