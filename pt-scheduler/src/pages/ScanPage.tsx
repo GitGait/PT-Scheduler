@@ -676,7 +676,7 @@ export function ScanPage() {
                     <Button
                         variant="primary"
                         size="sm"
-                        onClick={() => navigate("/schedule")}
+                        onClick={() => navigate("/")}
                     >
                         View Schedule
                     </Button>
