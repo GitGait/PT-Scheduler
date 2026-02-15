@@ -2855,7 +2855,7 @@ export function SchedulePage() {
                                             onChange={(e) => setNewPatientId(e.target.value)}
                                             className="w-full input-google"
                                         >
-                                            {patients.map((patient) => (
+                                            {[...patients].sort((a, b) => a.fullName.localeCompare(b.fullName)).map((patient) => (
                                                 <option key={patient.id} value={patient.id}>
                                                     {patient.fullName}
                                                 </option>
