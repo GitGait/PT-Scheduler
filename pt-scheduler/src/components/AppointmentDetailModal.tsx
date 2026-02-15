@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
-import { X, Phone, MapPin, Clock, FileText, Save, Loader2, Tag } from "lucide-react";
+import { X, Phone, MapPin, Clock, FileText, Save, Loader2, Tag, Users, Plus, Trash2 } from "lucide-react";
 import { Button } from "./ui/Button";
 import type { Appointment, Patient, VisitType } from "../types";
+import type { AlternateContact } from "../utils/validation";
 import { VISIT_TYPE_CONFIGS } from "../utils/visitTypeColors";
 
 interface AppointmentDetailModalProps {
@@ -27,6 +28,7 @@ export function AppointmentDetailModal({
     const [address, setAddress] = useState("");
     const [notes, setNotes] = useState("");
     const [visitType, setVisitType] = useState<VisitType>(null);
+    const [altContacts, setAltContacts] = useState<AlternateContact[]>([]);
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -36,6 +38,7 @@ export function AppointmentDetailModal({
         if (patient) {
             setPhone(patient.phone || "");
             setAddress(patient.address || "");
+            setAltContacts(patient.alternateContacts?.length ? [...patient.alternateContacts] : []);
         }
         setNotes(appointment.notes || "");
         setVisitType(appointment.visitType ?? null);
@@ -58,8 +61,12 @@ export function AppointmentDetailModal({
         setSuccessMessage(null);
 
         try {
+            // Filter out empty alternate contacts
+            const cleanedContacts = altContacts.filter(c => c.firstName.trim() && c.phone.trim());
+
             // Check if patient data changed
-            const patientChanged = phone !== patient.phone || address !== patient.address;
+            const altContactsChanged = JSON.stringify(cleanedContacts) !== JSON.stringify(patient.alternateContacts ?? []);
+            const patientChanged = phone !== patient.phone || address !== patient.address || altContactsChanged;
             const visitTypeChanged = visitType !== (appointment.visitType ?? null);
             const appointmentChanged = notes !== (appointment.notes || "") || visitTypeChanged;
 
@@ -68,6 +75,7 @@ export function AppointmentDetailModal({
                 await onSavePatient(patient.id, {
                     phone,
                     address,
+                    alternateContacts: cleanedContacts,
                 });
 
                 // Sync to Google Sheets if available
@@ -76,6 +84,7 @@ export function AppointmentDetailModal({
                         ...patient,
                         phone,
                         address,
+                        alternateContacts: cleanedContacts,
                     };
                     await onSyncToSheet(updatedPatient);
                 }
@@ -186,6 +195,71 @@ export function AppointmentDetailModal({
                             placeholder="Enter address"
                             className="w-full input-google"
                         />
+                    </div>
+
+                    {/* Alternate Contacts */}
+                    <div>
+                        <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                            <Users className="w-4 h-4" />
+                            Alternate Contacts
+                        </label>
+                        <div className="space-y-3">
+                            {altContacts.map((contact, index) => (
+                                <div key={index} className="flex gap-2 items-start">
+                                    <div className="flex-1 grid grid-cols-3 gap-2">
+                                        <input
+                                            type="text"
+                                            value={contact.firstName}
+                                            onChange={(e) => {
+                                                const updated = [...altContacts];
+                                                updated[index] = { ...updated[index], firstName: e.target.value };
+                                                setAltContacts(updated);
+                                            }}
+                                            placeholder="Name"
+                                            className="input-google text-sm"
+                                        />
+                                        <input
+                                            type="tel"
+                                            value={contact.phone}
+                                            onChange={(e) => {
+                                                const updated = [...altContacts];
+                                                updated[index] = { ...updated[index], phone: e.target.value };
+                                                setAltContacts(updated);
+                                            }}
+                                            placeholder="Phone"
+                                            className="input-google text-sm"
+                                        />
+                                        <input
+                                            type="text"
+                                            value={contact.relationship || ""}
+                                            onChange={(e) => {
+                                                const updated = [...altContacts];
+                                                updated[index] = { ...updated[index], relationship: e.target.value };
+                                                setAltContacts(updated);
+                                            }}
+                                            placeholder="Relation"
+                                            className="input-google text-sm"
+                                        />
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setAltContacts(altContacts.filter((_, i) => i !== index))}
+                                        className="p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-950 transition-colors mt-1"
+                                        aria-label="Remove contact"
+                                    >
+                                        <Trash2 className="w-4 h-4 text-red-500 dark:text-red-400" />
+                                    </button>
+                                </div>
+                            ))}
+                            <button
+                                type="button"
+                                onClick={() => setAltContacts([...altContacts, { firstName: "", phone: "" }])}
+                                className="flex items-center gap-2 text-sm text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] transition-colors py-1"
+                            >
+                                <Plus className="w-4 h-4" />
+                                Add Contact
+                            </button>
+                        </div>
                     </div>
 
                     {/* Visit Type */}
