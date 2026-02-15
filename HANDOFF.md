@@ -2,51 +2,44 @@
 
 > Read this + `CLAUDE.md` at session start. Update before session end.
 
-## Last Session: 2026-02-11
+## Last Session: 2026-02-15
 
 ### What Was Done
-- **Comprehensive dark mode fix across all pages and components**
-  - Replaced hardcoded hex colors (#202124, #5f6368, #dadce0, #f1f3f4, #1a73e8, #d93025, #1e8e3e, etc.) with CSS custom properties (`--color-*`) and Tailwind `dark:` variants
-  - Files fixed: AppointmentActionSheet.tsx, AppointmentDetailModal.tsx, SchedulePage.tsx, PatientsPage.tsx, PatientDetailPage.tsx, ScanPage.tsx, SettingsPage.tsx, Sidebar.tsx, index.css
-  - Error/success/warning banners now use Tailwind color classes with dark variants
-  - Status badges, icon circles, and decorative elements all theme-aware
-- **Fixed stale current time indicator** in SchedulePage.tsx
-  - Was `useMemo` with empty deps (never updated). Changed to `useState` + `useEffect` with 60-second interval
-- **Fixed dark mode contrast** — `--color-text-tertiary` changed from `#80868b` to `#9ca3ab` in both dark theme blocks
-- **Increased mini-calendar touch targets** — nav buttons from w-6 h-6 to w-9 h-9
-- **Fixed iOS Safari input zoom** — `.input-google` font-size changed from `14px` to `max(16px, 0.875rem)`
-- Commit: `67d0f55`
+- **Added personal events to schedule grid**
+  - Personal events (lunch, meeting, errand, personal, admin, other) appear on the calendar grid alongside patient appointments
+  - Reuses all existing appointment infrastructure: drag, resize, sync queue, calendar push/pull, copy/paste, CRUD
+  - Uses sentinel `patientId = "__personal__"` to distinguish from patient appointments
+  - Files created: `src/utils/personalEventColors.ts` (categories, colors, helpers)
+  - Files modified: `types/index.ts` (added `personalCategory`, `title` fields), `db/schema.ts` (version 3), `api/calendar.ts` (personal metadata keys + buildCalendarEvent), `hooks/useSync.ts` (detect/handle personal events in sync), `pages/SchedulePage.tsx` (modal toggle, chip rendering, auto-arrange exclusion, copy/paste, FAB always enabled), `components/AppointmentActionSheet.tsx` (hide Call/Text/Navigate for personal), `components/AppointmentDetailModal.tsx` (Title + Category editor for personal)
+  - Each category has a distinct gradient color (warm orange, blue-gray, teal, purple, slate, neutral)
+  - Auto-arrange excludes personal events (they stay pinned)
+  - Distance calculations skip personal events (no address)
+  - Google Calendar sync includes personal metadata for cross-device visibility
+- Commit: `d17fd30`
 - Deployed to Vercel production
+
+### Recent Commits
+```
+d17fd30 Add personal events to schedule grid (lunch, meetings, errands, etc.)
+a440390 Add ~ prefix for estimated distances and improve Distance Matrix logging
+b520a0f Add NOMNC to visit type OCR matching and prefix parsing
+40bf0cb Sync visitType to Google Calendar for cross-device visibility
+a7ebb1c Replace default Vite favicon with PT Scheduler calendar icon
+```
 
 ### Blocking Issue
 - **Distance Matrix API returns `REQUEST_DENIED`** — the API is NOT enabled in Google Cloud Console
   - User needs to enable "Distance Matrix API" at console.cloud.google.com → APIs & Services → Library
   - Once enabled, mileage will automatically switch from Haversine to real driving distances
-  - `GOOGLE_MAPS_API_KEY` env var IS set on Vercel, just needs the API enabled
-
-### Recent Commits
-```
-67d0f55 Fix dark mode theming across all pages and components
-629ac0d Fix scroll position reset when dragging appointment chips
-09eeb74 Add copy & paste appointment chips feature
-cfd818f Add copy buttons for phone numbers and addresses in action sheet
-2eb3138 Fix distance calculations using Haversine instead of Distance Matrix API
-1a43724 Fix chip positioning and scroll reset after drag-drop
-```
-
-### Remaining Hardcoded Colors (Acceptable)
-- SchedulePage.tsx: Leaflet map marker colors (JS values for map pins, not UI theme)
-- SchedulePage.tsx: Touch drag ghost gradient (inline style, can't use Tailwind)
-- SchedulePage.tsx: Google Calendar event bgColor (comes from API response)
 
 ### Known Issues / Next Steps
 - Enable Distance Matrix API in Google Cloud Console (blocking real driving distances)
 - Vercel auto-deploy from git push not working — check GitHub integration settings
 - Touch drag should be tested on actual mobile device to confirm feel
 - Consider auto-scroll when dragging to edge of viewport
-- SchedulePage.tsx is ~2800 lines - could benefit from extracting components
+- SchedulePage.tsx is now ~3000+ lines - could benefit from extracting components
 - Resize handle touch area overlaps chip touch area (both handlers fire) - not causing issues but could be cleaner
 - Pre-existing test failures: ErrorBoundary.test.tsx (missing beforeEach), pages.test.tsx (mock gaps for RoutePage, SettingsPage)
 
 ## App Status
-All 8 phases (0-7) complete. App is functional with: schedule calendar, patient management, OCR scan import, route optimization, Google calendar/sheets sync, theming, PWA. Currently in bug-fix/polish phase. Deployed to Vercel at https://pt-scheduler-one.vercel.app.
+All 8 phases (0-7) complete. App is functional with: schedule calendar, patient management, OCR scan import, route optimization, Google calendar/sheets sync, theming, PWA, **personal events**. Currently in bug-fix/polish phase. Deployed to Vercel at https://pt-scheduler-one.vercel.app.

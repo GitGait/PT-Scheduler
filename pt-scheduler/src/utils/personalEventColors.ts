@@ -6,6 +6,7 @@ export const PERSONAL_PATIENT_ID = "__personal__";
 export const PERSONAL_CATEGORIES = [
     "lunch",
     "meeting",
+    "idt",
     "errand",
     "personal",
     "admin",
@@ -33,6 +34,12 @@ export const PERSONAL_CATEGORY_CONFIGS: PersonalCategoryConfig[] = [
         label: "Meeting",
         bg: "#1565c0",
         gradient: "linear-gradient(135deg, #1565c0 0%, #0d47a1 100%)",
+    },
+    {
+        code: "idt",
+        label: "IDT Meeting",
+        bg: "#00695c",
+        gradient: "linear-gradient(135deg, #00695c 0%, #004d40 100%)",
     },
     {
         code: "errand",

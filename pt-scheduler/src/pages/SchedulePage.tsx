@@ -258,6 +258,8 @@ export function SchedulePage() {
     const [newIsPersonalEvent, setNewIsPersonalEvent] = useState(false);
     const [newPersonalCategory, setNewPersonalCategory] = useState("lunch");
     const [newPersonalTitle, setNewPersonalTitle] = useState("");
+    const [newRepeatInterval, setNewRepeatInterval] = useState<"none" | "weekly" | "biweekly">("none");
+    const [newRepeatUntil, setNewRepeatUntil] = useState("");
     const [addError, setAddError] = useState<string | null>(null);
     const [autoArrangeError, setAutoArrangeError] = useState<string | null>(null);
     const [isSaving, setIsSaving] = useState(false);
@@ -854,6 +856,8 @@ export function SchedulePage() {
         setNewIsPersonalEvent(false);
         setNewPersonalCategory("lunch");
         setNewPersonalTitle("");
+        setNewRepeatInterval("none");
+        setNewRepeatUntil("");
         setAddError(null);
         setIsAddOpen(true);
     };
@@ -889,18 +893,33 @@ export function SchedulePage() {
 
         try {
             if (newIsPersonalEvent) {
-                await create({
-                    patientId: PERSONAL_PATIENT_ID,
-                    date: newAppointmentDate,
-                    startTime: newStartTime,
-                    duration: newDuration,
-                    visitType: null,
-                    personalCategory: newPersonalCategory,
-                    title: newPersonalTitle.trim() || undefined,
-                    status: "scheduled",
-                    syncStatus: "local",
-                    notes: undefined,
-                });
+                // Build list of dates (single or recurring)
+                const dates: string[] = [newAppointmentDate];
+                if (newRepeatInterval !== "none" && newRepeatUntil) {
+                    const stepDays = newRepeatInterval === "weekly" ? 7 : 14;
+                    const startDate = new Date(newAppointmentDate + "T00:00:00");
+                    const endDate = new Date(newRepeatUntil + "T00:00:00");
+                    const cur = new Date(startDate);
+                    cur.setDate(cur.getDate() + stepDays);
+                    while (cur <= endDate) {
+                        dates.push(cur.toISOString().slice(0, 10));
+                        cur.setDate(cur.getDate() + stepDays);
+                    }
+                }
+                for (const date of dates) {
+                    await create({
+                        patientId: PERSONAL_PATIENT_ID,
+                        date,
+                        startTime: newStartTime,
+                        duration: newDuration,
+                        visitType: null,
+                        personalCategory: newPersonalCategory,
+                        title: newPersonalTitle.trim() || undefined,
+                        status: "scheduled",
+                        syncStatus: "local",
+                        notes: undefined,
+                    });
+                }
             } else {
                 await create({
                     patientId: newPatientId,
@@ -921,6 +940,8 @@ export function SchedulePage() {
             setNewIsPersonalEvent(false);
             setNewPersonalCategory("lunch");
             setNewPersonalTitle("");
+            setNewRepeatInterval("none");
+            setNewRepeatUntil("");
             triggerSync();
         } catch (err) {
             setAddError(err instanceof Error ? err.message : "Failed to add appointment.");
@@ -2979,6 +3000,36 @@ export function SchedulePage() {
                                                     className="w-full input-google"
                                                 />
                                             </div>
+
+                                            <div>
+                                                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                                                    Repeat
+                                                </label>
+                                                <select
+                                                    value={newRepeatInterval}
+                                                    onChange={(e) => setNewRepeatInterval(e.target.value as "none" | "weekly" | "biweekly")}
+                                                    className="w-full input-google"
+                                                >
+                                                    <option value="none">None</option>
+                                                    <option value="weekly">Weekly</option>
+                                                    <option value="biweekly">Every 2 weeks</option>
+                                                </select>
+                                            </div>
+
+                                            {newRepeatInterval !== "none" && (
+                                                <div>
+                                                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                                                        Repeat until
+                                                    </label>
+                                                    <input
+                                                        type="date"
+                                                        value={newRepeatUntil}
+                                                        onChange={(e) => setNewRepeatUntil(e.target.value)}
+                                                        min={newAppointmentDate}
+                                                        className="w-full input-google"
+                                                    />
+                                                </div>
+                                            )}
                                         </>
                                     ) : (
                                         <div>
