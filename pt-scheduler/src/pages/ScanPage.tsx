@@ -522,6 +522,7 @@ export function ScanPage() {
                     duration: result.duration,
                     status: "scheduled",
                     syncStatus: "local",
+                    visitType: visitType,
                     notes: notesWithVisitType || undefined,
                 });
 
