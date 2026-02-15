@@ -244,11 +244,21 @@ export const useAppointmentStore = create<AppointmentState & AppointmentActions>
     restoreFromHold: async (id: string) => {
         const held = get().onHoldAppointments.find((a) => a.id === id);
         if (!held) return undefined;
-        await get().update(id, { status: "scheduled" as AppointmentStatus });
+        const restored: Appointment = { ...held, status: "scheduled" as AppointmentStatus, updatedAt: new Date() };
+        // Add to appointments and remove from onHoldAppointments in one atomic set
+        // (can't use store's update() because it maps over appointments where this item doesn't exist)
         set((state) => ({
+            appointments: [...state.appointments, restored],
             onHoldAppointments: state.onHoldAppointments.filter((a) => a.id !== id),
         }));
-        return { ...held, status: "scheduled" as AppointmentStatus };
+        // Persist to DB and enqueue sync
+        const shouldSync = hasCalendarSyncConfigured();
+        await appointmentDB.update(id, {
+            status: "scheduled",
+            ...(shouldSync ? { syncStatus: "pending" as const } : {}),
+        });
+        await enqueueAppointmentSync("update", id);
+        return restored;
     },
 
     markComplete: async (id: string) => {
