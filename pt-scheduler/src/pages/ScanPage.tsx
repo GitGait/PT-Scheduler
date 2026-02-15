@@ -90,7 +90,7 @@ function normalizeVisitType(value?: string): string | undefined {
         return `${alphaNumeric[1].toUpperCase()}${alphaNumeric[2]}`;
     }
 
-    const keyword = cleaned.match(/^(EVAL|SOC|DC|ROC|RE[-\s]?EVAL)$/i);
+    const keyword = cleaned.match(/^(EVAL|SOC|DC|ROC|RE[-\s]?EVAL|NOMNC)$/i);
     if (keyword) {
         return keyword[1].toUpperCase().replace(/[-\s]/g, "");
     }
@@ -99,7 +99,7 @@ function normalizeVisitType(value?: string): string | undefined {
 }
 
 const VISIT_TYPE_PREFIX_REGEX =
-    /^([A-Za-z]{1,6}\s*[-]?\s*\d{1,3}|EVAL|SOC|DC|ROC|RE[-\s]?EVAL)\s*(?:[-:–—]\s*|\s+)(.+)$/i;
+    /^([A-Za-z]{1,6}\s*[-]?\s*\d{1,3}|EVAL|SOC|DC|ROC|RE[-\s]?EVAL|NOMNC)\s*(?:[-:–—]\s*|\s+)(.+)$/i;
 
 function parseVisitTypeAndName(input: {
     rawName: string;
@@ -111,7 +111,7 @@ function parseVisitTypeAndName(input: {
     if (visitTypeValue) {
         const withoutVisitType = nameValue
             .replace(
-                /^([A-Za-z]{1,6}\s*[-]?\s*\d{1,3}|EVAL|SOC|DC|ROC|RE[-\s]?EVAL)\s*(?:[-:–—]\s*)?/i,
+                /^([A-Za-z]{1,6}\s*[-]?\s*\d{1,3}|EVAL|SOC|DC|ROC|RE[-\s]?EVAL|NOMNC)\s*(?:[-:–—]\s*)?/i,
                 ""
             )
             .trim();

@@ -52,8 +52,9 @@ Extract every appointment you can identify.
 
 Rules:
 - Extract patient name exactly as shown (do not correct spelling).
-- If a visit type/code appears before the name (examples: "PT11", "PT 11", "EVAL"), extract it as visitType.
+- If a visit type/code appears before the name (examples: "PT11", "PT 11", "EVAL", "NOMNC"), extract it as visitType.
 - For rows like "PT33 - LAST, FIRST", set visitType to "PT33" and rawName to "LAST, FIRST" (without the code prefix).
+- For rows like "NOMNC - LAST, FIRST", set visitType to "NOMNC" and rawName to "LAST, FIRST" (without the code prefix).
 - Extract date in YYYY-MM-DD format.
 - Extract start time in HH:mm (24-hour) format.
 - Estimate duration in minutes. Default to 60 if not shown.
