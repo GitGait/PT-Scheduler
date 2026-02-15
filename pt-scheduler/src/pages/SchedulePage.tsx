@@ -68,6 +68,7 @@ interface ClearedWeekAppointmentSnapshot {
     duration: number;
     status: Appointment["status"];
     notes?: string;
+    chipNote?: string;
     personalCategory?: string;
     title?: string;
 }
@@ -1079,6 +1080,7 @@ export function SchedulePage() {
                 personalCategory: source.personalCategory,
                 title: source.title,
                 notes: source.notes,
+                chipNote: source.chipNote,
                 status: 'scheduled',
             });
         });
@@ -1534,6 +1536,7 @@ export function SchedulePage() {
                     duration: appointment.duration,
                     status: appointment.status,
                     notes: appointment.notes,
+                    chipNote: appointment.chipNote,
                     personalCategory: appointment.personalCategory,
                     title: appointment.title,
                 })),
@@ -1607,6 +1610,7 @@ export function SchedulePage() {
                     status: appointment.status,
                     syncStatus: "local",
                     notes: appointment.notes,
+                    chipNote: appointment.chipNote,
                 });
             }
 
@@ -2699,6 +2703,17 @@ export function SchedulePage() {
                                                             ))}
                                                         </div>
 
+                                                        {/* Chip quick note banner */}
+                                                        {appointment.chipNote && (
+                                                            <div
+                                                                className="absolute bottom-0 left-0 right-0 bg-yellow-400 text-yellow-950 text-[10px] font-semibold px-1.5 py-0.5 truncate leading-tight pointer-events-none"
+                                                                style={{ zIndex: 2 }}
+                                                                title={appointment.chipNote}
+                                                            >
+                                                                {appointment.chipNote}
+                                                            </div>
+                                                        )}
+
                                                         {/* Invisible resize handles - larger in day view for easier grabbing */}
                                                         {/* Top resize handle */}
                                                         <div
@@ -3239,6 +3254,9 @@ export function SchedulePage() {
                         }}
                         onHold={() => {
                             void putOnHold(actionSheetAppointmentId);
+                        }}
+                        onChipNote={(text) => {
+                            void update(actionSheetAppointmentId, { chipNote: text || undefined });
                         }}
                         onDelete={() => {
                             void handleDeleteAppointment(actionAppointment);

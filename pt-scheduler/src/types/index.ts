@@ -62,6 +62,7 @@ export interface Appointment {
   visitType: VisitType;  // Required field, null means unspecified
   personalCategory?: string;  // For personal events (patientId === "__personal__")
   title?: string;             // Free-text title for personal events
+  chipNote?: string;           // Short note displayed as banner on the chip
   createdAt: Date;
   updatedAt: Date;
 }

@@ -1,5 +1,5 @@
 import { useState, useCallback } from "react";
-import { Phone, MessageSquare, Navigation, Edit3, Move, Trash2, X, Copy, Check, PauseCircle } from "lucide-react";
+import { Phone, MessageSquare, Navigation, Edit3, Move, Trash2, X, Copy, Check, PauseCircle, StickyNote } from "lucide-react";
 import type { Appointment, Patient } from "../types";
 import { isPersonalEvent, getPersonalCategoryLabel } from "../utils/personalEventColors";
 
@@ -13,6 +13,7 @@ interface AppointmentActionSheetProps {
     onMove: () => void;
     onCopy: () => void;
     onHold: () => void;
+    onChipNote: (text: string) => void;
     onDelete: () => void;
 }
 
@@ -56,9 +57,12 @@ export function AppointmentActionSheet({
     onMove,
     onCopy,
     onHold,
+    onChipNote,
     onDelete,
 }: AppointmentActionSheetProps) {
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
+    const [chipNoteMode, setChipNoteMode] = useState(false);
+    const [chipNoteText, setChipNoteText] = useState(appointment.chipNote ?? "");
 
     const copyToClipboard = useCallback((text: string, key: string) => {
         void navigator.clipboard.writeText(text);
@@ -288,6 +292,59 @@ export function AppointmentActionSheet({
                         </div>
                         <span className="font-medium">Copy Appointment</span>
                     </button>
+
+                    {/* Quick Note */}
+                    {chipNoteMode ? (
+                        <div className="flex items-center gap-2 px-4 py-3">
+                            <input
+                                type="text"
+                                value={chipNoteText}
+                                onChange={(e) => setChipNoteText(e.target.value)}
+                                placeholder="e.g., Call 15 min before"
+                                autoFocus
+                                className="flex-1 px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        onChipNote(chipNoteText.trim());
+                                        onClose();
+                                    }
+                                }}
+                            />
+                            <button
+                                onClick={() => {
+                                    onChipNote(chipNoteText.trim());
+                                    onClose();
+                                }}
+                                className="px-3 py-2 rounded-lg bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition-colors"
+                            >
+                                Save
+                            </button>
+                            {appointment.chipNote && (
+                                <button
+                                    onClick={() => {
+                                        onChipNote("");
+                                        onClose();
+                                    }}
+                                    className="px-3 py-2 rounded-lg bg-red-100 dark:bg-red-950 text-red-600 dark:text-red-400 text-sm font-medium hover:bg-red-200 dark:hover:bg-red-900 transition-colors"
+                                >
+                                    Clear
+                                </button>
+                            )}
+                        </div>
+                    ) : (
+                        <button
+                            onClick={() => setChipNoteMode(true)}
+                            className="w-full flex items-center gap-4 py-3 px-4 text-left text-[var(--color-text-primary)] hover:bg-amber-50 dark:hover:bg-amber-950/50 rounded-lg transition-colors"
+                        >
+                            <div className="w-10 h-10 flex items-center justify-center rounded-full bg-amber-100 dark:bg-amber-950">
+                                <StickyNote className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                            </div>
+                            <span className="font-medium">{appointment.chipNote ? "Edit Note" : "Quick Note"}</span>
+                            {appointment.chipNote && (
+                                <span className="ml-auto text-sm text-[var(--color-text-secondary)] truncate max-w-[140px]">{appointment.chipNote}</span>
+                            )}
+                        </button>
+                    )}
 
                     {/* Put on Hold */}
                     {appointment.status !== "on-hold" && (
