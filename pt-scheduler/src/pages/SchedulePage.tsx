@@ -825,6 +825,8 @@ export function SchedulePage() {
     };
 
     const openAddAppointment = (prefillDate = selectedDate, prefillTime?: string) => {
+        // Reload all patients to ensure the dropdown has the full list
+        void loadAll();
         setSelectedDate(prefillDate);
         setNewAppointmentDate(prefillDate);
         if (prefillTime) {
