@@ -5,23 +5,28 @@
 ## Last Session: 2026-02-15
 
 ### What Was Done
-- **Improved Google Auth session persistence** — token no longer silently expires
-  - Added proactive refresh timer in `auth.ts` — schedules silent token renewal 5 min before expiry
-  - `scheduleTokenRefresh()` runs after every `setToken()` call and on restored tokens from localStorage
-  - On refresh failure: clears token and dispatches `AUTH_STATE_CHANGED_EVENT` so UI updates
-  - Moved `AUTH_STATE_CHANGED_EVENT` constant to `auth.ts` (canonical home), re-exported from `SettingsPage.tsx`
-  - `TopNav.tsx` visibility handler now calls `tryRestoreSignIn()` (actual refresh) instead of just `isSignedIn()` (status check)
-  - Files modified: `api/auth.ts`, `components/ui/TopNav.tsx`, `pages/SettingsPage.tsx`
-- Commit: `9b46be7`
-- Deployed to Vercel production
+- **Full codebase cohesion review — Batches 0-3 (12 commits)**
+  - **Batch 0:** Committed pending Personal pseudo-patient hiding (useSync.ts, PatientsPage.tsx)
+  - **Batch 1a:** Deduplicated Haversine distance function — removed copies from SchedulePage.tsx and ScanPage.tsx, now single source in `utils/scheduling.ts`
+  - **Batch 1b:** Removed unused `recurringBlockStore` and `calendarEventStore` Zustand stores (189 lines deleted)
+  - **Batch 1c:** Replaced hardcoded hex colors with CSS custom properties in SchedulePage.tsx (map markers, ghost chip, external events) and Sidebar.tsx (calendar checkboxes)
+  - **Batch 1d:** Added Space key handler to Card.tsx for WCAG keyboard accessibility
+  - **Batch 2a:** Added `fetchWithTimeout()` helper in `api/request.ts`, wrapped all 13 raw fetch() calls in sheets.ts and calendar.ts with timeout protection (30s default, 60s for batch operations)
+  - **Batch 2b:** Standardized Calendar API error handling with shared `getCalendarErrorMessage()` helper
+  - **Batch 2c:** Added Zod schemas for Google Sheets/Calendar API responses in `utils/validation.ts`, replaced `as Type` casts with `parseWithSchema()` validation
+  - **Batch 2d:** Added timeout to AI patient matching endpoint in `utils/matching.ts`
+  - **Batch 3a:** Extended `calendarSyncLockRef` to also cover `backfillLocalAppointmentsToCalendar` — prevents concurrent calendar operations
+  - **Batch 3b:** Added deleted patient tracking via localStorage — `trackDeletedPatientId()` and `getDeletedPatientIds()` in `db/operations.ts`, checked during calendar sync to prevent recreation
+  - **Batch 3c:** Replaced `Record<string, unknown>` in SyncQueueItem with discriminated union type keyed on entity field — `SyncQueueDataAppointment`, `SyncQueueDataPatient`, `SyncQueueDataCalendarEvent`
+- All 12 commits deployed to Vercel production
 
 ### Recent Commits
 ```
-9b46be7 Improve Google Auth session persistence with proactive token refresh
-d58626f Add patient-level persistent chip notes
-d4c33d2 Fix Google Calendar sync overwriting on-hold status
-ad843ab Add chip quick notes feature for per-appointment annotations
-f4cbf84 Fix on-hold appointments not persisting across page refresh
+80b2366 Strengthen SyncQueueItem data typing with discriminated union
+ff7c27d Prevent deleted patients from being recreated by calendar sync
+a717cb2 Extend calendar sync lock to cover backfill operation
+f852134 Add timeout protection to AI patient matching endpoint
+4e6c917 Add Zod schemas for Google Sheets and Calendar API responses
 ```
 
 ### Blocking Issue
@@ -34,7 +39,7 @@ f4cbf84 Fix on-hold appointments not persisting across page refresh
 - Vercel auto-deploy from git push not working — check GitHub integration settings
 - Touch drag should be tested on actual mobile device to confirm feel
 - Consider auto-scroll when dragging to edge of viewport
-- SchedulePage.tsx is now ~3000+ lines - could benefit from extracting components
+- **Batch 4 (future):** SchedulePage.tsx extraction (useDragAppointment, useResizeAppointment, usePinchZoom hooks), PatientsPage.tsx CSV extraction, useSync.ts splitting, direct Dexie access consolidation
 - Resize handle touch area overlaps chip touch area (both handlers fire) - not causing issues but could be cleaner
 - Pre-existing test failures: ErrorBoundary.test.tsx (missing beforeEach), pages.test.tsx (mock gaps for RoutePage, SettingsPage)
 
