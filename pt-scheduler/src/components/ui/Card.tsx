@@ -21,7 +21,12 @@ export function Card({ children, className = "", onClick, noPadding = false }: C
             onClick={onClick}
             role={isClickable ? "button" : undefined}
             tabIndex={isClickable ? 0 : undefined}
-            onKeyDown={isClickable ? (e) => e.key === "Enter" && onClick?.() : undefined}
+            onKeyDown={isClickable ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onClick?.();
+                }
+            } : undefined}
         >
             {children}
         </div>
