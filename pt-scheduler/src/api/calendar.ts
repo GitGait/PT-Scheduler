@@ -9,6 +9,19 @@ import { PERSONAL_PATIENT_ID } from "../utils/personalEventColors";
 
 const CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3";
 
+async function getCalendarErrorMessage(response: Response, fallback: string): Promise<string> {
+    try {
+        const payload = await response.json() as { error?: { message?: string } };
+        const message = payload.error?.message;
+        if (message) {
+            return `${fallback}: ${message}`;
+        }
+    } catch {
+        // Ignore parse errors and use fallback
+    }
+    return fallback;
+}
+
 interface CalendarEvent {
     id?: string;
     summary: string;
@@ -89,14 +102,8 @@ export async function createCalendarEvent(
     });
 
     if (!response.ok) {
-        let errorDetail = "";
-        try {
-            const errorData = await response.json();
-            errorDetail = errorData?.error?.message || JSON.stringify(errorData);
-        } catch {
-            errorDetail = response.statusText;
-        }
-        throw new Error(`Calendar API error (${response.status}): ${errorDetail}`);
+        const fallback = `Calendar API error (${response.status})`;
+        throw new Error(await getCalendarErrorMessage(response, fallback));
     }
 
     const data = await response.json();
@@ -132,7 +139,8 @@ export async function updateCalendarEvent(
     });
 
     if (!response.ok) {
-        throw new Error(`Calendar API error: ${response.status}`);
+        const fallback = `Calendar API error (${response.status})`;
+        throw new Error(await getCalendarErrorMessage(response, fallback));
     }
 }
 
@@ -155,7 +163,8 @@ export async function deleteCalendarEvent(
     });
 
     if (!response.ok && response.status !== 404) {
-        throw new Error(`Calendar API error: ${response.status}`);
+        const fallback = `Calendar API error (${response.status})`;
+        throw new Error(await getCalendarErrorMessage(response, fallback));
     }
 }
 
@@ -181,14 +190,8 @@ export async function listCalendars(): Promise<CalendarListItem[]> {
     });
 
     if (!response.ok) {
-        let errorDetail = "";
-        try {
-            const errorData = await response.json();
-            errorDetail = errorData?.error?.message || JSON.stringify(errorData);
-        } catch {
-            errorDetail = response.statusText;
-        }
-        throw new Error(`Calendar List API error (${response.status}): ${errorDetail}`);
+        const fallback = `Calendar List API error (${response.status})`;
+        throw new Error(await getCalendarErrorMessage(response, fallback));
     }
 
     const data = await response.json();
@@ -289,7 +292,8 @@ export async function listCalendarEvents(
     });
 
     if (!response.ok) {
-        throw new Error(`Calendar API error: ${response.status}`);
+        const fallback = `Calendar API error (${response.status})`;
+        throw new Error(await getCalendarErrorMessage(response, fallback));
     }
 
     const data = (await response.json()) as CalendarEventListResponse;
