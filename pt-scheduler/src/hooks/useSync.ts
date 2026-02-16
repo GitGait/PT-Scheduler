@@ -575,7 +575,7 @@ function markAppointmentBackfillRun(calendarId: string): void {
 }
 
 function parseAppointmentStatus(value?: string): AppointmentStatus {
-    if (value === "completed" || value === "cancelled" || value === "no-show") {
+    if (value === "completed" || value === "cancelled" || value === "no-show" || value === "on-hold") {
         return value;
     }
     return "scheduled";
