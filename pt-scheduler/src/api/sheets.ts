@@ -3,6 +3,7 @@
  */
 
 import { getAccessToken } from "./auth";
+import { fetchWithTimeout } from "./request";
 import type { Patient } from "../types";
 
 const SHEETS_API_BASE = "https://sheets.googleapis.com/v4/spreadsheets";
@@ -470,7 +471,7 @@ async function upsertPatientToNamedSheet(
         const updateUrl = `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(
             `${sheetTitle}!A${rowIndex}:${endCol}${rowIndex}`
         )}?valueInputOption=USER_ENTERED`;
-        const updateResponse = await fetch(updateUrl, {
+        const updateResponse = await fetchWithTimeout(updateUrl, {
             method: "PUT",
             headers: {
                 Authorization: `Bearer ${token}`,
@@ -488,7 +489,7 @@ async function upsertPatientToNamedSheet(
     const appendUrl = `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(
         `${sheetTitle}!A:${toColumnLetter(Math.max(effectiveHeaders.length, DEFAULT_PATIENT_HEADERS.length))}`
     )}:append?valueInputOption=USER_ENTERED`;
-    const appendResponse = await fetch(appendUrl, {
+    const appendResponse = await fetchWithTimeout(appendUrl, {
         method: "POST",
         headers: {
             Authorization: `Bearer ${token}`,
@@ -663,7 +664,7 @@ async function ensurePatientSheetHeaders(
     const writeUrl = `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(
         `${sheetTitle}!A1:${toColumnLetter(DEFAULT_PATIENT_HEADERS.length)}1`
     )}?valueInputOption=USER_ENTERED`;
-    const response = await fetch(writeUrl, {
+    const response = await fetchWithTimeout(writeUrl, {
         method: "PUT",
         headers: {
             Authorization: `Bearer ${token}`,
@@ -686,7 +687,7 @@ async function fetchPatientSheetRows(
 ): Promise<string[][]> {
     const range = sheetOrRange.includes("!") ? sheetOrRange : `${sheetOrRange}!A:K`;
     const fetchUrl = `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(range)}`;
-    const response = await fetch(fetchUrl, {
+    const response = await fetchWithTimeout(fetchUrl, {
         headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -719,7 +720,7 @@ async function getSheetIdByTitle(
         return null;
     }
 
-    const response = await fetch(`${SHEETS_API_BASE}/${spreadsheetId}:batchUpdate`, {
+    const response = await fetchWithTimeout(`${SHEETS_API_BASE}/${spreadsheetId}:batchUpdate`, {
         method: "POST",
         headers: {
             Authorization: `Bearer ${token}`,
@@ -748,7 +749,7 @@ async function fetchSpreadsheetMetadata(
     token: string
 ): Promise<SpreadsheetMetadata> {
     const metadataUrl = `${SHEETS_API_BASE}/${spreadsheetId}?fields=sheets.properties(sheetId,title)`;
-    const response = await fetch(metadataUrl, {
+    const response = await fetchWithTimeout(metadataUrl, {
         headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -788,14 +789,14 @@ async function deletePatientSheetRows(
             },
         }));
 
-    const response = await fetch(`${SHEETS_API_BASE}/${spreadsheetId}:batchUpdate`, {
+    const response = await fetchWithTimeout(`${SHEETS_API_BASE}/${spreadsheetId}:batchUpdate`, {
         method: "POST",
         headers: {
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
         },
         body: JSON.stringify({ requests }),
-    });
+    }, 60_000);
 
     if (!response.ok) {
         const fallback = `Sheets API error (${response.status})`;

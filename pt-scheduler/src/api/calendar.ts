@@ -3,6 +3,7 @@
  */
 
 import { getAccessToken } from "./auth";
+import { fetchWithTimeout } from "./request";
 import type { Appointment } from "../types";
 import { PERSONAL_PATIENT_ID } from "../utils/personalEventColors";
 
@@ -78,7 +79,7 @@ export async function createCalendarEvent(
     const event = buildCalendarEvent(appointment, patientName, address, patientPhone);
 
     const url = `${CALENDAR_API_BASE}/calendars/${encodeURIComponent(calendarId)}/events`;
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
         method: "POST",
         headers: {
             Authorization: `Bearer ${token}`,
@@ -121,7 +122,7 @@ export async function updateCalendarEvent(
     const event = buildCalendarEvent(appointment, patientName, address, patientPhone);
 
     const url = `${CALENDAR_API_BASE}/calendars/${encodeURIComponent(calendarId)}/events/${eventId}`;
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
         method: "PUT",
         headers: {
             Authorization: `Bearer ${token}`,
@@ -148,7 +149,7 @@ export async function deleteCalendarEvent(
     }
 
     const url = `${CALENDAR_API_BASE}/calendars/${encodeURIComponent(calendarId)}/events/${eventId}`;
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
     });
@@ -175,7 +176,7 @@ export async function listCalendars(): Promise<CalendarListItem[]> {
     }
 
     const url = `${CALENDAR_API_BASE}/users/me/calendarList`;
-    const response = await fetch(url, {
+    const response = await fetchWithTimeout(url, {
         headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -233,7 +234,7 @@ export async function fetchCalendarEvents(
     url.searchParams.set("timeMin", timeMinIso);
     url.searchParams.set("timeMax", timeMaxIso);
 
-    const response = await fetch(url.toString(), {
+    const response = await fetchWithTimeout(url.toString(), {
         headers: { Authorization: `Bearer ${token}` },
     });
 
@@ -283,7 +284,7 @@ export async function listCalendarEvents(
     url.searchParams.set("timeMin", timeMinIso);
     url.searchParams.set("timeMax", timeMaxIso);
 
-    const response = await fetch(url.toString(), {
+    const response = await fetchWithTimeout(url.toString(), {
         headers: { Authorization: `Bearer ${token}` },
     });
 
