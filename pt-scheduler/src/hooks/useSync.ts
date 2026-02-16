@@ -154,7 +154,7 @@ export function useSync(config: SyncConfig | null) {
                         "";
 
                     const existingPatient = await db.patients.get(patientId);
-                    if (!existingPatient) {
+                    if (!existingPatient && patientId !== PERSONAL_PATIENT_ID) {
                         await db.patients.add({
                             id: patientId,
                             fullName: patientName,

@@ -21,6 +21,7 @@ import { Search, Phone, X, Plus, Navigation } from "lucide-react";
 import { startOfWeek, endOfWeek } from "date-fns";
 import type { Patient, PatientStatus } from "../types";
 import type { CSVColumnMapping } from "../utils/validation";
+import { PERSONAL_PATIENT_ID } from "../utils/personalEventColors";
 
 type PatientTab = "current" | "for-other-pt" | "discharged";
 
@@ -672,6 +673,7 @@ export function PatientsPage() {
 
     const filteredPatients = patients
         .filter((p) => {
+            if (p.id === PERSONAL_PATIENT_ID) return false;
             if (activeTab === "current") {
                 if (p.status === "discharged") return false;
                 if (p.status === "for-other-pt") return isCurrentWeek(p.forOtherPtAt);
@@ -1581,7 +1583,7 @@ export function PatientsPage() {
                                 : "bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border-light)]"
                             }`}
                     >
-                        Current ({patients.filter((p) => p.status !== "discharged" && p.status !== "for-other-pt").length + patients.filter((p) => p.status === "for-other-pt" && isCurrentWeek(p.forOtherPtAt)).length})
+                        Current ({patients.filter((p) => p.id !== PERSONAL_PATIENT_ID && p.status !== "discharged" && p.status !== "for-other-pt").length + patients.filter((p) => p.id !== PERSONAL_PATIENT_ID && p.status === "for-other-pt" && isCurrentWeek(p.forOtherPtAt)).length})
                     </button>
                     <button
                         onClick={() => setActiveTab("for-other-pt")}
@@ -1590,7 +1592,7 @@ export function PatientsPage() {
                                 : "bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border-light)]"
                             }`}
                     >
-                        Other PT ({patients.filter((p) => p.status === "for-other-pt").length})
+                        Other PT ({patients.filter((p) => p.id !== PERSONAL_PATIENT_ID && p.status === "for-other-pt").length})
                     </button>
                     <button
                         onClick={() => setActiveTab("discharged")}
@@ -1599,7 +1601,7 @@ export function PatientsPage() {
                                 : "bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border-light)]"
                             }`}
                     >
-                        Discharged ({patients.filter((p) => p.status === "discharged").length})
+                        Discharged ({patients.filter((p) => p.id !== PERSONAL_PATIENT_ID && p.status === "discharged").length})
                     </button>
                 </div>
             </div>
