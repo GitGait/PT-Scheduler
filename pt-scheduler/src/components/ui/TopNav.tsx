@@ -13,8 +13,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from "lucide-react";
-import { isSignedIn, signIn, tryRestoreSignIn } from "../../api/auth";
-import { AUTH_STATE_CHANGED_EVENT } from "../../pages/SettingsPage";
+import { isSignedIn, signIn, tryRestoreSignIn, AUTH_STATE_CHANGED_EVENT } from "../../api/auth";
 
 interface TopNavProps {
   onMenuClick: () => void;
@@ -47,10 +46,11 @@ export function TopNav({ onMenuClick, showMenuButton = true }: TopNavProps) {
     // Check every 30 seconds (tokens can expire)
     const interval = setInterval(checkStatus, 30000);
 
-    // Check when tab becomes visible again
-    const handleVisibilityChange = () => {
+    // When tab becomes visible, attempt a silent refresh (not just a status check)
+    const handleVisibilityChange = async () => {
       if (document.visibilityState === "visible") {
-        checkStatus();
+        const restored = await tryRestoreSignIn();
+        setGoogleSignedIn(restored || isSignedIn());
       }
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);

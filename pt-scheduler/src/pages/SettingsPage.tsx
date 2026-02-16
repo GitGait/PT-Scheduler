@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePatientStore, useSyncStore, useThemeStore, type ThemeMode } from "../stores";
 import { Card, CardHeader } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
-import { initAuth, isSignedIn, signIn, signOut, tryRestoreSignIn, getAccessToken } from "../api/auth";
+import { initAuth, isSignedIn, signIn, signOut, tryRestoreSignIn, getAccessToken, AUTH_STATE_CHANGED_EVENT } from "../api/auth";
 import { fetchPatientsFromSheet } from "../api/sheets";
 import { createCalendarEvent, listCalendars } from "../api/calendar";
 import { geocodeAddress } from "../api/geocode";
@@ -11,8 +11,8 @@ import { db } from "../db/schema";
 import { env } from "../utils/env";
 import { getHomeBase, setHomeBase } from "../utils/scheduling";
 
-// Event for notifying other components of auth state changes
-export const AUTH_STATE_CHANGED_EVENT = "pt-scheduler:auth-state-changed";
+// Re-export for any consumers that import from here
+export { AUTH_STATE_CHANGED_EVENT } from "../api/auth";
 
 // Theme toggle component
 function ThemeToggle() {

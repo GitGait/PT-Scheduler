@@ -10,10 +10,13 @@ const SCOPES = [
 
 const TOKEN_STORAGE_KEY = "ptScheduler.googleAuthToken";
 
+export const AUTH_STATE_CHANGED_EVENT = "pt-scheduler:auth-state-changed";
+
 // Access token stored in memory and mirrored in localStorage (persists across tabs/restarts)
 let accessToken: string | null = null;
 let tokenClient: google.accounts.oauth2.TokenClient | null = null;
 let tokenExpiresAt: number = 0;
+let refreshTimerId: ReturnType<typeof setTimeout> | null = null;
 
 interface TokenResponse {
     access_token?: string;
@@ -71,15 +74,50 @@ function setToken(token: string, expiresInSeconds: number): void {
     accessToken = token;
     tokenExpiresAt = Date.now() + expiresInSeconds * 1000;
     persistToken();
+    scheduleTokenRefresh(expiresInSeconds);
 }
 
 function clearToken(): void {
+    if (refreshTimerId !== null) {
+        clearTimeout(refreshTimerId);
+        refreshTimerId = null;
+    }
     accessToken = null;
     tokenExpiresAt = 0;
     persistToken();
 }
 
+function scheduleTokenRefresh(expiresInSeconds: number): void {
+    if (refreshTimerId !== null) {
+        clearTimeout(refreshTimerId);
+        refreshTimerId = null;
+    }
+
+    // Refresh 5 minutes before expiry
+    const delayMs = (expiresInSeconds - 300) * 1000;
+    if (delayMs <= 0) return;
+
+    console.log(`[Auth] Scheduling token refresh in ${Math.round(delayMs / 1000)}s`);
+    refreshTimerId = setTimeout(async () => {
+        refreshTimerId = null;
+        try {
+            await requestAccessToken("");
+            // Success — setToken will be called by the callback, scheduling the next refresh
+        } catch {
+            console.warn("[Auth] Silent token refresh failed");
+            clearToken();
+            window.dispatchEvent(new Event(AUTH_STATE_CHANGED_EVENT));
+        }
+    }, delayMs);
+}
+
 restoreTokenFromStorage();
+
+// If a valid token was restored, schedule its refresh
+if (accessToken && tokenExpiresAt > Date.now()) {
+    const remainingSeconds = Math.floor((tokenExpiresAt - Date.now()) / 1000);
+    scheduleTokenRefresh(remainingSeconds);
+}
 
 /**
  * Initialize the Google OAuth token client.
