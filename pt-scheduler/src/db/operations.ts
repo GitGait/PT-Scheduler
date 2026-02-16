@@ -9,6 +9,29 @@ import type {
 } from "../types";
 
 // =============================================================================
+// Deleted Patient Tracking (prevents calendar sync from recreating deleted patients)
+// =============================================================================
+
+const DELETED_PATIENTS_KEY = "ptScheduler.deletedPatientIds";
+
+export function trackDeletedPatientId(id: string): void {
+    const ids = getDeletedPatientIds();
+    ids.add(id);
+    localStorage.setItem(DELETED_PATIENTS_KEY, JSON.stringify([...ids]));
+}
+
+export function getDeletedPatientIds(): Set<string> {
+    try {
+        const raw = localStorage.getItem(DELETED_PATIENTS_KEY);
+        if (!raw) return new Set();
+        const parsed = JSON.parse(raw) as string[];
+        return new Set(parsed);
+    } catch {
+        return new Set();
+    }
+}
+
+// =============================================================================
 // Patient Operations
 // =============================================================================
 
@@ -109,6 +132,7 @@ export const patientDB = {
 
     /** Delete patient */
     async delete(id: string): Promise<void> {
+        trackDeletedPatientId(id);
         await db.patients.delete(id);
     },
 };

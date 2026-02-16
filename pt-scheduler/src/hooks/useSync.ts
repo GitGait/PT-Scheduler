@@ -18,7 +18,7 @@ import {
 } from "../api/calendar";
 import { db } from "../db/schema";
 import { reconcilePatientsFromSheetSnapshot } from "../db/patientSheetSync";
-import { syncQueueDB } from "../db/operations";
+import { syncQueueDB, getDeletedPatientIds } from "../db/operations";
 import type { AppointmentStatus, SyncQueueItem, VisitType } from "../types";
 import { VISIT_TYPE_CODES } from "../types";
 import { PERSONAL_PATIENT_ID, parsePersonalCategory } from "../utils/personalEventColors";
@@ -101,6 +101,7 @@ export function useSync(config: SyncConfig | null) {
         try {
             let importedAny = false;
             let importedPatientsAny = false;
+            const deletedPatientIds = getDeletedPatientIds();
             const now = new Date();
             const timeMin = new Date(now);
             timeMin.setDate(timeMin.getDate() - CALENDAR_LOOKBACK_DAYS);
@@ -154,7 +155,7 @@ export function useSync(config: SyncConfig | null) {
                         "";
 
                     const existingPatient = await db.patients.get(patientId);
-                    if (!existingPatient && patientId !== PERSONAL_PATIENT_ID) {
+                    if (!existingPatient && patientId !== PERSONAL_PATIENT_ID && !deletedPatientIds.has(patientId)) {
                         await db.patients.add({
                             id: patientId,
                             fullName: patientName,
