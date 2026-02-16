@@ -43,6 +43,7 @@ const CALENDAR_METADATA_KEYS = {
     isPersonal: "ptSchedulerIsPersonal",
     personalCategory: "ptSchedulerPersonalCategory",
     personalTitle: "ptSchedulerPersonalTitle",
+    chipNote: "ptSchedulerChipNote",
 } as const;
 
 export interface SyncConfig {
@@ -202,6 +203,8 @@ export function useSync(config: SyncConfig | null) {
                     continue;
                 }
 
+                const chipNote = metadata[CALENDAR_METADATA_KEYS.chipNote] || existing?.chipNote || undefined;
+
                 const appointmentRecord: Record<string, unknown> = {
                     id: appointmentId,
                     patientId,
@@ -210,6 +213,7 @@ export function useSync(config: SyncConfig | null) {
                     duration: Number.isFinite(durationMinutes) ? durationMinutes : 60,
                     status,
                     visitType,
+                    chipNote,
                     syncStatus: "synced" as const,
                     calendarEventId: event.googleEventId,
                     notes: event.description,

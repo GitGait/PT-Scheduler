@@ -58,6 +58,7 @@ const CALENDAR_METADATA_KEYS = {
     isPersonal: "ptSchedulerIsPersonal",
     personalCategory: "ptSchedulerPersonalCategory",
     personalTitle: "ptSchedulerPersonalTitle",
+    chipNote: "ptSchedulerChipNote",
 } as const;
 
 /**
@@ -331,6 +332,10 @@ function buildCalendarEvent(
         privateMetadata[CALENDAR_METADATA_KEYS.patientPhone] = patientPhone ?? "";
         privateMetadata[CALENDAR_METADATA_KEYS.patientAddress] = address ?? "";
         privateMetadata[CALENDAR_METADATA_KEYS.visitType] = appointment.visitType ?? "";
+    }
+
+    if (appointment.chipNote) {
+        privateMetadata[CALENDAR_METADATA_KEYS.chipNote] = appointment.chipNote;
     }
 
     return {

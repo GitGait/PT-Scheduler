@@ -19,6 +19,10 @@ export async function reconcilePatientsFromSheetSnapshot(
     sheetPatients: Patient[]
 ): Promise<PatientSheetSyncResult> {
     for (const patient of sheetPatients) {
+        const existing = await db.patients.get(patient.id);
+        if (existing?.chipNote && !patient.chipNote) {
+            patient.chipNote = existing.chipNote;
+        }
         await db.patients.put(patient);
     }
 
