@@ -625,16 +625,8 @@ async function resolvePatientIdFromEventSummary(summary: string): Promise<string
     return patient?.id ?? null;
 }
 
-function getEntityId(item: SyncQueueItem): string | undefined {
-    const fromData =
-        item.data.entityId ??
-        item.data.patientId ??
-        item.data.appointmentId ??
-        item.data.id;
-
-    if (typeof fromData === "string") return fromData;
-    if (typeof fromData === "number") return String(fromData);
-    return undefined;
+function getEntityId(item: SyncQueueItem): string {
+    return item.data.entityId;
 }
 
 /**
@@ -763,10 +755,7 @@ async function processSyncItem(item: SyncQueueItem, config: SyncConfig): Promise
                     });
                 }
             } else if (action === "delete") {
-                const eventIdFromQueue =
-                    typeof item.data.calendarEventId === "string"
-                        ? item.data.calendarEventId
-                        : undefined;
+                const eventIdFromQueue = item.data.calendarEventId;
                 const calEvent = entityId
                     ? await db.calendarEvents.where("appointmentId").equals(entityId).first()
                     : undefined;

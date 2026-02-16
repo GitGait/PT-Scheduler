@@ -100,11 +100,28 @@ export type SyncQueueStatus =
   | "conflict"
   | "synced";
 
-export interface SyncQueueItem {
+export interface SyncQueueDataAppointment {
+  entityId: string;
+  calendarEventId?: string;
+}
+
+export interface SyncQueueDataPatient {
+  entityId: string;
+}
+
+export interface SyncQueueDataCalendarEvent {
+  entityId: string;
+  calendarEventId?: string;
+}
+
+export type SyncQueueData =
+  | SyncQueueDataAppointment
+  | SyncQueueDataPatient
+  | SyncQueueDataCalendarEvent;
+
+interface SyncQueueItemBase {
   id?: number;
   type: SyncAction;
-  entity: SyncEntity;
-  data: Record<string, unknown>;
   timestamp: Date;
   retryCount: number;
   status: SyncQueueStatus;
@@ -112,3 +129,9 @@ export interface SyncQueueItem {
   nextRetryAt?: Date;
   idempotencyKey?: string;
 }
+
+export type SyncQueueItem = SyncQueueItemBase & (
+  | { entity: "appointment"; data: SyncQueueDataAppointment }
+  | { entity: "patient"; data: SyncQueueDataPatient }
+  | { entity: "calendarEvent"; data: SyncQueueDataCalendarEvent }
+);

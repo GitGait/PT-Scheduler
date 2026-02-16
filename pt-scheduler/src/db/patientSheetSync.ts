@@ -112,18 +112,6 @@ async function getPendingPatientSyncIds(): Promise<Set<string>> {
     return pendingIds;
 }
 
-function getEntityId(item: SyncQueueItem): string | undefined {
-    const fromData =
-        item.data.entityId ??
-        item.data.patientId ??
-        item.data.appointmentId ??
-        item.data.id;
-
-    if (typeof fromData === "string") {
-        return fromData;
-    }
-    if (typeof fromData === "number") {
-        return String(fromData);
-    }
-    return undefined;
+function getEntityId(item: SyncQueueItem): string {
+    return item.data.entityId;
 }
