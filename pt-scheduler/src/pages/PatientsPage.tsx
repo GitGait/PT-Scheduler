@@ -1666,13 +1666,6 @@ export function PatientsPage() {
                         >
                             Download CSV template
                         </a>
-                        <a
-                            href="/templates/patients_sample_15.csv"
-                            download
-                            className="text-sm text-[var(--color-primary)] hover:underline"
-                        >
-                            Download sample CSV (15 patients)
-                        </a>
                     </div>
                 </Card>
 

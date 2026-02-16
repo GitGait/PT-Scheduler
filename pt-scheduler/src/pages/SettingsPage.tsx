@@ -583,13 +583,6 @@ export function SettingsPage() {
                     >
                         Download CSV template
                     </a>
-                    <a
-                        href="/templates/patients_sample_15.csv"
-                        download
-                        className="inline-block text-sm text-[var(--color-primary)] hover:underline"
-                    >
-                        Download sample CSV (15 patients)
-                    </a>
                 </div>
             </Card>
 
