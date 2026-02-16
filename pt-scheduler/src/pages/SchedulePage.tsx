@@ -2487,7 +2487,7 @@ export function SchedulePage() {
                                         {timeSlots.map((slotMinutes) => {
                                             const slotTime = minutesToTimeString(slotMinutes);
                                             const isHourMark = slotMinutes % 60 === 0;
-                                            const hourIndex = Math.floor((slotMinutes - DAY_START_MINUTES) / 60);
+                                            const hourIndex = Math.floor(slotMinutes / 60);
                                             const isEvenHour = hourIndex % 2 === 0;
 
                                             return (
