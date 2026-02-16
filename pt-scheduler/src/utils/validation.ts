@@ -87,6 +87,43 @@ export const distanceMatrixResponseSchema = z.object({
 });
 
 // =============================================================================
+// Google Sheets API Response Schemas
+// =============================================================================
+
+export const sheetValuesSchema = z.object({
+  values: z.array(z.array(z.string())).default([]),
+});
+
+export const spreadsheetMetadataSchema = z.object({
+  sheets: z.array(z.object({
+    properties: z.object({
+      sheetId: z.number().optional(),
+      title: z.string().optional(),
+    }).optional(),
+  })).default([]),
+});
+
+// =============================================================================
+// Google Calendar API Response Schemas
+// =============================================================================
+
+export const calendarEventListItemSchema = z.object({
+  id: z.string().optional(),
+  summary: z.string().optional(),
+  location: z.string().optional(),
+  description: z.string().optional(),
+  start: z.object({ dateTime: z.string().optional() }).optional(),
+  end: z.object({ dateTime: z.string().optional() }).optional(),
+  extendedProperties: z.object({
+    private: z.record(z.string(), z.string()).optional(),
+  }).optional(),
+});
+
+export const calendarEventListResponseSchema = z.object({
+  items: z.array(calendarEventListItemSchema).default([]),
+});
+
+// =============================================================================
 // Inferred Types (derived from schemas - never define these separately!)
 // =============================================================================
 
@@ -102,6 +139,10 @@ export type CSVColumnMapping = z.infer<typeof csvColumnMappingSchema>;
 export type CSVMappingResponse = z.infer<typeof csvMappingResponseSchema>;
 export type DistanceMatrixElement = z.infer<typeof distanceMatrixElementSchema>;
 export type DistanceMatrixResponse = z.infer<typeof distanceMatrixResponseSchema>;
+export type SheetValues = z.infer<typeof sheetValuesSchema>;
+export type SpreadsheetMetadata = z.infer<typeof spreadsheetMetadataSchema>;
+export type CalendarEventListItem = z.infer<typeof calendarEventListItemSchema>;
+export type CalendarEventListResponse = z.infer<typeof calendarEventListResponseSchema>;
 
 // =============================================================================
 // Request Validation Schemas (for serverless endpoints)

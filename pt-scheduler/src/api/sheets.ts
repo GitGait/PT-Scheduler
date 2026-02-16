@@ -5,6 +5,8 @@
 import { getAccessToken } from "./auth";
 import { fetchWithTimeout } from "./request";
 import type { Patient } from "../types";
+import { sheetValuesSchema, spreadsheetMetadataSchema, parseWithSchema } from "../utils/validation";
+import type { SpreadsheetMetadata } from "../utils/validation";
 
 const SHEETS_API_BASE = "https://sheets.googleapis.com/v4/spreadsheets";
 const ALT_CONTACT_ENTRY_SEPARATOR = ";";
@@ -12,19 +14,6 @@ const ALT_CONTACT_PART_SEPARATOR = "|";
 const PATIENTS_SHEET_TITLE = "Patients";
 const DISCHARGE_SHEET_TITLE = "Discharge";
 const FOR_OTHER_PT_SHEET_TITLE = "For Other PT";
-
-interface SheetValues {
-    values: string[][];
-}
-
-interface SpreadsheetMetadata {
-    sheets?: Array<{
-        properties?: {
-            sheetId?: number;
-            title?: string;
-        };
-    }>;
-}
 
 type AlternateContact = Patient["alternateContacts"][number];
 
@@ -699,8 +688,9 @@ async function fetchPatientSheetRows(
         throw new Error(await getSheetsErrorMessage(response, fallback));
     }
 
-    const payload = (await response.json()) as SheetValues;
-    return payload.values || [];
+    const raw = await response.json();
+    const payload = parseWithSchema(sheetValuesSchema, raw, "Sheets values response");
+    return payload.values;
 }
 
 async function getSheetIdByTitle(
@@ -758,7 +748,8 @@ async function fetchSpreadsheetMetadata(
         throw new Error(await getSheetsErrorMessage(response, fallback));
     }
 
-    return (await response.json()) as SpreadsheetMetadata;
+    const raw = await response.json();
+    return parseWithSchema(spreadsheetMetadataSchema, raw, "Spreadsheet metadata response");
 }
 
 async function deletePatientSheetRows(

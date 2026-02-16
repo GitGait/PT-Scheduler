@@ -6,6 +6,8 @@ import { getAccessToken } from "./auth";
 import { fetchWithTimeout } from "./request";
 import type { Appointment } from "../types";
 import { PERSONAL_PATIENT_ID } from "../utils/personalEventColors";
+import { calendarEventListResponseSchema, parseWithSchema } from "../utils/validation";
+import type { CalendarEventListItem } from "../utils/validation";
 
 const CALENDAR_API_BASE = "https://www.googleapis.com/calendar/v3";
 
@@ -32,22 +34,6 @@ interface CalendarEvent {
     };
     start: { dateTime: string; timeZone: string };
     end: { dateTime: string; timeZone: string };
-}
-
-interface CalendarEventListItem {
-    id?: string;
-    summary?: string;
-    location?: string;
-    description?: string;
-    start?: { dateTime?: string };
-    end?: { dateTime?: string };
-    extendedProperties?: {
-        private?: Record<string, string>;
-    };
-}
-
-interface CalendarEventListResponse {
-    items?: CalendarEventListItem[];
 }
 
 export interface CalendarSyncedEvent {
@@ -296,8 +282,9 @@ export async function listCalendarEvents(
         throw new Error(await getCalendarErrorMessage(response, fallback));
     }
 
-    const data = (await response.json()) as CalendarEventListResponse;
-    const items = data.items ?? [];
+    const raw = await response.json();
+    const data = parseWithSchema(calendarEventListResponseSchema, raw, "Calendar events response");
+    const items = data.items;
 
     return items
         .filter((item): item is CalendarEventListItem & { id: string } => Boolean(item.id))
