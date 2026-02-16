@@ -2434,7 +2434,7 @@ export function SchedulePage() {
                                         className="relative pr-2 text-right"
                                         style={{ height: SLOT_HEIGHT_PX }}
                                     >
-                                        {slotIndex % 4 === 0 && (
+                                        {slotMinutes % 60 === 0 && (
                                             <span className="absolute top-0 right-2 text-[10px] leading-none text-[var(--color-text-tertiary)]">
                                                 {formatAxisTime(slotMinutes)}
                                             </span>

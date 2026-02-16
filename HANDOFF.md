@@ -5,26 +5,23 @@
 ## Last Session: 2026-02-15
 
 ### What Was Done
-- **Added on-hold appointments feature**
-  - New `"on-hold"` status in `AppointmentStatus` union
-  - `byStatus` query added to `appointmentDB` in `db/operations.ts`
-  - Store actions: `loadOnHold`, `putOnHold`, `restoreFromHold` in `appointmentStore.ts`
-  - `pendingRestoreFromHoldId` in `scheduleStore.ts` bridges Sidebar↔SchedulePage communication
-  - "Put on Hold" button (amber, PauseCircle icon) in `AppointmentActionSheet.tsx`
-  - Collapsible "On Hold" section in `Sidebar.tsx` with count badge, auto-expand/collapse, compact cards with amber left border
-  - On-hold appointments filtered from calendar grid (`appointmentsByDay`, `appointmentCountsByDay`, `selectedDayAppointments`)
-  - Restore flow: tap card in sidebar → `restoreFromHold()` changes status back to scheduled → enters move mode → user taps grid slot to place it
-  - Files modified: `types/index.ts`, `db/operations.ts`, `stores/appointmentStore.ts`, `stores/scheduleStore.ts`, `components/AppointmentActionSheet.tsx`, `components/ui/Sidebar.tsx`, `pages/SchedulePage.tsx`
-- Commit: `6032502`
+- **Improved Google Auth session persistence** — token no longer silently expires
+  - Added proactive refresh timer in `auth.ts` — schedules silent token renewal 5 min before expiry
+  - `scheduleTokenRefresh()` runs after every `setToken()` call and on restored tokens from localStorage
+  - On refresh failure: clears token and dispatches `AUTH_STATE_CHANGED_EVENT` so UI updates
+  - Moved `AUTH_STATE_CHANGED_EVENT` constant to `auth.ts` (canonical home), re-exported from `SettingsPage.tsx`
+  - `TopNav.tsx` visibility handler now calls `tryRestoreSignIn()` (actual refresh) instead of just `isSignedIn()` (status check)
+  - Files modified: `api/auth.ts`, `components/ui/TopNav.tsx`, `pages/SettingsPage.tsx`
+- Commit: `9b46be7`
 - Deployed to Vercel production
 
 ### Recent Commits
 ```
-6032502 Add on-hold appointments feature for temporarily shelving patients
-06dd632 Add IDT Meeting category and recurring personal events
-1a67bce Fix personal event colors to avoid clashing with PT visit type colors
-d17fd30 Add personal events to schedule grid (lunch, meetings, errands, etc.)
-a440390 Add ~ prefix for estimated distances and improve Distance Matrix logging
+9b46be7 Improve Google Auth session persistence with proactive token refresh
+d58626f Add patient-level persistent chip notes
+d4c33d2 Fix Google Calendar sync overwriting on-hold status
+ad843ab Add chip quick notes feature for per-appointment annotations
+f4cbf84 Fix on-hold appointments not persisting across page refresh
 ```
 
 ### Blocking Issue
