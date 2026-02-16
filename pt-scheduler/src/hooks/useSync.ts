@@ -284,6 +284,10 @@ export function useSync(config: SyncConfig | null) {
         if (!config?.calendarId || !isSignedIn()) return;
         if (!shouldRunAppointmentBackfill(config.calendarId)) return;
 
+        // Share the calendar sync lock to prevent concurrent operations
+        if (calendarSyncLockRef.current) return;
+        calendarSyncLockRef.current = true;
+
         try {
             const now = new Date();
             const timeMin = new Date(now);
@@ -365,6 +369,8 @@ export function useSync(config: SyncConfig | null) {
         } catch (err) {
             console.error("Appointment backfill failed:", err);
             setLastSyncError(err instanceof Error ? err.message : "Appointment backfill failed");
+        } finally {
+            calendarSyncLockRef.current = false;
         }
     }, [config?.calendarId]);
 
