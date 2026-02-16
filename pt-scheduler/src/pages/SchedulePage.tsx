@@ -2704,13 +2704,13 @@ export function SchedulePage() {
                                                         </div>
 
                                                         {/* Chip quick note banner */}
-                                                        {appointment.chipNote && (
+                                                        {(appointment.chipNote ?? patient?.chipNote) && (
                                                             <div
                                                                 className="absolute bottom-0 left-0 right-0 bg-yellow-400 text-yellow-950 text-[10px] font-semibold px-1.5 py-0.5 truncate leading-tight pointer-events-none"
                                                                 style={{ zIndex: 2 }}
-                                                                title={appointment.chipNote}
+                                                                title={appointment.chipNote ?? patient?.chipNote}
                                                             >
-                                                                {appointment.chipNote}
+                                                                {appointment.chipNote ?? patient?.chipNote}
                                                             </div>
                                                         )}
 
@@ -3257,6 +3257,13 @@ export function SchedulePage() {
                         }}
                         onChipNote={(text) => {
                             void update(actionSheetAppointmentId, { chipNote: text || undefined });
+                        }}
+                        onPatientChipNote={(text) => {
+                            if (actionAppointment.patientId) {
+                                void updatePatient(actionAppointment.patientId, { chipNote: text || undefined });
+                            }
+                            // Clear appointment-level chipNote so patient-level takes over
+                            void update(actionSheetAppointmentId, { chipNote: undefined });
                         }}
                         onDelete={() => {
                             void handleDeleteAppointment(actionAppointment);

@@ -14,6 +14,7 @@ interface AppointmentActionSheetProps {
     onCopy: () => void;
     onHold: () => void;
     onChipNote: (text: string) => void;
+    onPatientChipNote: (text: string) => void;
     onDelete: () => void;
 }
 
@@ -58,11 +59,16 @@ export function AppointmentActionSheet({
     onCopy,
     onHold,
     onChipNote,
+    onPatientChipNote,
     onDelete,
 }: AppointmentActionSheetProps) {
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
     const [chipNoteMode, setChipNoteMode] = useState(false);
-    const [chipNoteText, setChipNoteText] = useState(appointment.chipNote ?? "");
+    const isPersonal = isPersonalEvent(appointment);
+    const noteFromPatient = !appointment.chipNote && Boolean(patient?.chipNote);
+    const effectiveNote = appointment.chipNote ?? patient?.chipNote ?? "";
+    const [chipNoteText, setChipNoteText] = useState(effectiveNote);
+    const [applyToAll, setApplyToAll] = useState(!isPersonal && (noteFromPatient || (!appointment.chipNote && !patient?.chipNote)));
 
     const copyToClipboard = useCallback((text: string, key: string) => {
         void navigator.clipboard.writeText(text);
@@ -74,7 +80,6 @@ export function AppointmentActionSheet({
         return null;
     }
 
-    const isPersonal = isPersonalEvent(appointment);
     const headerName = isPersonal
         ? (appointment.title || getPersonalCategoryLabel(appointment.personalCategory))
         : (patient?.fullName ?? "Unknown Patient");
@@ -295,40 +300,70 @@ export function AppointmentActionSheet({
 
                     {/* Quick Note */}
                     {chipNoteMode ? (
-                        <div className="flex items-center gap-2 px-4 py-3">
-                            <input
-                                type="text"
-                                value={chipNoteText}
-                                onChange={(e) => setChipNoteText(e.target.value)}
-                                placeholder="e.g., Call 15 min before"
-                                autoFocus
-                                className="flex-1 px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                        onChipNote(chipNoteText.trim());
-                                        onClose();
-                                    }
-                                }}
-                            />
-                            <button
-                                onClick={() => {
-                                    onChipNote(chipNoteText.trim());
-                                    onClose();
-                                }}
-                                className="px-3 py-2 rounded-lg bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition-colors"
-                            >
-                                Save
-                            </button>
-                            {appointment.chipNote && (
+                        <div className="px-4 py-3 space-y-2">
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="text"
+                                    value={chipNoteText}
+                                    onChange={(e) => setChipNoteText(e.target.value)}
+                                    placeholder="e.g., Call 15 min before"
+                                    autoFocus
+                                    className="flex-1 px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            if (applyToAll && !isPersonal) {
+                                                onPatientChipNote(chipNoteText.trim());
+                                            } else {
+                                                onChipNote(chipNoteText.trim());
+                                            }
+                                            onClose();
+                                        }
+                                    }}
+                                />
                                 <button
                                     onClick={() => {
-                                        onChipNote("");
+                                        if (applyToAll && !isPersonal) {
+                                            onPatientChipNote(chipNoteText.trim());
+                                        } else {
+                                            onChipNote(chipNoteText.trim());
+                                        }
                                         onClose();
                                     }}
-                                    className="px-3 py-2 rounded-lg bg-red-100 dark:bg-red-950 text-red-600 dark:text-red-400 text-sm font-medium hover:bg-red-200 dark:hover:bg-red-900 transition-colors"
+                                    className="px-3 py-2 rounded-lg bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition-colors"
                                 >
-                                    Clear
+                                    Save
                                 </button>
+                                {effectiveNote && (
+                                    <button
+                                        onClick={() => {
+                                            if (applyToAll && !isPersonal) {
+                                                onPatientChipNote("");
+                                            } else {
+                                                onChipNote("");
+                                            }
+                                            onClose();
+                                        }}
+                                        className="px-3 py-2 rounded-lg bg-red-100 dark:bg-red-950 text-red-600 dark:text-red-400 text-sm font-medium hover:bg-red-200 dark:hover:bg-red-900 transition-colors"
+                                    >
+                                        Clear
+                                    </button>
+                                )}
+                            </div>
+                            {!isPersonal && (
+                                <label className="flex items-center gap-2 px-1 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={applyToAll}
+                                        onChange={(e) => setApplyToAll(e.target.checked)}
+                                        className="w-4 h-4 rounded border-[var(--color-border)] text-amber-500 focus:ring-amber-400 accent-amber-500"
+                                    />
+                                    <span className="text-sm text-[var(--color-text-secondary)]">Apply to all appointments</span>
+                                </label>
+                            )}
+                            {effectiveNote && (
+                                <p className="text-[11px] text-[var(--color-text-tertiary)] px-1 italic">
+                                    {noteFromPatient ? "Note from patient record" : "Note on this appointment"}
+                                </p>
                             )}
                         </div>
                     ) : (
@@ -339,9 +374,9 @@ export function AppointmentActionSheet({
                             <div className="w-10 h-10 flex items-center justify-center rounded-full bg-amber-100 dark:bg-amber-950">
                                 <StickyNote className="w-5 h-5 text-amber-600 dark:text-amber-400" />
                             </div>
-                            <span className="font-medium">{appointment.chipNote ? "Edit Note" : "Quick Note"}</span>
-                            {appointment.chipNote && (
-                                <span className="ml-auto text-sm text-[var(--color-text-secondary)] truncate max-w-[140px]">{appointment.chipNote}</span>
+                            <span className="font-medium">{effectiveNote ? "Edit Note" : "Quick Note"}</span>
+                            {effectiveNote && (
+                                <span className="ml-auto text-sm text-[var(--color-text-secondary)] truncate max-w-[140px]">{effectiveNote}</span>
                             )}
                         </button>
                     )}

@@ -36,6 +36,7 @@ export interface Patient {
   insuranceInfo?: string;
   referralSource?: string;
   notes: string;
+  chipNote?: string;
   sheetsRowIndex?: number;
   createdAt: Date;
   updatedAt: Date;
