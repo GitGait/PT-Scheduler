@@ -157,8 +157,8 @@ export function Sidebar({
                   type="checkbox"
                   checked={enabledCalendars["pt-appointments"] !== false}
                   onChange={() => toggleCalendar("pt-appointments")}
-                  className="w-4 h-4 rounded border-2 accent-[#039be5]"
-                  style={{ accentColor: "#039be5" }}
+                  className="w-4 h-4 rounded border-2"
+                  style={{ accentColor: "var(--color-event-blue)" }}
                 />
                 <span className="text-sm text-[var(--color-text-primary)]">PT Appointments</span>
               </label>
@@ -176,7 +176,7 @@ export function Sidebar({
                       checked={enabledCalendars[cal.id] !== false}
                       onChange={() => toggleCalendar(cal.id)}
                       className="w-4 h-4 rounded border-2"
-                      style={{ accentColor: cal.backgroundColor || "#33b679" }}
+                      style={{ accentColor: cal.backgroundColor || "var(--color-event-green)" }}
                     />
                     <span className="text-sm text-[var(--color-text-primary)] truncate">
                       {cal.primary ? "Personal" : cal.summary}
@@ -210,7 +210,7 @@ export function Sidebar({
                       checked={enabledCalendars[cal.id] !== false}
                       onChange={() => toggleCalendar(cal.id)}
                       className="w-4 h-4 rounded border-2"
-                      style={{ accentColor: cal.backgroundColor || "#0b8043" }}
+                      style={{ accentColor: cal.backgroundColor || "var(--color-event-green)" }}
                     />
                     <span className="text-sm text-[var(--color-text-primary)] truncate">{cal.summary}</span>
                   </label>

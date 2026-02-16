@@ -2121,9 +2121,13 @@ export function SchedulePage() {
             layer.clearLayers();
             const bounds = L.latLngBounds([]);
 
+            const computedStyle = getComputedStyle(document.documentElement);
+            const mapRedColor = computedStyle.getPropertyValue("--color-event-red").trim();
+            const mapBlueColor = computedStyle.getPropertyValue("--color-primary").trim();
+
             for (let index = 0; index < dayMapPoints.length; index += 1) {
                 const point = dayMapPoints[index];
-                const color = point.isHome ? "#d93025" : "#1a73e8";
+                const color = point.isHome ? mapRedColor : mapBlueColor;
                 const marker = L.circleMarker([point.lat, point.lng], {
                     radius: point.isHome ? 9 : 7,
                     color,
@@ -2148,7 +2152,7 @@ export function SchedulePage() {
                     number
                 ][];
                 L.polyline(routeCoordinates, {
-                    color: "#1a73e8",
+                    color: mapBlueColor,
                     opacity: 0.55,
                     weight: 3,
                     dashArray: "6,6",
@@ -2753,7 +2757,7 @@ export function SchedulePage() {
                                                 );
 
                                                 // Use calendar color or default
-                                                const bgColor = event.backgroundColor || "#33b679";
+                                                const bgColor = event.backgroundColor || "var(--color-event-green)";
 
                                                 return (
                                                     <div
@@ -2847,7 +2851,7 @@ export function SchedulePage() {
                         top: touchDragGhost.y - 20,
                         width: 120,
                         height: 40,
-                        background: 'linear-gradient(135deg, #1a73e8 0%, #4285f4 100%)',
+                        background: 'linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-hover) 100%)',
                         opacity: 0.9,
                     }}
                 >
