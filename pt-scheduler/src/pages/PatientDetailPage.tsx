@@ -23,7 +23,7 @@ interface EditFormData {
 export function PatientDetailPage() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
-    const { patients, loadAll, update, discharge, reactivate, delete: deletePatient } = usePatientStore();
+    const { patients, loadAll, update, discharge, markForOtherPt, reactivate, delete: deletePatient } = usePatientStore();
     const [patient, setPatient] = useState<Patient | null>(null);
     const [isEditing, setIsEditing] = useState(false);
     const [formData, setFormData] = useState<EditFormData | null>(null);
@@ -62,11 +62,17 @@ export function PatientDetailPage() {
     }
 
     const handleStatusToggle = async () => {
-        if (patient.status === "active") {
+        if (patient.status === "active" || patient.status === "evaluation") {
             await discharge(patient.id);
+        } else if (patient.status === "for-other-pt") {
+            await reactivate(patient.id);
         } else {
             await reactivate(patient.id);
         }
+    };
+
+    const handleMarkForOtherPt = async () => {
+        await markForOtherPt(patient.id);
     };
 
     const handleStartEdit = () => {
@@ -104,7 +110,7 @@ export function PatientDetailPage() {
         setFormError(null);
 
         try {
-            await update(patient.id, {
+            const changes: Partial<Omit<Patient, "id" | "createdAt">> = {
                 fullName: formData.fullName.trim(),
                 nicknames: formData.nicknames
                     .split(",")
@@ -115,7 +121,13 @@ export function PatientDetailPage() {
                 address: formData.address.trim(),
                 notes: formData.notes.trim(),
                 status: formData.status,
-            });
+            };
+            if (formData.status === "for-other-pt" && patient.status !== "for-other-pt") {
+                changes.forOtherPtAt = new Date();
+            } else if (formData.status !== "for-other-pt") {
+                changes.forOtherPtAt = undefined;
+            }
+            await update(patient.id, changes);
             setIsEditing(false);
         } catch (err) {
             setFormError(err instanceof Error ? err.message : "Failed to update patient.");
@@ -247,6 +259,7 @@ export function PatientDetailPage() {
                         >
                             <option value="active">Active</option>
                             <option value="evaluation">Evaluation</option>
+                            <option value="for-other-pt">For Other PT</option>
                             <option value="discharged">Discharged</option>
                         </select>
                     </div>
@@ -309,10 +322,12 @@ export function PatientDetailPage() {
                             ? "bg-green-100 dark:bg-green-950 text-green-700 dark:text-green-300"
                             : patient.status === "evaluation"
                             ? "bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400"
+                            : patient.status === "for-other-pt"
+                            ? "bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300"
                             : "bg-[var(--color-border-light)] text-[var(--color-text-secondary)]"
                         }`}
                 >
-                    {patient.status}
+                    {patient.status === "for-other-pt" ? "For Other PT" : patient.status}
                 </span>
             </div>
 
@@ -418,12 +433,23 @@ export function PatientDetailPage() {
                         <Edit2 className="w-4 h-4 mr-2" />
                         Edit
                     </Button>
+                    {patient.status !== "for-other-pt" && patient.status !== "discharged" && (
+                        <Button
+                            variant="secondary"
+                            className="flex-1"
+                            onClick={() => void handleMarkForOtherPt()}
+                        >
+                            Other PT
+                        </Button>
+                    )}
                     <Button
-                        variant={patient.status === "active" ? "danger" : "primary"}
+                        variant={patient.status === "active" || patient.status === "evaluation" ? "danger" : "primary"}
                         className="flex-1"
-                        onClick={handleStatusToggle}
+                        onClick={() => void handleStatusToggle()}
                     >
-                        {patient.status === "active" ? "Discharge" : "Reactivate"}
+                        {patient.status === "active" || patient.status === "evaluation"
+                            ? "Discharge"
+                            : "Reactivate"}
                     </Button>
                 </div>
             </div>

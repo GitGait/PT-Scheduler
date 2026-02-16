@@ -78,10 +78,20 @@ export const patientDB = {
         });
     },
 
+    /** Mark patient as belonging to another PT */
+    async markForOtherPt(id: string): Promise<void> {
+        await db.patients.update(id, {
+            status: "for-other-pt" as PatientStatus,
+            forOtherPtAt: new Date(),
+            updatedAt: new Date(),
+        });
+    },
+
     /** Reactivate patient */
     async reactivate(id: string): Promise<void> {
         await db.patients.update(id, {
             status: "active" as PatientStatus,
+            forOtherPtAt: undefined,
             updatedAt: new Date(),
         });
     },

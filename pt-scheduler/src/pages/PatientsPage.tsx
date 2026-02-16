@@ -18,8 +18,19 @@ import {
 import { db } from "../db/schema";
 import { patientDB, syncQueueDB } from "../db/operations";
 import { Search, Phone, X, Plus, Navigation } from "lucide-react";
+import { startOfWeek, endOfWeek } from "date-fns";
 import type { Patient, PatientStatus } from "../types";
 import type { CSVColumnMapping } from "../utils/validation";
+
+type PatientTab = "current" | "for-other-pt" | "discharged";
+
+function isCurrentWeek(date?: Date): boolean {
+    if (!date) return false;
+    const now = new Date();
+    const weekStart = startOfWeek(now, { weekStartsOn: 1 }); // Monday
+    const weekEnd = endOfWeek(now, { weekStartsOn: 1 });       // Sunday
+    return date >= weekStart && date <= weekEnd;
+}
 
 interface PatientFormData {
     fullName: string;
@@ -269,6 +280,7 @@ function parsePatientStatus(value: string): PatientStatus {
     const normalized = value.trim().toLowerCase();
     if (normalized === "discharged") return "discharged";
     if (normalized === "evaluation") return "evaluation";
+    if (normalized === "for-other-pt") return "for-other-pt";
     return "active";
 }
 
@@ -623,7 +635,7 @@ export function PatientsPage() {
     const { patients, loadAll, search, loading, add } = usePatientStore();
     const { spreadsheetId, refreshPendingCount } = useSyncStore();
     const [searchQuery, setSearchQuery] = useState("");
-    const [showDischarged, setShowDischarged] = useState(false);
+    const [activeTab, setActiveTab] = useState<PatientTab>("current");
     const [isAddOpen, setIsAddOpen] = useState(false);
     const [formData, setFormData] = useState<PatientFormData>(emptyForm);
     const [formError, setFormError] = useState<string | null>(null);
@@ -659,7 +671,15 @@ export function PatientsPage() {
     }, [searchQuery, search, loadAll]);
 
     const filteredPatients = patients
-        .filter((p) => showDischarged ? p.status === "discharged" : p.status !== "discharged")
+        .filter((p) => {
+            if (activeTab === "current") {
+                if (p.status === "discharged") return false;
+                if (p.status === "for-other-pt") return isCurrentWeek(p.forOtherPtAt);
+                return true;
+            }
+            if (activeTab === "for-other-pt") return p.status === "for-other-pt";
+            return p.status === "discharged";
+        })
         .sort((a, b) => a.fullName.localeCompare(b.fullName));
 
     const handleOpenAdd = () => {
@@ -1491,6 +1511,7 @@ export function PatientsPage() {
                 email: normalizedEmail || undefined,
                 status: formData.status,
                 notes: notesWithEmail,
+                ...(formData.status === "for-other-pt" ? { forOtherPtAt: new Date() } : {}),
             });
 
             const targetSpreadsheetId = spreadsheetId.trim();
@@ -1554,17 +1575,26 @@ export function PatientsPage() {
                 </div>
                 <div className="flex gap-2 mt-3">
                     <button
-                        onClick={() => setShowDischarged(false)}
-                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${!showDischarged
+                        onClick={() => setActiveTab("current")}
+                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === "current"
                                 ? "bg-[var(--color-primary-light)] text-[var(--color-primary)]"
                                 : "bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border-light)]"
                             }`}
                     >
-                        Current ({patients.filter((p) => p.status !== "discharged").length})
+                        Current ({patients.filter((p) => p.status !== "discharged" && p.status !== "for-other-pt").length + patients.filter((p) => p.status === "for-other-pt" && isCurrentWeek(p.forOtherPtAt)).length})
                     </button>
                     <button
-                        onClick={() => setShowDischarged(true)}
-                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${showDischarged
+                        onClick={() => setActiveTab("for-other-pt")}
+                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === "for-other-pt"
+                                ? "bg-[var(--color-primary-light)] text-[var(--color-primary)]"
+                                : "bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border-light)]"
+                            }`}
+                    >
+                        Other PT ({patients.filter((p) => p.status === "for-other-pt").length})
+                    </button>
+                    <button
+                        onClick={() => setActiveTab("discharged")}
+                        className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${activeTab === "discharged"
                                 ? "bg-[var(--color-primary-light)] text-[var(--color-primary)]"
                                 : "bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:bg-[var(--color-border-light)]"
                             }`}
@@ -1977,6 +2007,7 @@ export function PatientsPage() {
                                 >
                                     <option value="active">Active</option>
                                     <option value="evaluation">Evaluation</option>
+                                    <option value="for-other-pt">For Other PT</option>
                                     <option value="discharged">Discharged</option>
                                 </select>
                             </div>

@@ -19,7 +19,7 @@ export type {
 // Domain Types (Patient, Appointment, etc.)
 // =============================================================================
 
-export type PatientStatus = "active" | "discharged" | "evaluation";
+export type PatientStatus = "active" | "discharged" | "evaluation" | "for-other-pt";
 
 export interface Patient {
   id: string;
@@ -38,6 +38,7 @@ export interface Patient {
   notes: string;
   chipNote?: string;
   sheetsRowIndex?: number;
+  forOtherPtAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }

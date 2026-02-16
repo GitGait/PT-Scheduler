@@ -10,6 +10,7 @@ const ALT_CONTACT_ENTRY_SEPARATOR = ";";
 const ALT_CONTACT_PART_SEPARATOR = "|";
 const PATIENTS_SHEET_TITLE = "Patients";
 const DISCHARGE_SHEET_TITLE = "Discharge";
+const FOR_OTHER_PT_SHEET_TITLE = "For Other PT";
 
 interface SheetValues {
     values: string[][];
@@ -97,7 +98,7 @@ export function serializeAlternateContactsField(contacts: AlternateContact[]): s
  */
 export async function fetchPatientsFromSheet(
     spreadsheetId: string,
-    range = `${PATIENTS_SHEET_TITLE}!A:J`
+    range = `${PATIENTS_SHEET_TITLE}!A:K`
 ): Promise<Patient[]> {
     const token = await getAccessToken();
     if (!token) {
@@ -136,7 +137,7 @@ export async function fetchPatientsFromSheet(
         }
     };
 
-    if (range !== `${PATIENTS_SHEET_TITLE}!A:J`) {
+    if (range !== `${PATIENTS_SHEET_TITLE}!A:K`) {
         const rows = await fetchPatientSheetRows(spreadsheetId, token, range, false);
         if (rows.length < 2) {
             return [];
@@ -153,6 +154,7 @@ export async function fetchPatientsFromSheet(
 
     await loadTabPatients(PATIENTS_SHEET_TITLE);
     await loadTabPatients(DISCHARGE_SHEET_TITLE, "discharged");
+    await loadTabPatients(FOR_OTHER_PT_SHEET_TITLE, "for-other-pt");
 
     return [...allPatients.values()];
 }
@@ -189,13 +191,22 @@ export async function syncPatientToSheetByStatus(
         throw new Error("Not authenticated");
     }
 
-    const targetTitle =
-        patient.status === "discharged" ? DISCHARGE_SHEET_TITLE : PATIENTS_SHEET_TITLE;
-    const otherTitle =
-        targetTitle === PATIENTS_SHEET_TITLE ? DISCHARGE_SHEET_TITLE : PATIENTS_SHEET_TITLE;
+    const allTabs = [PATIENTS_SHEET_TITLE, DISCHARGE_SHEET_TITLE, FOR_OTHER_PT_SHEET_TITLE];
+    let targetTitle: string;
+    if (patient.status === "discharged") {
+        targetTitle = DISCHARGE_SHEET_TITLE;
+    } else if (patient.status === "for-other-pt") {
+        targetTitle = FOR_OTHER_PT_SHEET_TITLE;
+    } else {
+        targetTitle = PATIENTS_SHEET_TITLE;
+    }
 
     await upsertPatientToNamedSheet(spreadsheetId, token, targetTitle, patient);
-    await deletePatientRowsByIdsInSheet(spreadsheetId, token, otherTitle, [patient.id]);
+    for (const tab of allTabs) {
+        if (tab !== targetTitle) {
+            await deletePatientRowsByIdsInSheet(spreadsheetId, token, tab, [patient.id]);
+        }
+    }
 }
 
 /**
@@ -231,7 +242,13 @@ export async function deletePatientsFromSheetByIds(
         DISCHARGE_SHEET_TITLE,
         idList
     );
-    return removedFromPatients + removedFromDischarge;
+    const removedFromForOtherPt = await deletePatientRowsByIdsInSheet(
+        spreadsheetId,
+        token,
+        FOR_OTHER_PT_SHEET_TITLE,
+        idList
+    );
+    return removedFromPatients + removedFromDischarge + removedFromForOtherPt;
 }
 
 /**
@@ -256,6 +273,11 @@ export async function removeDuplicatePatientRowsInSheet(
         token,
         DISCHARGE_SHEET_TITLE
     );
+    const inForOtherPt = await removeDuplicateRowsInSinglePatientSheet(
+        spreadsheetId,
+        token,
+        FOR_OTHER_PT_SHEET_TITLE
+    );
 
     // If same ID exists in both tabs, keep discharged copy and remove active-tab copy.
     const dischargeIds = await getPatientIdsInSheet(spreadsheetId, token, DISCHARGE_SHEET_TITLE);
@@ -266,7 +288,16 @@ export async function removeDuplicatePatientRowsInSheet(
         [...dischargeIds]
     );
 
-    return inPatients + inDischarge + removedFromPatients;
+    // Also remove For Other PT IDs from the Patients tab.
+    const forOtherPtIds = await getPatientIdsInSheet(spreadsheetId, token, FOR_OTHER_PT_SHEET_TITLE);
+    const removedFromPatientsForOtherPt = await deletePatientRowsByIdsInSheet(
+        spreadsheetId,
+        token,
+        PATIENTS_SHEET_TITLE,
+        [...forOtherPtIds]
+    );
+
+    return inPatients + inDischarge + inForOtherPt + removedFromPatients + removedFromPatientsForOtherPt;
 }
 
 /**
@@ -290,6 +321,9 @@ function parsePatientRow(
         return null;
     }
 
+    const forOtherPtAtRaw = getValue("forOtherPtAt");
+    const forOtherPtAtDate = forOtherPtAtRaw ? new Date(forOtherPtAtRaw) : undefined;
+
     return {
         id,
         fullName,
@@ -304,6 +338,7 @@ function parsePatientRow(
         email: getValue("email") || undefined,
         status: forcedStatus ?? parsedStatus,
         notes: getValue("notes"),
+        forOtherPtAt: forOtherPtAtDate && !isNaN(forOtherPtAtDate.getTime()) ? forOtherPtAtDate : undefined,
         createdAt: new Date(),
         updatedAt: new Date(),
     };
@@ -392,6 +427,7 @@ const DEFAULT_PATIENT_HEADERS = [
     "lng",
     "status",
     "notes",
+    "forOtherPtAt",
 ];
 
 async function upsertPatientToNamedSheet(
@@ -601,6 +637,7 @@ function buildPatientRowForHeaders(headers: string[], patient: Patient): string[
     setCell(["status"], patient.status);
     setCell(["notes"], patient.notes || "");
     setCell(["email"], patient.email || "");
+    setCell(["forotherptat"], patient.forOtherPtAt ? patient.forOtherPtAt.toISOString() : "");
 
     return row;
 }
@@ -647,7 +684,7 @@ async function fetchPatientSheetRows(
     sheetOrRange: string,
     throwIfMissing = true
 ): Promise<string[][]> {
-    const range = sheetOrRange.includes("!") ? sheetOrRange : `${sheetOrRange}!A:J`;
+    const range = sheetOrRange.includes("!") ? sheetOrRange : `${sheetOrRange}!A:K`;
     const fetchUrl = `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(range)}`;
     const response = await fetch(fetchUrl, {
         headers: { Authorization: `Bearer ${token}` },

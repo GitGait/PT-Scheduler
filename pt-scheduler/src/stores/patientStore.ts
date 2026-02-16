@@ -17,6 +17,7 @@ interface PatientActions {
     add: (patient: Omit<Patient, "id" | "createdAt" | "updatedAt">) => Promise<string>;
     update: (id: string, changes: Partial<Omit<Patient, "id" | "createdAt">>) => Promise<void>;
     discharge: (id: string) => Promise<void>;
+    markForOtherPt: (id: string) => Promise<void>;
     reactivate: (id: string) => Promise<void>;
     delete: (id: string) => Promise<void>;
     clearError: () => void;
@@ -139,6 +140,22 @@ export const usePatientStore = create<PatientState & PatientActions>((set, get) 
         }
     },
 
+    markForOtherPt: async (id: string) => {
+        set({ error: null });
+        try {
+            await patientDB.markForOtherPt(id);
+            await enqueuePatientSync("update", id);
+            const now = new Date();
+            set((state) => ({
+                patients: state.patients.map((p) =>
+                    p.id === id ? { ...p, status: "for-other-pt" as PatientStatus, forOtherPtAt: now, updatedAt: now } : p
+                ),
+            }));
+        } catch (err) {
+            set({ error: err instanceof Error ? err.message : "Failed to mark patient for other PT" });
+        }
+    },
+
     reactivate: async (id: string) => {
         set({ error: null });
         try {
@@ -146,7 +163,7 @@ export const usePatientStore = create<PatientState & PatientActions>((set, get) 
             await enqueuePatientSync("update", id);
             set((state) => ({
                 patients: state.patients.map((p) =>
-                    p.id === id ? { ...p, status: "active" as PatientStatus, updatedAt: new Date() } : p
+                    p.id === id ? { ...p, status: "active" as PatientStatus, forOtherPtAt: undefined, updatedAt: new Date() } : p
                 ),
             }));
         } catch (err) {

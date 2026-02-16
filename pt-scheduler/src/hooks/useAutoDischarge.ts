@@ -54,7 +54,7 @@ export async function processAutoDischarges(): Promise<number> {
     // Only discharge if today >= Saturday of that appointment's week
     if (todayStr >= saturdayStr) {
       const patient = await patientDB.get(appt.patientId);
-      if (patient && patient.status !== "discharged") {
+      if (patient && patient.status !== "discharged" && patient.status !== "for-other-pt") {
         await usePatientStore.getState().discharge(appt.patientId);
         dischargedCount++;
       }
