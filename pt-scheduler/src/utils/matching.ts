@@ -1,4 +1,5 @@
 import Fuse from "fuse.js";
+import { fetchWithTimeout } from "../api/request";
 
 // ---------------------------------------------------------------------------
 // Nickname mapping for alias expansion
@@ -168,7 +169,7 @@ async function aiMatch(
   try {
     const candidateNames = candidates.map((c) => c.fullName);
 
-    const response = await fetch("/api/match-patient", {
+    const response = await fetchWithTimeout("/api/match-patient", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ocrName: rawName, candidateNames }),
