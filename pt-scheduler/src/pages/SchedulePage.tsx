@@ -51,9 +51,8 @@ const DAY_START_MINUTES = 7 * 60 + 30; // 7:30 AM
 const DAY_END_MINUTES = 20 * 60;
 const SLOT_HEIGHT_PX = 48;
 const MIN_DURATION_MINUTES = 15;
-const EARTH_RADIUS_MILES = 3958.8;
 const AVERAGE_DRIVE_SPEED_MPH = 30;
-import { getHomeBase } from "../utils/scheduling";
+import { getHomeBase, calculateMilesBetweenCoordinates } from "../utils/scheduling";
 const APPOINTMENTS_SYNCED_EVENT = "pt-scheduler:appointments-synced";
 const REQUEST_SYNC_EVENT = "pt-scheduler:request-sync";
 
@@ -138,23 +137,6 @@ const isValidQuarterHour = (time: string): boolean => {
     return minutes % SLOT_MINUTES === 0;
 };
 
-const toRadians = (degrees: number): number => degrees * (Math.PI / 180);
-
-const calculateMilesBetweenCoordinates = (
-    from: { lat: number; lng: number },
-    to: { lat: number; lng: number }
-): number => {
-    const deltaLat = toRadians(to.lat - from.lat);
-    const deltaLng = toRadians(to.lng - from.lng);
-    const fromLat = toRadians(from.lat);
-    const toLat = toRadians(to.lat);
-
-    const a =
-        Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
-        Math.cos(fromLat) * Math.cos(toLat) * Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return EARTH_RADIUS_MILES * c;
-};
 
 function orderByFarthestFromHome<T extends { lat: number; lng: number }>(
     items: T[],

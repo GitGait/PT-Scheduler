@@ -28,29 +28,8 @@ interface OCRResult extends ExtractedAppointment {
     isMatching: boolean;
 }
 
-import { getHomeBase } from "../utils/scheduling";
-const EARTH_RADIUS_MILES = 3958.8;
+import { getHomeBase, calculateMilesBetweenCoordinates } from "../utils/scheduling";
 const SLOT_MINUTES = 15;
-
-function toRadians(degrees: number): number {
-    return degrees * (Math.PI / 180);
-}
-
-function calculateMilesBetweenCoordinates(
-    from: { lat: number; lng: number },
-    to: { lat: number; lng: number }
-): number {
-    const deltaLat = toRadians(to.lat - from.lat);
-    const deltaLng = toRadians(to.lng - from.lng);
-    const fromLat = toRadians(from.lat);
-    const toLat = toRadians(to.lat);
-
-    const a =
-        Math.sin(deltaLat / 2) * Math.sin(deltaLat / 2) +
-        Math.cos(fromLat) * Math.cos(toLat) * Math.sin(deltaLng / 2) * Math.sin(deltaLng / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return EARTH_RADIUS_MILES * c;
-}
 
 function timeStringToMinutes(time: string): number {
     const [hours, minutes] = time.split(":").map((value) => Number(value));
