@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { usePatientStore, useSyncStore } from "../stores";
 import { Card, CardHeader } from "../components/ui/Card";
@@ -638,6 +638,8 @@ export function PatientsPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [activeTab, setActiveTab] = useState<PatientTab>("current");
     const [isAddOpen, setIsAddOpen] = useState(false);
+    const backdropMouseDownRef = useRef<EventTarget | null>(null);
+    const formContentRef = useRef<HTMLDivElement>(null);
     const [formData, setFormData] = useState<PatientFormData>(emptyForm);
     const [formError, setFormError] = useState<string | null>(null);
     const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -1487,6 +1489,9 @@ export function PatientsPage() {
     const handleSubmit = async () => {
         if (!formData.fullName.trim()) {
             setFormError("Patient name is required.");
+            requestAnimationFrame(() => {
+                formContentRef.current?.scrollTo({ top: formContentRef.current.scrollHeight, behavior: "smooth" });
+            });
             return;
         }
 
@@ -1871,13 +1876,17 @@ export function PatientsPage() {
             {isAddOpen && (
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
-                    onClick={handleCloseAdd}
+                    onMouseDown={(e) => { backdropMouseDownRef.current = e.target; }}
+                    onClick={(e) => {
+                        if (e.target === e.currentTarget && backdropMouseDownRef.current === e.currentTarget) {
+                            handleCloseAdd();
+                        }
+                    }}
                 >
                     <div
-                        className="bg-[var(--color-surface)] rounded-lg shadow-2xl w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto animate-slide-in"
-                        onClick={(event) => event.stopPropagation()}
+                        className="bg-[var(--color-surface)] rounded-lg shadow-2xl w-full max-w-md mx-4 max-h-[90vh] flex flex-col animate-slide-in"
                     >
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)] sticky top-0 bg-[var(--color-surface)]">
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)] shrink-0">
                             <h2 className="text-lg font-medium text-[var(--color-text-primary)]">Add Patient</h2>
                             <button
                                 onClick={handleCloseAdd}
@@ -1887,7 +1896,7 @@ export function PatientsPage() {
                             </button>
                         </div>
 
-                        <div className="p-6 space-y-4">
+                        <div ref={formContentRef} className="p-6 space-y-4 overflow-y-auto flex-1 min-h-0">
                             <div>
                                 <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                                     Intake Text (AI Extract)
@@ -2032,7 +2041,7 @@ export function PatientsPage() {
                             )}
                         </div>
 
-                        <div className="flex justify-end gap-2 px-6 py-4 border-t border-[var(--color-border)] sticky bottom-0 bg-[var(--color-surface)]">
+                        <div className="flex justify-end gap-2 px-6 py-4 border-t border-[var(--color-border)] shrink-0">
                             <Button variant="ghost" onClick={handleCloseAdd} disabled={isSaving}>
                                 Cancel
                             </Button>
