@@ -203,7 +203,7 @@ export function useSync(config: SyncConfig | null) {
                     continue;
                 }
 
-                const chipNote = metadata[CALENDAR_METADATA_KEYS.chipNote] || existing?.chipNote || undefined;
+                const chipNote = metadata[CALENDAR_METADATA_KEYS.chipNote] ?? existing?.chipNote;
 
                 const appointmentRecord: Record<string, unknown> = {
                     id: appointmentId,
@@ -213,13 +213,18 @@ export function useSync(config: SyncConfig | null) {
                     duration: Number.isFinite(durationMinutes) ? durationMinutes : 60,
                     status,
                     visitType,
-                    chipNote,
                     syncStatus: "synced" as const,
                     calendarEventId: event.googleEventId,
                     notes: event.description,
                     createdAt: existing?.createdAt ?? new Date(),
                     updatedAt: new Date(),
                 };
+
+                // Only include chipNote when it has a value — passing
+                // undefined to Dexie's .update() deletes the property.
+                if (chipNote) {
+                    appointmentRecord.chipNote = chipNote;
+                }
 
                 if (isPersonalEvent) {
                     appointmentRecord.personalCategory = parsePersonalCategory(
