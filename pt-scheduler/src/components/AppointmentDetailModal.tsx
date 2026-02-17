@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { X, Phone, MapPin, Clock, FileText, Save, Loader2, Tag, Users, Plus, Trash2 } from "lucide-react";
 import { Button } from "./ui/Button";
 import type { Appointment, Patient, VisitType } from "../types";
@@ -41,9 +41,20 @@ export function AppointmentDetailModal({
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
     const isPersonal = isPersonalEvent(appointment);
+    const initializedRef = useRef(false);
 
-    // Initialize form values when modal opens or patient/appointment changes
+    // Initialize form values once when modal opens — gated by ref so
+    // background sync refreshing patient/appointment props won't overwrite edits
     useEffect(() => {
+        if (!isOpen) {
+            initializedRef.current = false;
+            return;
+        }
+        if (initializedRef.current) {
+            return;
+        }
+        initializedRef.current = true;
+
         if (patient) {
             setPhone(patient.phone || "");
             setAddress(patient.address || "");
