@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePatientStore, useSyncStore, useThemeStore, type ThemeMode } from "../stores";
 import { Card, CardHeader } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
-import { initAuth, isSignedIn, signIn, signOut, tryRestoreSignIn, getAccessToken, AUTH_STATE_CHANGED_EVENT } from "../api/auth";
+import { initAuth, isSignedIn, signIn, signOut, getAccessToken, AUTH_STATE_CHANGED_EVENT } from "../api/auth";
 import { fetchPatientsFromSheet } from "../api/sheets";
 import { createCalendarEvent, listCalendars } from "../api/calendar";
 import { geocodeAddress } from "../api/geocode";
@@ -107,39 +107,23 @@ export function SettingsPage() {
             return;
         }
 
+        // initAuth is idempotent — the app-level useGoogleAuth hook handles retry logic.
+        // This just ensures local state is up-to-date when SettingsPage mounts.
         let cancelled = false;
-        const maxAttempts = 20;
 
-        const initWithRetry = async () => {
-            for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-                try {
-                    await initAuth(env.googleClientId);
-                    const restored = await tryRestoreSignIn();
-                    if (!cancelled) {
-                        setAuthReady(true);
-                        setSignedIn(restored || isSignedIn());
-                        setStatusError(null);
-                    }
-                    return;
-                } catch (err) {
-                    const message =
-                        err instanceof Error ? err.message : "Google auth initialization failed";
-                    const shouldRetry = message.includes("Google Identity Services not loaded");
-
-                    if (!shouldRetry || attempt === maxAttempts) {
-                        if (!cancelled) {
-                            setAuthReady(false);
-                            setStatusError(message);
-                        }
-                        return;
-                    }
-
-                    await new Promise((resolve) => setTimeout(resolve, 300));
-                }
+        void initAuth(env.googleClientId).then(() => {
+            if (!cancelled) {
+                setAuthReady(true);
+                setSignedIn(isSignedIn());
+                setStatusError(null);
             }
-        };
-
-        void initWithRetry();
+        }).catch(() => {
+            // Already initialized by useGoogleAuth; just sync local state
+            if (!cancelled) {
+                setAuthReady(isSignedIn());
+                setSignedIn(isSignedIn());
+            }
+        });
 
         return () => {
             cancelled = true;
@@ -170,9 +154,8 @@ export function SettingsPage() {
 
         try {
             await initAuth(env.googleClientId);
-            const restored = await tryRestoreSignIn();
             setAuthReady(true);
-            setSignedIn(restored || isSignedIn());
+            setSignedIn(isSignedIn());
             setStatusError(null);
             return true;
         } catch (err) {

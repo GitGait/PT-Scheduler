@@ -5,6 +5,7 @@ import { Sidebar } from "./components/ui/Sidebar";
 import { TopNav } from "./components/ui/TopNav";
 import { useSync } from "./hooks/useSync";
 import { useAutoDischarge } from "./hooks/useAutoDischarge";
+import { useGoogleAuth } from "./hooks/useGoogleAuth";
 import { useSyncStore, useScheduleStore } from "./stores";
 import {
   SchedulePage,
@@ -69,6 +70,7 @@ function App() {
     [spreadsheetId, calendarId]
   );
 
+  useGoogleAuth();
   useSync(syncConfig);
   useAutoDischarge();
 

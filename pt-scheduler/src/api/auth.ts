@@ -124,6 +124,8 @@ if (accessToken && tokenExpiresAt > Date.now()) {
  * Must be called after GIS script loads.
  */
 export function initAuth(clientId: string): Promise<void> {
+    if (tokenClient) return Promise.resolve(); // Already initialized
+
     return new Promise((resolve, reject) => {
         if (!window.google?.accounts?.oauth2) {
             reject(new Error("Google Identity Services not loaded"));
