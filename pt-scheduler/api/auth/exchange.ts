@@ -52,8 +52,10 @@ export default async function handler(
         const data = await response.json();
 
         if (!response.ok) {
+            console.error("Google token exchange failed:", JSON.stringify(data));
             res.status(401).json({
                 error: data.error_description || "Token exchange failed",
+                google_error: data.error,
                 code: "TOKEN_EXCHANGE_FAILED",
             });
             return;
