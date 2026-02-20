@@ -169,7 +169,9 @@ export function initAuth(clientId: string): Promise<void> {
                 scope: SCOPES,
                 ux_mode: "popup",
                 callback: async (response: CodeResponse) => {
+                    console.log("[Auth] Code callback fired", response.error || "OK");
                     if (response.error) {
+                        console.error("[Auth] Code response error:", response.error, response.error_description);
                         pendingReject?.(
                             new Error(response.error_description || response.error)
                         );
@@ -179,23 +181,27 @@ export function initAuth(clientId: string): Promise<void> {
                     }
 
                     try {
+                        console.log("[Auth] Exchanging code with server...");
                         const resp = await fetch("/api/auth/exchange", {
                             method: "POST",
                             headers: { "Content-Type": "application/json" },
                             credentials: "include",
                             body: JSON.stringify({ code: response.code }),
                         });
+                        console.log("[Auth] Exchange response:", resp.status, resp.statusText);
 
                         if (!resp.ok) {
                             const err = await resp
                                 .json()
                                 .catch(() => ({ error: "Token exchange failed" }));
+                            console.error("[Auth] Exchange failed:", err);
                             throw new Error(
                                 (err as { error?: string }).error || "Token exchange failed"
                             );
                         }
 
                         const data: ServerTokenResponse = await resp.json();
+                        console.log("[Auth] Exchange succeeded, persistent:", data.persistent);
                         setToken(data.access_token, data.expires_in);
                         if (data.persistent === false) {
                             console.warn("[Auth] No refresh token received — sign-in won't persist. Revoke app at myaccount.google.com/permissions and re-sign-in.");
@@ -203,6 +209,7 @@ export function initAuth(clientId: string): Promise<void> {
                         window.dispatchEvent(new Event(AUTH_STATE_CHANGED_EVENT));
                         pendingResolve?.(data.access_token);
                     } catch (err) {
+                        console.error("[Auth] Sign-in error:", err);
                         pendingReject?.(
                             err instanceof Error ? err : new Error("Token exchange failed")
                         );
