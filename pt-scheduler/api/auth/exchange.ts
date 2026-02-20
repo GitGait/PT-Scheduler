@@ -80,7 +80,7 @@ export default async function handler(
             res.setHeader("Set-Cookie", cookie);
         }
 
-        res.status(200).json({ access_token, expires_in });
+        res.status(200).json({ access_token, expires_in, persistent: !!refresh_token });
     } catch (err) {
         console.error("Exchange handler error:", err);
         res.status(500).json({

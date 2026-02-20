@@ -33,6 +33,7 @@ interface CodeResponse {
 interface ServerTokenResponse {
     access_token: string;
     expires_in: number;
+    persistent?: boolean;
     error?: string;
 }
 
@@ -196,6 +197,9 @@ export function initAuth(clientId: string): Promise<void> {
 
                         const data: ServerTokenResponse = await resp.json();
                         setToken(data.access_token, data.expires_in);
+                        if (data.persistent === false) {
+                            console.warn("[Auth] No refresh token received — sign-in won't persist. Revoke app at myaccount.google.com/permissions and re-sign-in.");
+                        }
                         window.dispatchEvent(new Event(AUTH_STATE_CHANGED_EVENT));
                         pendingResolve?.(data.access_token);
                     } catch (err) {
