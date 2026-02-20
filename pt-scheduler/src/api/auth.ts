@@ -168,7 +168,6 @@ export function initAuth(clientId: string): Promise<void> {
                 client_id: clientId,
                 scope: SCOPES,
                 ux_mode: "popup",
-                access_type: "offline",
                 callback: async (response: CodeResponse) => {
                     if (response.error) {
                         pendingReject?.(
