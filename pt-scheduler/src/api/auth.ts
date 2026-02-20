@@ -1,6 +1,7 @@
 /**
  * Google Identity Services (GIS) authentication module.
- * Uses OAuth 2.0 implicit flow for client-side authentication.
+ * Uses OAuth 2.0 authorization code flow with server-side refresh tokens
+ * for persistent sessions that survive browser restarts and token expiry.
  */
 
 const SCOPES = [
@@ -14,20 +15,26 @@ export const AUTH_STATE_CHANGED_EVENT = "pt-scheduler:auth-state-changed";
 
 // Access token stored in memory and mirrored in localStorage (persists across tabs/restarts)
 let accessToken: string | null = null;
-let tokenClient: google.accounts.oauth2.TokenClient | null = null;
+let codeClient: google.accounts.oauth2.CodeClient | null = null;
 let tokenExpiresAt: number = 0;
 let refreshTimerId: ReturnType<typeof setTimeout> | null = null;
 
-interface TokenResponse {
-    access_token?: string;
-    expires_in?: number;
-    token_type?: string;
-    scope?: string;
+// Pending sign-in promise handlers (resolved by the GIS code callback)
+let pendingResolve: ((token: string) => void) | null = null;
+let pendingReject: ((err: Error) => void) | null = null;
+
+interface CodeResponse {
+    code: string;
+    scope: string;
     error?: string;
     error_description?: string;
 }
 
-type TokenPrompt = "" | "consent";
+interface ServerTokenResponse {
+    access_token: string;
+    expires_in: number;
+    error?: string;
+}
 
 interface StoredToken {
     accessToken: string;
@@ -101,8 +108,8 @@ function scheduleTokenRefresh(expiresInSeconds: number): void {
     refreshTimerId = setTimeout(async () => {
         refreshTimerId = null;
         try {
-            await requestAccessToken("");
-            // Success — setToken will be called by the callback, scheduling the next refresh
+            await refreshViaServer();
+            // Success — setToken schedules the next refresh
         } catch {
             console.warn("[Auth] Silent token refresh failed");
             clearToken();
@@ -111,6 +118,29 @@ function scheduleTokenRefresh(expiresInSeconds: number): void {
     }, delayMs);
 }
 
+/**
+ * Exchange refresh token cookie for a new access token via the server.
+ */
+async function refreshViaServer(): Promise<string> {
+    const resp = await fetch("/api/auth/refresh", {
+        method: "POST",
+        credentials: "include",
+    });
+
+    if (!resp.ok) {
+        throw new Error("Refresh failed");
+    }
+
+    const data: ServerTokenResponse = await resp.json();
+    if (!data.access_token || !data.expires_in) {
+        throw new Error("Invalid refresh response");
+    }
+
+    setToken(data.access_token, data.expires_in);
+    return data.access_token;
+}
+
+// Restore token from localStorage on module load
 restoreTokenFromStorage();
 
 // If a valid token was restored, schedule its refresh
@@ -120,11 +150,11 @@ if (accessToken && tokenExpiresAt > Date.now()) {
 }
 
 /**
- * Initialize the Google OAuth token client.
+ * Initialize the Google OAuth code client.
  * Must be called after GIS script loads.
  */
 export function initAuth(clientId: string): Promise<void> {
-    if (tokenClient) return Promise.resolve(); // Already initialized
+    if (codeClient) return Promise.resolve(); // Already initialized
 
     return new Promise((resolve, reject) => {
         if (!window.google?.accounts?.oauth2) {
@@ -133,13 +163,54 @@ export function initAuth(clientId: string): Promise<void> {
         }
 
         try {
-            tokenClient = window.google.accounts.oauth2.initTokenClient({
+            codeClient = window.google.accounts.oauth2.initCodeClient({
                 client_id: clientId,
                 scope: SCOPES,
-                callback: (response: TokenResponse) => {
-                    if (response.access_token && response.expires_in) {
-                        setToken(response.access_token, response.expires_in);
+                ux_mode: "popup",
+                callback: async (response: CodeResponse) => {
+                    if (response.error) {
+                        pendingReject?.(
+                            new Error(response.error_description || response.error)
+                        );
+                        pendingResolve = null;
+                        pendingReject = null;
+                        return;
                     }
+
+                    try {
+                        const resp = await fetch("/api/auth/exchange", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            credentials: "include",
+                            body: JSON.stringify({ code: response.code }),
+                        });
+
+                        if (!resp.ok) {
+                            const err = await resp
+                                .json()
+                                .catch(() => ({ error: "Token exchange failed" }));
+                            throw new Error(
+                                (err as { error?: string }).error || "Token exchange failed"
+                            );
+                        }
+
+                        const data: ServerTokenResponse = await resp.json();
+                        setToken(data.access_token, data.expires_in);
+                        window.dispatchEvent(new Event(AUTH_STATE_CHANGED_EVENT));
+                        pendingResolve?.(data.access_token);
+                    } catch (err) {
+                        pendingReject?.(
+                            err instanceof Error ? err : new Error("Token exchange failed")
+                        );
+                    }
+
+                    pendingResolve = null;
+                    pendingReject = null;
+                },
+                error_callback: (error: { type: string }) => {
+                    pendingReject?.(new Error(error.type || "Sign-in cancelled"));
+                    pendingResolve = null;
+                    pendingReject = null;
                 },
             });
             resolve();
@@ -154,61 +225,50 @@ export function initAuth(clientId: string): Promise<void> {
  * Opens Google sign-in popup.
  */
 export function signIn(): Promise<string> {
-    return requestAccessToken("consent");
+    return new Promise((resolve, reject) => {
+        if (!codeClient) {
+            reject(new Error("Auth not initialized"));
+            return;
+        }
+
+        pendingResolve = resolve;
+        pendingReject = reject;
+        codeClient.requestCode();
+    });
 }
 
 /**
- * Attempt a silent sign-in using existing Google session.
+ * Attempt to restore sign-in using the server-side refresh token.
  * Returns true if a valid token was restored.
  */
 export async function tryRestoreSignIn(): Promise<boolean> {
-    if (!tokenClient) return false;
-
+    // Valid token already in memory (from localStorage)
     if (accessToken && Date.now() < tokenExpiresAt - 60000) {
         return true;
     }
 
+    // Try server-side refresh (httpOnly cookie)
     try {
-        await requestAccessToken("");
+        await refreshViaServer();
         return true;
     } catch {
         return false;
     }
 }
 
-function requestAccessToken(prompt: TokenPrompt): Promise<string> {
-    return new Promise((resolve, reject) => {
-        if (!tokenClient) {
-            reject(new Error("Auth not initialized"));
-            return;
-        }
-
-        // Override callback for this request
-        const originalCallback = tokenClient.callback;
-        tokenClient.callback = (response: TokenResponse) => {
-            if (response.access_token && response.expires_in) {
-                setToken(response.access_token, response.expires_in);
-                resolve(response.access_token);
-            } else if (response.error) {
-                reject(new Error(response.error_description || response.error));
-            } else {
-                reject(new Error("Sign-in failed"));
-            }
-            tokenClient!.callback = originalCallback;
-        };
-
-        tokenClient.requestAccessToken({ prompt });
-    });
-}
-
 /**
- * Sign out and clear the access token.
+ * Sign out and clear the access token + server refresh token.
  */
 export function signOut(): void {
-    if (accessToken) {
-        google.accounts.oauth2.revoke(accessToken, () => { });
-    }
     clearToken();
+
+    // Clear the server-side refresh token cookie
+    fetch("/api/auth/refresh", {
+        method: "DELETE",
+        credentials: "include",
+    }).catch(() => {
+        // Best effort — cookie will eventually expire
+    });
 }
 
 /**
@@ -224,16 +284,12 @@ export async function getAccessToken(): Promise<string | null> {
         clearToken();
     }
 
-    // Try a silent refresh if auth is initialized and user has already granted consent.
-    if (tokenClient) {
-        try {
-            return await requestAccessToken("");
-        } catch {
-            return null;
-        }
+    // Try a server-side refresh using the httpOnly cookie
+    try {
+        return await refreshViaServer();
+    } catch {
+        return null;
     }
-
-    return null;
 }
 
 /**
@@ -248,18 +304,20 @@ export function isSignedIn(): boolean {
 }
 
 /**
- * Add type declarations for Google Identity Services.
+ * Add type declarations for Google Identity Services (Code Client).
  */
 declare global {
     interface Window {
         google?: {
             accounts: {
                 oauth2: {
-                    initTokenClient: (config: {
+                    initCodeClient: (config: {
                         client_id: string;
                         scope: string;
-                        callback: (response: TokenResponse) => void;
-                    }) => google.accounts.oauth2.TokenClient;
+                        ux_mode: string;
+                        callback: (response: CodeResponse) => void;
+                        error_callback?: (error: { type: string }) => void;
+                    }) => google.accounts.oauth2.CodeClient;
                     revoke: (token: string, callback: () => void) => void;
                 };
             };
@@ -267,9 +325,8 @@ declare global {
     }
 
     namespace google.accounts.oauth2 {
-        interface TokenClient {
-            callback: (response: TokenResponse) => void;
-            requestAccessToken: (options?: { prompt?: string }) => void;
+        interface CodeClient {
+            requestCode: () => void;
         }
     }
 }
