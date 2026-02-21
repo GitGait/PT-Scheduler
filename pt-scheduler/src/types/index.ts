@@ -88,6 +88,22 @@ export interface CalendarEvent {
 }
 
 // =============================================================================
+// Day Notes (Sticky Notes)
+// =============================================================================
+
+export type DayNoteColor = "yellow" | "blue" | "green" | "pink" | "purple" | "orange";
+
+export interface DayNote {
+  id: string;            // UUID v4
+  date: string;          // YYYY-MM-DD
+  text: string;          // free-text content
+  color: DayNoteColor;   // default "yellow"
+  startMinutes?: number; // grid position (minutes from midnight), default 720 (noon)
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// =============================================================================
 // Sync Queue Types
 // =============================================================================
 

@@ -9,7 +9,7 @@ import {
     type MouseEvent,
     type TouchEvent,
 } from "react";
-import { useAppointmentStore, usePatientStore, useScheduleStore, useSyncStore, type ExternalCalendarEvent } from "../stores";
+import { useAppointmentStore, usePatientStore, useScheduleStore, useSyncStore, useDayNoteStore, type ExternalCalendarEvent } from "../stores";
 import { fetchCalendarEvents } from "../api/calendar";
 import { isSignedIn } from "../api/auth";
 import { syncPatientToSheetByStatus } from "../api/sheets";
@@ -19,6 +19,10 @@ import { ScheduleGridSkeleton } from "../components/ui/Skeleton";
 import { ScheduleEmptyState } from "../components/ui/EmptyState";
 import { AppointmentDetailModal } from "../components/AppointmentDetailModal";
 import { AppointmentActionSheet } from "../components/AppointmentActionSheet";
+import { DayNoteIndicator } from "../components/DayNoteIndicator";
+import { DayNoteModal } from "../components/DayNoteModal";
+import { SlotActionMenu } from "../components/SlotActionMenu";
+import { DayNoteChip } from "../components/DayNoteChip";
 import { geocodeAddress } from "../api/geocode";
 import { getDistanceMatrix } from "../api/distance";
 import { db } from "../db/schema";
@@ -340,6 +344,8 @@ export function SchedulePage() {
     const { patients, loadAll, update: updatePatient } = usePatientStore();
     const { appointments, loading, loadByRange, markComplete, create, update, delete: deleteAppointment, loadOnHold, putOnHold } =
         useAppointmentStore();
+    const { notes: dayNotes, loadByRange: loadDayNotes, create: createDayNote, update: updateDayNote, delete: deleteDayNote, moveNote } =
+        useDayNoteStore();
 
     const weekDates = useMemo(() => getWeekDates(selectedDate), [selectedDate]);
     const weekStart = weekDates[0];
@@ -366,7 +372,8 @@ export function SchedulePage() {
         if (!weekStart || !weekEnd) return;
         void loadByRange(weekStart, weekEnd);
         void loadOnHold();
-    }, [loadByRange, loadOnHold, weekStart, weekEnd]);
+        void loadDayNotes(weekStart, weekEnd);
+    }, [loadByRange, loadOnHold, loadDayNotes, weekStart, weekEnd]);
 
     useEffect(() => {
         const handleAppointmentsSynced = () => {
@@ -379,6 +386,7 @@ export function SchedulePage() {
             pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 10 };
             void loadByRange(weekStart, weekEnd);
             void loadOnHold();
+            void loadDayNotes(weekStart, weekEnd);
         };
 
         window.addEventListener(APPOINTMENTS_SYNCED_EVENT, handleAppointmentsSynced);
@@ -525,6 +533,37 @@ export function SchedulePage() {
 
         return grouped;
     }, [appointments, weekDates]);
+
+    // Group day notes by date
+    const notesByDay = useMemo(() => {
+        const grouped: Record<string, import("../types").DayNote[]> = {};
+        for (const date of displayDates) {
+            grouped[date] = [];
+        }
+        for (const note of dayNotes) {
+            if (grouped[note.date]) {
+                grouped[note.date].push(note);
+            }
+        }
+        return grouped;
+    }, [dayNotes, displayDates]);
+
+    const [dayNoteDate, setDayNoteDate] = useState<string | null>(null);
+    const [dayNotePrefillMinutes, setDayNotePrefillMinutes] = useState<number | undefined>(undefined);
+    const [slotActionMenu, setSlotActionMenu] = useState<{ date: string; startTime: string; anchorRect: DOMRect } | null>(null);
+    const [draggingNoteId, setDraggingNoteId] = useState<string | null>(null);
+    const [noteDragPreview, setNoteDragPreview] = useState<{ date: string; startTime: string } | null>(null);
+
+    // Touch drag refs for note dragging
+    const touchDragNoteRef = useRef<{
+        noteId: string;
+        startX: number;
+        startY: number;
+        activated: boolean;
+    } | null>(null);
+    const touchDragNoteTimerRef = useRef<number | null>(null);
+    const touchDragNoteGhostRef = useRef<{ x: number; y: number; text: string } | null>(null);
+    const [touchDragNoteGhost, setTouchDragNoteGhost] = useState<{ x: number; y: number; text: string } | null>(null);
 
     // Group external events by day
     const externalEventsByDay = useMemo(() => {
@@ -851,6 +890,55 @@ export function SchedulePage() {
         setIsAddOpen(true);
     };
 
+    const openSlotMenu = (date: string, startTime: string, anchorEl: Element | null) => {
+        if (!anchorEl) return;
+        const rect = anchorEl.getBoundingClientRect();
+        setSlotActionMenu({ date, startTime, anchorRect: rect });
+    };
+
+    const openNoteForSlot = (date: string, startMinutes: number) => {
+        setDayNotePrefillMinutes(startMinutes);
+        setDayNoteDate(date);
+    };
+
+    // Note drag handlers (HTML5 DnD)
+    const handleNoteDragStart = (e: DragEvent<HTMLDivElement>, noteId: string) => {
+        e.dataTransfer.setData("application/x-daynote", noteId);
+        e.dataTransfer.effectAllowed = "move";
+        setDraggingNoteId(noteId);
+    };
+
+    const handleNoteDragEnd = () => {
+        setDraggingNoteId(null);
+        setNoteDragPreview(null);
+    };
+
+    // Note touch drag
+    const handleNoteTouchStart = (e: TouchEvent<HTMLDivElement>, noteId: string, noteText: string) => {
+        if (resizeSessionRef.current || resizingAppointmentId) return;
+
+        const touch = e.touches[0];
+        touchDragNoteRef.current = {
+            noteId,
+            startX: touch.clientX,
+            startY: touch.clientY,
+            activated: false,
+        };
+
+        touchDragNoteTimerRef.current = window.setTimeout(() => {
+            if (touchDragNoteRef.current && !touchDragNoteRef.current.activated) {
+                const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
+                const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
+                pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 10 };
+
+                touchDragNoteRef.current.activated = true;
+                setDraggingNoteId(noteId);
+                setTouchDragNoteGhost({ x: touch.clientX, y: touch.clientY, text: noteText });
+                touchDragNoteGhostRef.current = { x: touch.clientX, y: touch.clientY, text: noteText };
+            }
+        }, TOUCH_DRAG_HOLD_MS);
+    };
+
     const cancelAddAppointment = () => {
         setAddError(null);
         setIsAddOpen(false);
@@ -1073,6 +1161,18 @@ export function SchedulePage() {
         date: string
     ) => {
         event.preventDefault();
+
+        // Check for day note drop
+        const noteId = event.dataTransfer.getData("application/x-daynote");
+        if (noteId) {
+            const startTime = getStartTimeFromColumnPosition(event);
+            const startMinutes = timeStringToMinutes(startTime);
+            void moveNote(noteId, date, startMinutes);
+            setDraggingNoteId(null);
+            setNoteDragPreview(null);
+            return;
+        }
+
         const droppedId = event.dataTransfer.getData("text/plain") || draggingAppointmentId;
 
         // Lock scroll before any state changes
@@ -1102,12 +1202,30 @@ export function SchedulePage() {
     };
 
     const handleSlotDrop = (
-        event: DragEvent<HTMLButtonElement>,
+        event: DragEvent<HTMLDivElement>,
         date: string,
         startTime: string
     ) => {
         event.preventDefault();
         event.stopPropagation();
+
+        // Check for day note drop first
+        const noteId = event.dataTransfer.getData("application/x-daynote");
+        if (noteId) {
+            const startMinutes = timeStringToMinutes(startTime);
+            void moveNote(noteId, date, startMinutes);
+            setDraggingNoteId(null);
+            setNoteDragPreview(null);
+            suppressNextSlotClickRef.current = true;
+            if (suppressClickTimerRef.current) {
+                window.clearTimeout(suppressClickTimerRef.current);
+            }
+            suppressClickTimerRef.current = window.setTimeout(() => {
+                suppressNextSlotClickRef.current = false;
+            }, 0);
+            return;
+        }
+
         const droppedId = event.dataTransfer.getData("text/plain") || draggingAppointmentId;
         setDraggingAppointmentId(null);
         setDragPreview(null);
@@ -1225,6 +1343,36 @@ export function SchedulePage() {
         setTouchDragGhost(null);
     };
 
+    const handleNoteTouchEnd = () => {
+        const state = touchDragNoteRef.current;
+
+        if (state?.activated) {
+            const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
+            const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
+            pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 10 };
+        }
+
+        if (state?.activated && noteDragPreview) {
+            const startMinutes = timeStringToMinutes(noteDragPreview.startTime);
+            void moveNote(state.noteId, noteDragPreview.date, startMinutes);
+            suppressNextSlotClickRef.current = true;
+            if (suppressClickTimerRef.current) window.clearTimeout(suppressClickTimerRef.current);
+            suppressClickTimerRef.current = window.setTimeout(() => {
+                suppressNextSlotClickRef.current = false;
+            }, 400);
+        }
+
+        if (touchDragNoteTimerRef.current) {
+            clearTimeout(touchDragNoteTimerRef.current);
+            touchDragNoteTimerRef.current = null;
+        }
+        touchDragNoteRef.current = null;
+        touchDragNoteGhostRef.current = null;
+        setDraggingNoteId(null);
+        setNoteDragPreview(null);
+        setTouchDragNoteGhost(null);
+    };
+
     // Pinch-to-zoom handlers for mobile
     const getDistance = (touch1: Touch, touch2: Touch): number => {
         const dx = touch1.clientX - touch2.clientX;
@@ -1312,20 +1460,28 @@ export function SchedulePage() {
 
     const LONG_PRESS_DURATION_MS = 400;
 
-    const handleSlotLongPressStart = (date: string, startTime: string) => {
+    const slotLongPressElRef = useRef<Element | null>(null);
+
+    const handleSlotLongPressStart = (date: string, startTime: string, el: Element | null) => {
         // Don't start long press if we're in move or copy mode
         if (moveAppointmentId || copyAppointmentId) {
             return;
         }
 
         slotLongPressTargetRef.current = { date, startTime };
+        slotLongPressElRef.current = el;
         if (slotLongPressTimerRef.current) {
             window.clearTimeout(slotLongPressTimerRef.current);
         }
         slotLongPressTimerRef.current = window.setTimeout(() => {
             if (slotLongPressTargetRef.current) {
-                openAddAppointment(slotLongPressTargetRef.current.date, slotLongPressTargetRef.current.startTime);
+                openSlotMenu(
+                    slotLongPressTargetRef.current.date,
+                    slotLongPressTargetRef.current.startTime,
+                    slotLongPressElRef.current
+                );
                 slotLongPressTargetRef.current = null;
+                slotLongPressElRef.current = null;
             }
         }, LONG_PRESS_DURATION_MS);
     };
@@ -1921,6 +2077,21 @@ export function SchedulePage() {
             return null;
         };
 
+        const computeSlotFromTouch = (touch: globalThis.Touch) => {
+            const columnEl = findColumnAtPoint(touch.clientX, touch.clientY);
+            if (!columnEl) return null;
+            const date = columnEl.getAttribute('data-column-date');
+            const rect = columnEl.getBoundingClientRect();
+            const y = touch.clientY - rect.top;
+            const scaledSlotHeight = SLOT_HEIGHT_PX * zoomScale;
+            const slotIndex = Math.max(
+                0,
+                Math.min(timeSlots.length - 1, Math.floor(y / scaledSlotHeight))
+            );
+            const startTime = minutesToTimeString(DAY_START_MINUTES + slotIndex * SLOT_MINUTES);
+            return date ? { date, startTime } : null;
+        };
+
         const handleTouchDragMove = (event: globalThis.TouchEvent) => {
             const state = touchDragRef.current;
             if (!state) return;
@@ -1951,31 +2122,62 @@ export function SchedulePage() {
                 return { ...prev, x: touch.clientX, y: touch.clientY };
             });
 
-            const columnEl = findColumnAtPoint(touch.clientX, touch.clientY);
-            if (columnEl) {
-                const date = columnEl.getAttribute('data-column-date');
-                const rect = columnEl.getBoundingClientRect();
-                const y = touch.clientY - rect.top;
-                const scaledSlotHeight = SLOT_HEIGHT_PX * zoomScale;
-                const slotIndex = Math.max(
-                    0,
-                    Math.min(timeSlots.length - 1, Math.floor(y / scaledSlotHeight))
-                );
-                const startTime = minutesToTimeString(DAY_START_MINUTES + slotIndex * SLOT_MINUTES);
-                if (date) {
-                    const preview = { date, startTime };
-                    touchDragPreviewRef.current = preview;
-                    setDragPreview((prev) => {
-                        if (prev?.date === date && prev.startTime === startTime) return prev;
-                        return preview;
-                    });
+            const slot = computeSlotFromTouch(touch);
+            if (slot) {
+                const preview = { date: slot.date, startTime: slot.startTime };
+                touchDragPreviewRef.current = preview;
+                setDragPreview((prev) => {
+                    if (prev?.date === slot.date && prev.startTime === slot.startTime) return prev;
+                    return preview;
+                });
+            }
+        };
+
+        // Note touch drag move
+        const handleNoteTouchDragMove = (event: globalThis.TouchEvent) => {
+            const state = touchDragNoteRef.current;
+            if (!state) return;
+
+            const touch = event.touches[0];
+
+            if (!state.activated) {
+                const dx = Math.abs(touch.clientX - state.startX);
+                const dy = Math.abs(touch.clientY - state.startY);
+                if (dx > 10 || dy > 10) {
+                    if (touchDragNoteTimerRef.current) {
+                        clearTimeout(touchDragNoteTimerRef.current);
+                        touchDragNoteTimerRef.current = null;
+                    }
+                    touchDragNoteRef.current = null;
                 }
+                return;
+            }
+
+            event.preventDefault();
+
+            setTouchDragNoteGhost((prev) => {
+                if (!prev) return prev;
+                if (prev.x === touch.clientX && prev.y === touch.clientY) return prev;
+                return { ...prev, x: touch.clientX, y: touch.clientY };
+            });
+            if (touchDragNoteGhostRef.current) {
+                touchDragNoteGhostRef.current = { ...touchDragNoteGhostRef.current, x: touch.clientX, y: touch.clientY };
+            }
+
+            const slot = computeSlotFromTouch(touch);
+            if (slot) {
+                setNoteDragPreview((prev) => {
+                    if (prev?.date === slot.date && prev.startTime === slot.startTime) return prev;
+                    return { date: slot.date, startTime: slot.startTime };
+                });
             }
         };
 
         window.addEventListener('touchmove', handleTouchDragMove, { passive: false });
+        window.addEventListener('touchmove', handleNoteTouchDragMove, { passive: false });
         return () => {
             window.removeEventListener('touchmove', handleTouchDragMove);
+            window.removeEventListener('touchmove', handleNoteTouchDragMove);
         };
     }, [zoomScale, timeSlots.length]);
 
@@ -1995,6 +2197,9 @@ export function SchedulePage() {
             }
             if (touchDragTimerRef.current) {
                 window.clearTimeout(touchDragTimerRef.current);
+            }
+            if (touchDragNoteTimerRef.current) {
+                window.clearTimeout(touchDragNoteTimerRef.current);
             }
         };
     }, []);
@@ -2404,6 +2609,10 @@ export function SchedulePage() {
                                                     {isAutoArranging ? "..." : "Optimize"}
                                                 </button>
                                             )}
+                                            <DayNoteIndicator
+                                                notes={notesByDay[date] ?? []}
+                                                onClick={() => setDayNoteDate(date)}
+                                            />
                                         </div>
                                     );
                                 })}
@@ -2464,6 +2673,12 @@ export function SchedulePage() {
                                                     getStartTimeFromColumnPosition(event)
                                                 );
                                             }
+                                            if (draggingNoteId) {
+                                                setNoteDragPreview({
+                                                    date,
+                                                    startTime: getStartTimeFromColumnPosition(event),
+                                                });
+                                            }
                                         }}
                                         onDrop={(event) => {
                                             void handleDayDrop(event, date);
@@ -2482,14 +2697,14 @@ export function SchedulePage() {
                                                     role="button"
                                                     tabIndex={0}
                                                     onClick={() => handleSlotClick(date, slotTime)}
-                                                    onDoubleClick={() => openAddAppointment(date, slotTime)}
+                                                    onDoubleClick={(e) => openSlotMenu(date, slotTime, e.currentTarget)}
                                                     onKeyDown={(e) => {
                                                         if (e.key === 'Enter' || e.key === ' ') {
                                                             e.preventDefault();
-                                                            openAddAppointment(date, slotTime);
+                                                            openSlotMenu(date, slotTime, e.currentTarget);
                                                         }
                                                     }}
-                                                    onTouchStart={() => handleSlotLongPressStart(date, slotTime)}
+                                                    onTouchStart={(e) => handleSlotLongPressStart(date, slotTime, e.currentTarget)}
                                                     onTouchMove={handleSlotLongPressEnd}
                                                     onTouchEnd={handleSlotLongPressEnd}
                                                     onTouchCancel={handleSlotLongPressEnd}
@@ -2500,6 +2715,9 @@ export function SchedulePage() {
                                                         if (draggingAppointmentId) {
                                                             updateDragPreview(date, slotTime);
                                                         }
+                                                        if (draggingNoteId) {
+                                                            setNoteDragPreview({ date, startTime: slotTime });
+                                                        }
                                                     }}
                                                     onDrop={(event) => {
                                                         void handleSlotDrop(event, date, slotTime);
@@ -2508,7 +2726,7 @@ export function SchedulePage() {
                                                         isHourMark ? 'border-t grid-line-hour' : 'border-t grid-line-soft'
                                                     } ${isEvenHour ? 'hour-even' : 'hour-odd'}`}
                                                     style={{ height: SLOT_HEIGHT_PX }}
-                                                    aria-label={`Double-click or hold to add appointment ${date} at ${formatAxisTime(slotMinutes)}`}
+                                                    aria-label={`Double-click or hold to add appointment or note ${date} at ${formatAxisTime(slotMinutes)}`}
                                                 />
                                             );
                                         })}
@@ -2833,6 +3051,54 @@ export function SchedulePage() {
                                                         />
                                                     );
                                                 })()}
+
+                                            {/* Day note chips */}
+                                            {(notesByDay[date] ?? [])
+                                                .filter((note) => note.startMinutes != null)
+                                                .map((note) => {
+                                                    const noteStart = Math.max(note.startMinutes!, DAY_START_MINUTES);
+                                                    const noteEnd = Math.min(note.startMinutes! + SLOT_MINUTES, DAY_END_MINUTES);
+                                                    if (noteEnd <= noteStart) return null;
+                                                    const noteTopPx = ((noteStart - DAY_START_MINUTES) / SLOT_MINUTES) * SLOT_HEIGHT_PX + 1;
+                                                    const noteHeightPx = SLOT_HEIGHT_PX - 2;
+                                                    return (
+                                                        <DayNoteChip
+                                                            key={note.id}
+                                                            note={note}
+                                                            topPx={noteTopPx}
+                                                            heightPx={noteHeightPx}
+                                                            isDragging={draggingNoteId === note.id}
+                                                            isDayView={viewMode === 'day'}
+                                                            onClick={() => {
+                                                                setDayNotePrefillMinutes(note.startMinutes);
+                                                                setDayNoteDate(note.date);
+                                                            }}
+                                                            onDragStart={(e) => handleNoteDragStart(e, note.id)}
+                                                            onDragEnd={handleNoteDragEnd}
+                                                            onTouchStart={(e) => handleNoteTouchStart(e, note.id, note.text)}
+                                                            onTouchEnd={handleNoteTouchEnd}
+                                                        />
+                                                    );
+                                                })}
+
+                                            {/* Note drag preview */}
+                                            {draggingNoteId &&
+                                                noteDragPreview?.date === date &&
+                                                (() => {
+                                                    const nPreviewStart = timeStringToMinutes(noteDragPreview.startTime);
+                                                    const nPreviewTop = ((Math.max(nPreviewStart, DAY_START_MINUTES) - DAY_START_MINUTES) / SLOT_MINUTES) * SLOT_HEIGHT_PX + 1;
+                                                    return (
+                                                        <div
+                                                            className="absolute rounded border-2 border-dashed border-amber-500 bg-amber-500/20"
+                                                            style={{
+                                                                top: nPreviewTop,
+                                                                height: SLOT_HEIGHT_PX - 2,
+                                                                right: viewMode === 'day' ? '4px' : '3px',
+                                                                width: '35%',
+                                                            }}
+                                                        />
+                                                    );
+                                                })()}
                                         </div>
                                     </div>
                                 );
@@ -2860,6 +3126,27 @@ export function SchedulePage() {
                     </div>
                     <div className="px-2 text-[10px] opacity-90">
                         {touchDragGhost.duration}m
+                    </div>
+                </div>
+            )}
+
+            {/* Floating ghost note during touch drag */}
+            {touchDragNoteGhost && (
+                <div
+                    className="fixed z-50 pointer-events-none rounded text-xs shadow-2xl"
+                    style={{
+                        left: touchDragNoteGhost.x - 60,
+                        top: touchDragNoteGhost.y - 20,
+                        width: 120,
+                        height: 36,
+                        backgroundColor: '#fef9c3',
+                        borderLeft: '3px solid #facc15',
+                        color: '#713f12',
+                        opacity: 0.9,
+                    }}
+                >
+                    <div className="px-2 py-1.5 truncate font-medium text-[10px]">
+                        {touchDragNoteGhost.text}
                     </div>
                 </div>
             )}
@@ -3290,6 +3577,45 @@ export function SchedulePage() {
                     />
                 );
             })()}
+
+            {/* Slot Action Menu */}
+            {slotActionMenu && (
+                <SlotActionMenu
+                    anchorRect={slotActionMenu.anchorRect}
+                    onAddAppointment={() => {
+                        openAddAppointment(slotActionMenu.date, slotActionMenu.startTime);
+                        setSlotActionMenu(null);
+                    }}
+                    onAddNote={() => {
+                        const startMinutes = timeStringToMinutes(slotActionMenu.startTime);
+                        openNoteForSlot(slotActionMenu.date, startMinutes);
+                        setSlotActionMenu(null);
+                    }}
+                    onClose={() => setSlotActionMenu(null)}
+                />
+            )}
+
+            {/* Day Note Modal */}
+            {dayNoteDate && (
+                <DayNoteModal
+                    date={dayNoteDate}
+                    notes={notesByDay[dayNoteDate] ?? []}
+                    onClose={() => {
+                        setDayNoteDate(null);
+                        setDayNotePrefillMinutes(undefined);
+                    }}
+                    onCreate={async (note) => {
+                        await createDayNote(note);
+                    }}
+                    onUpdate={async (id, changes) => {
+                        await updateDayNote(id, changes);
+                    }}
+                    onDelete={async (id) => {
+                        await deleteDayNote(id);
+                    }}
+                    prefillStartMinutes={dayNotePrefillMinutes}
+                />
+            )}
         </div>
     );
 }

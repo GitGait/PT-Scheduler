@@ -3,6 +3,7 @@ import { db } from "./schema";
 import type {
     Patient,
     Appointment,
+    DayNote,
     SyncQueueItem,
     PatientStatus,
     SyncStatus,
@@ -208,6 +209,61 @@ export const appointmentDB = {
             calendarEventId,
             updatedAt: new Date(),
         });
+    },
+};
+
+// =============================================================================
+// Day Note Operations
+// =============================================================================
+
+export const dayNoteDB = {
+    /** Create a new day note */
+    async create(
+        note: Omit<DayNote, "id" | "createdAt" | "updatedAt">
+    ): Promise<string> {
+        const id = uuidv4();
+        const now = new Date();
+        await db.dayNotes.add({
+            ...note,
+            id,
+            createdAt: now,
+            updatedAt: now,
+        });
+        return id;
+    },
+
+    /** Get day note by ID */
+    async get(id: string): Promise<DayNote | undefined> {
+        return db.dayNotes.get(id);
+    },
+
+    /** Get all notes for a specific date (YYYY-MM-DD) */
+    async byDate(date: string): Promise<DayNote[]> {
+        return db.dayNotes.where("date").equals(date).toArray();
+    },
+
+    /** Get all notes in a date range (inclusive) */
+    async byRange(startDate: string, endDate: string): Promise<DayNote[]> {
+        return db.dayNotes
+            .where("date")
+            .between(startDate, endDate, true, true)
+            .toArray();
+    },
+
+    /** Update day note (partial) */
+    async update(
+        id: string,
+        changes: Partial<Omit<DayNote, "id" | "createdAt">>
+    ): Promise<void> {
+        await db.dayNotes.update(id, {
+            ...changes,
+            updatedAt: new Date(),
+        });
+    },
+
+    /** Delete day note */
+    async delete(id: string): Promise<void> {
+        await db.dayNotes.delete(id);
     },
 };
 

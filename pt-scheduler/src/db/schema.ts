@@ -6,6 +6,7 @@ import {
     type RecurringBlock,
     type CalendarEvent,
     type SyncQueueItem,
+    type DayNote,
     type VisitType,
 } from "../types";
 
@@ -29,6 +30,7 @@ export class PTSchedulerDB extends Dexie {
     calendarEvents!: EntityTable<CalendarEvent, "id">;
     syncQueue!: EntityTable<SyncQueueItem, "id">;
     routeCache!: EntityTable<RouteCache, "id">;
+    dayNotes!: EntityTable<DayNote, "id">;
 
     constructor() {
         super("PTSchedulerDB");
@@ -77,6 +79,39 @@ export class PTSchedulerDB extends Dexie {
             syncQueue: "++id, timestamp, status, nextRetryAt",
             routeCache: "id, date, expiresAt",
         });
+
+        // Version 4: Add dayNotes table for sticky notes on calendar days
+        this.version(4).stores({
+            patients: "id, fullName, status",
+            appointments: "id, patientId, date, status, syncStatus, visitType",
+            recurringBlocks: "id, patientId, dayOfWeek",
+            calendarEvents: "id, appointmentId, googleEventId",
+            syncQueue: "++id, timestamp, status, nextRetryAt",
+            routeCache: "id, date, expiresAt",
+            dayNotes: "id, date",
+        });
+
+        // Version 5: Add startMinutes to dayNotes for grid positioning
+        this.version(5)
+            .stores({
+                patients: "id, fullName, status",
+                appointments: "id, patientId, date, status, syncStatus, visitType",
+                recurringBlocks: "id, patientId, dayOfWeek",
+                calendarEvents: "id, appointmentId, googleEventId",
+                syncQueue: "++id, timestamp, status, nextRetryAt",
+                routeCache: "id, date, expiresAt",
+                dayNotes: "id, date",
+            })
+            .upgrade((tx) => {
+                return tx
+                    .table("dayNotes")
+                    .toCollection()
+                    .modify((note) => {
+                        if (note.startMinutes === undefined) {
+                            note.startMinutes = 720; // noon
+                        }
+                    });
+            });
     }
 }
 
