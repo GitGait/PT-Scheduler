@@ -19,7 +19,6 @@ import { ScheduleGridSkeleton } from "../components/ui/Skeleton";
 import { ScheduleEmptyState } from "../components/ui/EmptyState";
 import { AppointmentDetailModal } from "../components/AppointmentDetailModal";
 import { AppointmentActionSheet } from "../components/AppointmentActionSheet";
-import { DayNoteIndicator } from "../components/DayNoteIndicator";
 import { DayNoteModal } from "../components/DayNoteModal";
 import { SlotActionMenu } from "../components/SlotActionMenu";
 import { DayNoteChip } from "../components/DayNoteChip";
@@ -2609,10 +2608,6 @@ export function SchedulePage() {
                                                     {isAutoArranging ? "..." : "Optimize"}
                                                 </button>
                                             )}
-                                            <DayNoteIndicator
-                                                notes={notesByDay[date] ?? []}
-                                                onClick={() => setDayNoteDate(date)}
-                                            />
                                         </div>
                                     );
                                 })}
