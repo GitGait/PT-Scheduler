@@ -3093,8 +3093,8 @@ export function SchedulePage() {
                                                             style={{
                                                                 top: nPreviewTop,
                                                                 height: SLOT_HEIGHT_PX - 2,
-                                                                right: viewMode === 'day' ? '4px' : '3px',
-                                                                width: '35%',
+                                                                left: viewMode === 'day' ? '4px' : '2px',
+                                                                width: viewMode === 'day' ? 'calc(100% - 8px)' : 'calc(100% - 4px)',
                                                             }}
                                                         />
                                                     );

@@ -48,8 +48,8 @@ export function DayNoteChip({
             style={{
                 top: topPx,
                 height: heightPx,
-                right: isDayView ? "4px" : "3px",
-                width: isDayView ? "35%" : "35%",
+                left: isDayView ? "4px" : "2px",
+                width: isDayView ? "calc(100% - 8px)" : "calc(100% - 4px)",
                 backgroundColor: colors.bg,
                 borderLeft: `3px solid ${colors.border}`,
                 color: colors.text,
