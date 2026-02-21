@@ -56,6 +56,7 @@ export interface SyncConfig {
 }
 
 const APPOINTMENTS_SYNCED_EVENT = "pt-scheduler:appointments-synced";
+const DAY_NOTES_SYNCED_EVENT = "pt-scheduler:day-notes-synced";
 export const REQUEST_SYNC_EVENT = "pt-scheduler:request-sync";
 const LAST_SHEETS_SYNC_KEY_PREFIX = "ptScheduler.lastSheetsAutoSync.";
 const LAST_APPOINTMENT_BACKFILL_KEY_PREFIX = "ptScheduler.lastCalendarBackfill.";
@@ -98,7 +99,10 @@ export function useSync(config: SyncConfig | null) {
         if (!config?.spreadsheetId || !isSignedIn()) return;
         try {
             const sheetNotes = await fetchDayNotesFromSheet(config.spreadsheetId);
-            await reconcileDayNotesFromSheetSnapshot(config.spreadsheetId, sheetNotes);
+            const result = await reconcileDayNotesFromSheetSnapshot(config.spreadsheetId, sheetNotes);
+            if ((result.upserted > 0 || result.deleted > 0) && typeof window !== "undefined") {
+                window.dispatchEvent(new Event(DAY_NOTES_SYNCED_EVENT));
+            }
         } catch (err) {
             console.error("Day note sync failed:", err);
         }

@@ -57,6 +57,7 @@ const MIN_DURATION_MINUTES = 15;
 const AVERAGE_DRIVE_SPEED_MPH = 30;
 import { getHomeBase, calculateMilesBetweenCoordinates } from "../utils/scheduling";
 const APPOINTMENTS_SYNCED_EVENT = "pt-scheduler:appointments-synced";
+const DAY_NOTES_SYNCED_EVENT = "pt-scheduler:day-notes-synced";
 const REQUEST_SYNC_EVENT = "pt-scheduler:request-sync";
 
 const triggerSync = () => {
@@ -388,11 +389,20 @@ export function SchedulePage() {
             void loadDayNotes(weekStart, weekEnd);
         };
 
+        const handleDayNotesSynced = () => {
+            if (!weekStart || !weekEnd) {
+                return;
+            }
+            void loadDayNotes(weekStart, weekEnd);
+        };
+
         window.addEventListener(APPOINTMENTS_SYNCED_EVENT, handleAppointmentsSynced);
+        window.addEventListener(DAY_NOTES_SYNCED_EVENT, handleDayNotesSynced);
         return () => {
             window.removeEventListener(APPOINTMENTS_SYNCED_EVENT, handleAppointmentsSynced);
+            window.removeEventListener(DAY_NOTES_SYNCED_EVENT, handleDayNotesSynced);
         };
-    }, [loadByRange, loadOnHold, weekStart, weekEnd]);
+    }, [loadByRange, loadOnHold, loadDayNotes, weekStart, weekEnd]);
 
     useEffect(() => {
         let cancelled = false;
