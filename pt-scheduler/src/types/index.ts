@@ -108,7 +108,7 @@ export interface DayNote {
 // =============================================================================
 
 export type SyncAction = "create" | "update" | "delete";
-export type SyncEntity = "appointment" | "calendarEvent" | "patient";
+export type SyncEntity = "appointment" | "calendarEvent" | "patient" | "dayNote";
 export type SyncQueueStatus =
   | "pending"
   | "processing"
@@ -130,10 +130,15 @@ export interface SyncQueueDataCalendarEvent {
   calendarEventId?: string;
 }
 
+export interface SyncQueueDataDayNote {
+  entityId: string;
+}
+
 export type SyncQueueData =
   | SyncQueueDataAppointment
   | SyncQueueDataPatient
-  | SyncQueueDataCalendarEvent;
+  | SyncQueueDataCalendarEvent
+  | SyncQueueDataDayNote;
 
 interface SyncQueueItemBase {
   id?: number;
@@ -150,4 +155,5 @@ export type SyncQueueItem = SyncQueueItemBase & (
   | { entity: "appointment"; data: SyncQueueDataAppointment }
   | { entity: "patient"; data: SyncQueueDataPatient }
   | { entity: "calendarEvent"; data: SyncQueueDataCalendarEvent }
+  | { entity: "dayNote"; data: SyncQueueDataDayNote }
 );

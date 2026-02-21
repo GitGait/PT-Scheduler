@@ -4,7 +4,7 @@
 
 import { getAccessToken } from "./auth";
 import { fetchWithTimeout } from "./request";
-import type { Patient } from "../types";
+import type { Patient, DayNote, DayNoteColor } from "../types";
 import { sheetValuesSchema, spreadsheetMetadataSchema, parseWithSchema } from "../utils/validation";
 import type { SpreadsheetMetadata } from "../utils/validation";
 
@@ -804,4 +804,274 @@ function toColumnLetter(index1Based: number): string {
         n = Math.floor((n - 1) / 26);
     }
     return result;
+}
+
+// =============================================================================
+// Day Notes Sheet Sync
+// =============================================================================
+
+const DAY_NOTES_SHEET_TITLE = "Day Notes";
+const DEFAULT_DAYNOTE_HEADERS = [
+    "id",
+    "date",
+    "text",
+    "color",
+    "startMinutes",
+    "createdAt",
+    "updatedAt",
+];
+
+const VALID_DAY_NOTE_COLORS: DayNoteColor[] = ["yellow", "blue", "green", "pink", "purple", "orange"];
+
+function parseDayNoteRow(headers: string[], row: string[]): DayNote | null {
+    const getValue = (header: string) => {
+        const index = headers.findIndex((h) => h.toLowerCase() === header.toLowerCase());
+        return index >= 0 ? row[index] || "" : "";
+    };
+
+    const id = getValue("id");
+    const date = getValue("date");
+    if (!id || !date) {
+        return null;
+    }
+
+    const colorRaw = getValue("color");
+    const color: DayNoteColor = VALID_DAY_NOTE_COLORS.includes(colorRaw as DayNoteColor)
+        ? (colorRaw as DayNoteColor)
+        : "yellow";
+
+    const startMinutesRaw = getValue("startMinutes");
+    const startMinutes = startMinutesRaw ? parseInt(startMinutesRaw, 10) : undefined;
+
+    const createdAtRaw = getValue("createdAt");
+    const updatedAtRaw = getValue("updatedAt");
+
+    return {
+        id,
+        date,
+        text: getValue("text"),
+        color,
+        startMinutes: Number.isFinite(startMinutes) ? startMinutes : undefined,
+        createdAt: createdAtRaw ? new Date(createdAtRaw) : new Date(),
+        updatedAt: updatedAtRaw ? new Date(updatedAtRaw) : new Date(),
+    };
+}
+
+function buildDayNoteRowForHeaders(headers: string[], note: DayNote): string[] {
+    const normalizedHeaders = headers.length > 0 ? headers : DEFAULT_DAYNOTE_HEADERS;
+    const row = new Array(normalizedHeaders.length).fill("");
+
+    const setCell = (aliases: string[], value: string) => {
+        const index = findHeaderIndex(normalizedHeaders, aliases);
+        if (index >= 0) {
+            row[index] = value;
+        }
+    };
+
+    setCell(["id"], note.id);
+    setCell(["date"], note.date);
+    setCell(["text"], note.text);
+    setCell(["color"], note.color);
+    setCell(["startminutes"], note.startMinutes?.toString() ?? "");
+    setCell(["createdat"], note.createdAt.toISOString());
+    setCell(["updatedat"], note.updatedAt.toISOString());
+
+    return row;
+}
+
+async function fetchDayNoteSheetRows(
+    spreadsheetId: string,
+    token: string,
+    throwIfMissing = true
+): Promise<string[][]> {
+    const range = `${DAY_NOTES_SHEET_TITLE}!A:G`;
+    const fetchUrl = `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(range)}`;
+    const response = await fetchWithTimeout(fetchUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) {
+        if (!throwIfMissing && (response.status === 400 || response.status === 404)) {
+            return [];
+        }
+        const fallback = `Sheets API error (${response.status})`;
+        throw new Error(await getSheetsErrorMessage(response, fallback));
+    }
+
+    const raw = await response.json();
+    const payload = parseWithSchema(sheetValuesSchema, raw, "Sheets values response");
+    return payload.values;
+}
+
+async function ensureDayNoteSheetExists(spreadsheetId: string, token: string): Promise<void> {
+    await getSheetIdByTitle(spreadsheetId, token, DAY_NOTES_SHEET_TITLE, true);
+}
+
+async function ensureDayNoteSheetHeaders(spreadsheetId: string, token: string): Promise<void> {
+    const rows = await fetchDayNoteSheetRows(spreadsheetId, token, false);
+    if (rows.length > 0 && rows[0].some((cell) => cell.trim() !== "")) {
+        return;
+    }
+
+    const writeUrl = `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(
+        `${DAY_NOTES_SHEET_TITLE}!A1:${toColumnLetter(DEFAULT_DAYNOTE_HEADERS.length)}1`
+    )}?valueInputOption=USER_ENTERED`;
+    const response = await fetchWithTimeout(writeUrl, {
+        method: "PUT",
+        headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ values: [DEFAULT_DAYNOTE_HEADERS] }),
+    });
+
+    if (!response.ok) {
+        const fallback = `Sheets API error (${response.status})`;
+        throw new Error(await getSheetsErrorMessage(response, fallback));
+    }
+}
+
+/**
+ * Fetch all day notes from the "Day Notes" tab of a Google Sheet.
+ */
+export async function fetchDayNotesFromSheet(spreadsheetId: string): Promise<DayNote[]> {
+    const token = await getAccessToken();
+    if (!token) {
+        throw new Error("Not authenticated");
+    }
+
+    const rows = await fetchDayNoteSheetRows(spreadsheetId, token, false);
+    if (rows.length < 2) {
+        return [];
+    }
+
+    const headers = rows[0];
+    const notes: DayNote[] = [];
+    for (let i = 1; i < rows.length; i++) {
+        const note = parseDayNoteRow(headers, rows[i]);
+        if (note) {
+            notes.push(note);
+        }
+    }
+    return notes;
+}
+
+/**
+ * Upsert a single day note to the "Day Notes" tab (find by ID or append).
+ */
+export async function upsertDayNoteToSheet(spreadsheetId: string, note: DayNote): Promise<void> {
+    const token = await getAccessToken();
+    if (!token) {
+        throw new Error("Not authenticated");
+    }
+
+    await ensureDayNoteSheetExists(spreadsheetId, token);
+    let rows = await fetchDayNoteSheetRows(spreadsheetId, token, true);
+    if (rows.length === 0) {
+        await ensureDayNoteSheetHeaders(spreadsheetId, token);
+        rows = await fetchDayNoteSheetRows(spreadsheetId, token, true);
+    }
+
+    const headers = rows[0] ?? DEFAULT_DAYNOTE_HEADERS;
+    let idIndex = findHeaderIndex(headers, ["id"]);
+    if (idIndex < 0) {
+        await ensureDayNoteSheetHeaders(spreadsheetId, token);
+        rows = await fetchDayNoteSheetRows(spreadsheetId, token, true);
+        idIndex = findHeaderIndex(rows[0] ?? DEFAULT_DAYNOTE_HEADERS, ["id"]);
+        if (idIndex < 0) {
+            throw new Error("ID column not found in Day Notes sheet");
+        }
+    }
+
+    const effectiveHeaders = rows[0] ?? DEFAULT_DAYNOTE_HEADERS;
+    const rowValues = buildDayNoteRowForHeaders(effectiveHeaders, note);
+    const colCount = Math.max(effectiveHeaders.length, DEFAULT_DAYNOTE_HEADERS.length);
+
+    let rowIndex = -1;
+    for (let i = 1; i < rows.length; i++) {
+        if ((rows[i][idIndex] ?? "").trim() === note.id) {
+            rowIndex = i + 1;
+            break;
+        }
+    }
+
+    if (rowIndex >= 0) {
+        const endCol = toColumnLetter(colCount);
+        const updateUrl = `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(
+            `${DAY_NOTES_SHEET_TITLE}!A${rowIndex}:${endCol}${rowIndex}`
+        )}?valueInputOption=USER_ENTERED`;
+        const updateResponse = await fetchWithTimeout(updateUrl, {
+            method: "PUT",
+            headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ values: [rowValues] }),
+        });
+        if (!updateResponse.ok) {
+            const fallback = `Sheets API error (${updateResponse.status})`;
+            throw new Error(await getSheetsErrorMessage(updateResponse, fallback));
+        }
+        return;
+    }
+
+    const appendUrl = `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(
+        `${DAY_NOTES_SHEET_TITLE}!A:${toColumnLetter(colCount)}`
+    )}:append?valueInputOption=USER_ENTERED`;
+    const appendResponse = await fetchWithTimeout(appendUrl, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ values: [rowValues] }),
+    });
+    if (!appendResponse.ok) {
+        const fallback = `Sheets API error (${appendResponse.status})`;
+        throw new Error(await getSheetsErrorMessage(appendResponse, fallback));
+    }
+}
+
+/**
+ * Delete day note rows from the "Day Notes" tab by IDs.
+ */
+export async function deleteDayNotesFromSheetByIds(
+    spreadsheetId: string,
+    noteIds: string[]
+): Promise<number> {
+    const normalizedIds = new Set(noteIds.map((id) => id.trim()).filter(Boolean));
+    if (normalizedIds.size === 0) {
+        return 0;
+    }
+
+    const token = await getAccessToken();
+    if (!token) {
+        throw new Error("Not authenticated");
+    }
+
+    const rows = await fetchDayNoteSheetRows(spreadsheetId, token, false);
+    if (rows.length < 2) {
+        return 0;
+    }
+
+    const headers = rows[0];
+    const idIndex = findHeaderIndex(headers, ["id"]);
+    if (idIndex < 0) {
+        return 0;
+    }
+
+    const rowIndicesToDelete: number[] = [];
+    for (let i = 1; i < rows.length; i++) {
+        const noteId = (rows[i][idIndex] ?? "").trim();
+        if (noteId && normalizedIds.has(noteId)) {
+            rowIndicesToDelete.push(i + 1);
+        }
+    }
+
+    if (rowIndicesToDelete.length === 0) {
+        return 0;
+    }
+
+    await deletePatientSheetRows(spreadsheetId, token, DAY_NOTES_SHEET_TITLE, rowIndicesToDelete);
+    return rowIndicesToDelete.length;
 }

@@ -1,6 +1,7 @@
 import { create } from "zustand";
-import type { DayNote } from "../types";
-import { dayNoteDB } from "../db/operations";
+import type { DayNote, SyncAction } from "../types";
+import { dayNoteDB, syncQueueDB } from "../db/operations";
+import { useSyncStore } from "./syncStore";
 
 interface DayNoteState {
     notes: DayNote[];
@@ -15,6 +16,21 @@ interface DayNoteActions {
     moveNote: (id: string, date: string, startMinutes: number) => Promise<void>;
     delete: (id: string) => Promise<void>;
     clearError: () => void;
+}
+
+function hasSheetsSyncConfigured(): boolean {
+    const spreadsheetId = useSyncStore.getState().spreadsheetId;
+    return Boolean(spreadsheetId.trim());
+}
+
+async function enqueueDayNoteSync(type: SyncAction, entityId: string): Promise<void> {
+    if (!hasSheetsSyncConfigured()) return;
+    await syncQueueDB.add({
+        type,
+        entity: "dayNote",
+        data: { entityId },
+    });
+    await useSyncStore.getState().refreshPendingCount();
 }
 
 export const useDayNoteStore = create<DayNoteState & DayNoteActions>((set, get) => ({
@@ -48,6 +64,7 @@ export const useDayNoteStore = create<DayNoteState & DayNoteActions>((set, get) 
                 updatedAt: new Date(),
             } as DayNote;
             set((state) => ({ notes: [...state.notes, noteToStore] }));
+            await enqueueDayNoteSync("create", id);
             return id;
         } catch (err) {
             set({
@@ -69,6 +86,7 @@ export const useDayNoteStore = create<DayNoteState & DayNoteActions>((set, get) 
 
         try {
             await dayNoteDB.update(id, changes);
+            await enqueueDayNoteSync("update", id);
         } catch (err) {
             set((state) => ({
                 error: err instanceof Error ? err.message : "Failed to update day note",
@@ -91,6 +109,7 @@ export const useDayNoteStore = create<DayNoteState & DayNoteActions>((set, get) 
 
         try {
             await dayNoteDB.update(id, { date, startMinutes });
+            await enqueueDayNoteSync("update", id);
         } catch (err) {
             set((state) => ({
                 error: err instanceof Error ? err.message : "Failed to move day note",
@@ -108,6 +127,7 @@ export const useDayNoteStore = create<DayNoteState & DayNoteActions>((set, get) 
 
         try {
             await dayNoteDB.delete(id);
+            await enqueueDayNoteSync("delete", id);
         } catch (err) {
             set({
                 error: err instanceof Error ? err.message : "Failed to delete day note",

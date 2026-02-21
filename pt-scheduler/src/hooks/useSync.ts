@@ -9,6 +9,9 @@ import {
     deletePatientsFromSheetByIds,
     fetchPatientsFromSheet,
     syncPatientToSheetByStatus,
+    fetchDayNotesFromSheet,
+    upsertDayNoteToSheet,
+    deleteDayNotesFromSheetByIds,
 } from "../api/sheets";
 import {
     createCalendarEvent,
@@ -18,6 +21,7 @@ import {
 } from "../api/calendar";
 import { db } from "../db/schema";
 import { reconcilePatientsFromSheetSnapshot } from "../db/patientSheetSync";
+import { reconcileDayNotesFromSheetSnapshot } from "../db/dayNoteSheetSync";
 import { syncQueueDB, getDeletedPatientIds } from "../db/operations";
 import type { AppointmentStatus, SyncQueueItem, VisitType } from "../types";
 import { VISIT_TYPE_CODES } from "../types";
@@ -86,6 +90,19 @@ export function useSync(config: SyncConfig | null) {
             setLastSyncError(err instanceof Error ? err.message : "Sync failed");
         }
     }, [config?.spreadsheetId, loadAll]);
+
+    /**
+     * Sync day notes from Google Sheets to local database.
+     */
+    const syncDayNotesFromSheets = useCallback(async () => {
+        if (!config?.spreadsheetId || !isSignedIn()) return;
+        try {
+            const sheetNotes = await fetchDayNotesFromSheet(config.spreadsheetId);
+            await reconcileDayNotesFromSheetSnapshot(config.spreadsheetId, sheetNotes);
+        } catch (err) {
+            console.error("Day note sync failed:", err);
+        }
+    }, [config?.spreadsheetId]);
 
     /**
      * Sync appointments from Google Calendar to local database for cross-device visibility.
@@ -450,6 +467,7 @@ export function useSync(config: SyncConfig | null) {
 
             await backfillLocalAppointmentsToCalendar();
             await syncPatientsFromSheets();
+            await syncDayNotesFromSheets();
             await syncAppointmentsFromCalendar();
         };
 
@@ -467,6 +485,7 @@ export function useSync(config: SyncConfig | null) {
             }
 
             await syncPatientsFromSheets();
+            await syncDayNotesFromSheets();
             await syncAppointmentsFromCalendar();
         };
 
@@ -497,6 +516,7 @@ export function useSync(config: SyncConfig | null) {
         config,
         backfillLocalAppointmentsToCalendar,
         syncPatientsFromSheets,
+        syncDayNotesFromSheets,
         syncAppointmentsFromCalendar,
         processQueue,
     ]);
@@ -780,6 +800,21 @@ async function processSyncItem(item: SyncQueueItem, config: SyncConfig): Promise
                 if (entityId) {
                     await db.calendarEvents.where("appointmentId").equals(entityId).delete();
                 }
+            }
+            break;
+        }
+
+        case "dayNote": {
+            if (!config.spreadsheetId) {
+                throw new Error("Spreadsheet ID not configured");
+            }
+            if ((action === "create" || action === "update") && entityId) {
+                const note = await db.dayNotes.get(entityId);
+                if (note) {
+                    await upsertDayNoteToSheet(config.spreadsheetId, note);
+                }
+            } else if (action === "delete" && entityId) {
+                await deleteDayNotesFromSheetByIds(config.spreadsheetId, [entityId]);
             }
             break;
         }
