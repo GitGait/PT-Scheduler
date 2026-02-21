@@ -1,4 +1,4 @@
-import { StickyNote } from "lucide-react";
+import { StickyNote, X } from "lucide-react";
 import type { DayNote } from "../types";
 import { getDayNoteColor } from "../utils/dayNoteColors";
 import type { DragEvent, TouchEvent } from "react";
@@ -10,6 +10,7 @@ interface DayNoteChipProps {
     isDragging: boolean;
     isDayView: boolean;
     onClick: () => void;
+    onDelete: () => void;
     onDragStart: (e: DragEvent<HTMLDivElement>) => void;
     onDragEnd: () => void;
     onTouchStart: (e: TouchEvent<HTMLDivElement>) => void;
@@ -23,6 +24,7 @@ export function DayNoteChip({
     isDragging,
     isDayView,
     onClick,
+    onDelete,
     onDragStart,
     onDragEnd,
     onTouchStart,
@@ -42,7 +44,7 @@ export function DayNoteChip({
                 e.stopPropagation();
                 onClick();
             }}
-            className={`pointer-events-auto absolute rounded cursor-pointer transition-opacity select-none overflow-hidden ${
+            className={`group pointer-events-auto absolute rounded cursor-pointer transition-opacity select-none overflow-hidden ${
                 isDragging ? "opacity-40" : "opacity-95 hover:opacity-100"
             }`}
             style={{
@@ -62,6 +64,12 @@ export function DayNoteChip({
                 <span className="text-[10px] leading-tight truncate font-medium">
                     {note.text}
                 </span>
+                <button
+                    onClick={(e) => { e.stopPropagation(); onDelete(); }}
+                    className="shrink-0 ml-auto opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-black/20 transition-opacity"
+                >
+                    <X size={12} />
+                </button>
             </div>
         </div>
     );

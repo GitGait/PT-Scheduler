@@ -3073,6 +3073,7 @@ export function SchedulePage() {
                                                                 setDayNotePrefillMinutes(note.startMinutes);
                                                                 setDayNoteDate(note.date);
                                                             }}
+                                                            onDelete={() => void deleteDayNote(note.id)}
                                                             onDragStart={(e) => handleNoteDragStart(e, note.id)}
                                                             onDragEnd={handleNoteDragEnd}
                                                             onTouchStart={(e) => handleNoteTouchStart(e, note.id, note.text)}
