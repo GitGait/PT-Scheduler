@@ -1,5 +1,5 @@
-import { useState, useCallback } from "react";
-import { Phone, MessageSquare, Navigation, Edit3, Move, Trash2, X, Copy, Check, PauseCircle, StickyNote, Plus } from "lucide-react";
+import { useState, useCallback, useRef, useEffect } from "react";
+import { Phone, MessageSquare, Navigation, Edit3, Move, Trash2, X, Copy, Check, PauseCircle, StickyNote, Plus, Pencil } from "lucide-react";
 import type { Appointment, Patient } from "../types";
 import { isPersonalEvent, getPersonalCategoryLabel } from "../utils/personalEventColors";
 
@@ -88,7 +88,10 @@ export function AppointmentActionSheet({
     const effectiveNotes = hasAppointmentNotes ? appointmentNotes : patientNotes;
     const [notes, setNotes] = useState<string[]>(effectiveNotes);
     const [newNoteText, setNewNoteText] = useState("");
-    const [applyToAll, setApplyToAll] = useState(!isPersonal && (noteFromPatient || (!hasAppointmentNotes && !hasPatientNotes)));
+    const [applyToAll, setApplyToAll] = useState(false);
+    const [editingIndex, setEditingIndex] = useState<number | null>(null);
+    const [editingText, setEditingText] = useState("");
+    const editInputRef = useRef<HTMLInputElement>(null);
 
     const copyToClipboard = useCallback((text: string, key: string) => {
         void navigator.clipboard.writeText(text);
@@ -105,7 +108,37 @@ export function AppointmentActionSheet({
 
     const removeNote = (index: number) => {
         setNotes(notes.filter((_, i) => i !== index));
+        if (editingIndex === index) {
+            setEditingIndex(null);
+        } else if (editingIndex !== null && editingIndex > index) {
+            setEditingIndex(editingIndex - 1);
+        }
     };
+
+    const startEditing = (index: number) => {
+        setEditingIndex(index);
+        setEditingText(notes[index]);
+    };
+
+    const commitEdit = () => {
+        if (editingIndex === null) return;
+        const trimmed = editingText.trim();
+        if (trimmed) {
+            setNotes(notes.map((n, i) => i === editingIndex ? trimmed : n));
+        }
+        setEditingIndex(null);
+    };
+
+    const cancelEdit = () => {
+        setEditingIndex(null);
+    };
+
+    useEffect(() => {
+        if (editingIndex !== null && editInputRef.current) {
+            editInputRef.current.focus();
+            editInputRef.current.select();
+        }
+    }, [editingIndex]);
 
     const saveNotes = () => {
         if (applyToAll && !isPersonal) {
@@ -354,7 +387,33 @@ export function AppointmentActionSheet({
                                             key={index}
                                             className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/50 rounded-lg px-3 py-1.5"
                                         >
-                                            <span className="flex-1 text-sm text-[var(--color-text-primary)] truncate">{note}</span>
+                                            {editingIndex === index ? (
+                                                <input
+                                                    ref={editInputRef}
+                                                    type="text"
+                                                    value={editingText}
+                                                    onChange={(e) => setEditingText(e.target.value)}
+                                                    onBlur={commitEdit}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            commitEdit();
+                                                        } else if (e.key === 'Escape') {
+                                                            e.preventDefault();
+                                                            cancelEdit();
+                                                        }
+                                                    }}
+                                                    className="flex-1 text-sm text-[var(--color-text-primary)] bg-white dark:bg-amber-900/50 rounded px-2 py-0.5 border border-amber-300 dark:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-400"
+                                                />
+                                            ) : (
+                                                <button
+                                                    onClick={() => startEditing(index)}
+                                                    className="flex-1 flex items-center gap-1.5 text-left min-w-0 group"
+                                                >
+                                                    <span className="text-sm text-[var(--color-text-primary)] truncate">{note}</span>
+                                                    <Pencil className="w-3 h-3 text-amber-400 dark:text-amber-600 opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
+                                                </button>
+                                            )}
                                             <button
                                                 onClick={() => removeNote(index)}
                                                 className="p-1 rounded-full hover:bg-amber-200 dark:hover:bg-amber-900 transition-colors shrink-0"
