@@ -16,7 +16,6 @@ import { syncPatientToSheetByStatus } from "../api/sheets";
 import { Card, CardHeader } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { ScheduleGridSkeleton } from "../components/ui/Skeleton";
-import { ScheduleEmptyState } from "../components/ui/EmptyState";
 import { AppointmentDetailModal } from "../components/AppointmentDetailModal";
 import { AppointmentActionSheet } from "../components/AppointmentActionSheet";
 import { DayNoteModal } from "../components/DayNoteModal";
@@ -55,7 +54,7 @@ const DAY_END_MINUTES = 20 * 60;
 const SLOT_HEIGHT_PX = 48;
 const MIN_DURATION_MINUTES = 15;
 const AVERAGE_DRIVE_SPEED_MPH = 30;
-import { getHomeBase, calculateMilesBetweenCoordinates } from "../utils/scheduling";
+import { getHomeBase, calculateMilesBetweenCoordinates, toLocalIsoDate } from "../utils/scheduling";
 const APPOINTMENTS_SYNCED_EVENT = "pt-scheduler:appointments-synced";
 const DAY_NOTES_SYNCED_EVENT = "pt-scheduler:day-notes-synced";
 const REQUEST_SYNC_EVENT = "pt-scheduler:request-sync";
@@ -91,11 +90,9 @@ interface DayMapPoint {
     isHome: boolean;
 }
 
-const toIsoDate = (date: Date): string => date.toISOString().split("T")[0];
-
 const parseIsoDate = (date: string): Date => new Date(`${date}T12:00:00`);
 
-const todayIso = (): string => toIsoDate(new Date());
+const todayIso = (): string => toLocalIsoDate(new Date());
 
 const getWeekDates = (selectedDate: string): string[] => {
     const start = parseIsoDate(selectedDate);
@@ -108,7 +105,7 @@ const getWeekDates = (selectedDate: string): string[] => {
     return Array.from({ length: 7 }, (_, index) => {
         const day = new Date(start);
         day.setDate(start.getDate() + index);
-        return toIsoDate(day);
+        return toLocalIsoDate(day);
     });
 };
 
@@ -231,7 +228,6 @@ export function SchedulePage() {
     const {
         selectedDate,
         setSelectedDate,
-        sidebarOpen,
         googleCalendars,
         enabledCalendars,
         externalEvents,
@@ -489,7 +485,7 @@ export function SchedulePage() {
         // Navigate by day in day view, by week in week view
         const daysToMove = viewMode === 'day' ? direction : direction * 7;
         date.setDate(date.getDate() + daysToMove);
-        setSelectedDate(toIsoDate(date));
+        setSelectedDate(toLocalIsoDate(date));
     };
 
     const appointmentCountsByDay = useMemo(() => {
@@ -851,13 +847,6 @@ export function SchedulePage() {
         return infoById;
     }, [appointmentsByDay, homeCoordinates, patientById, resolvedPatientCoordinates, drivingDistances]);
 
-    const selectedDayEstimatedMiles = useMemo(() => {
-        return selectedDayAppointments.reduce((total, appointment) => {
-            const legMiles = legInfoByAppointmentId[appointment.id]?.miles;
-            return total + (legMiles ?? 0);
-        }, 0);
-    }, [selectedDayAppointments, legInfoByAppointmentId]);
-
     const selectedDayEstimatedDriveMinutes = useMemo(() => {
         return selectedDayAppointments.reduce((total, appointment) => {
             const driveMinutes = legInfoByAppointmentId[appointment.id]?.minutes;
@@ -1081,12 +1070,11 @@ export function SchedulePage() {
             const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
             const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
             pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 10 };
-            moveAppointmentToSlot(
+            void moveAppointmentToSlot(
                 draggingAppointmentIdRef.current,
                 dragPreviewRef.current.date,
                 dragPreviewRef.current.startTime
             );
-            triggerSync();
         }
 
         dragCommittedRef.current = false;
@@ -1158,7 +1146,7 @@ export function SchedulePage() {
         callback();
     };
 
-    const moveAppointmentToSlot = (appointmentId: string, date: string, startTime: string) => {
+    const moveAppointmentToSlot = async (appointmentId: string, date: string, startTime: string) => {
         const existingAppointment = appointments.find((apt) => apt.id === appointmentId);
         if (!existingAppointment) {
             return;
@@ -1171,33 +1159,38 @@ export function SchedulePage() {
             return;
         }
 
-        preserveScrollPosition(() => {
-            void update(appointmentId, {
-                date,
-                startTime,
-            });
-        });
+        // Inline scroll preservation so we can await the update
+        const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
+        const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
+        pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 10 };
+
+        await update(appointmentId, { date, startTime });
+        triggerSync();
     };
 
     const copyAppointmentToSlot = async (appointmentId: string, date: string, startTime: string) => {
         const source = appointments.find((apt) => apt.id === appointmentId);
         if (!source) return;
 
-        preserveScrollPosition(() => {
-            void create({
-                patientId: source.patientId,
-                date,
-                startTime,
-                duration: source.duration,
-                visitType: source.visitType,
-                personalCategory: source.personalCategory,
-                title: source.title,
-                notes: source.notes,
-                chipNote: source.chipNote,
-                chipNotes: source.chipNotes,
-                status: 'scheduled',
-            });
+        // Inline scroll preservation so we can await the create
+        const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
+        const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
+        pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 10 };
+
+        await create({
+            patientId: source.patientId,
+            date,
+            startTime,
+            duration: source.duration,
+            visitType: source.visitType,
+            personalCategory: source.personalCategory,
+            title: source.title,
+            notes: source.notes,
+            chipNote: source.chipNote,
+            chipNotes: source.chipNotes,
+            status: 'scheduled',
         });
+        triggerSync();
     };
 
     const handleDayDrop = (
@@ -1235,10 +1228,9 @@ export function SchedulePage() {
 
         const startTime = getStartTimeFromColumnPosition(event);
 
-        moveAppointmentToSlot(droppedId, date, startTime);
+        void moveAppointmentToSlot(droppedId, date, startTime);
         dragCommittedRef.current = true;
         setMoveAppointmentId(null);
-        triggerSync();
         suppressNextSlotClickRef.current = true;
         if (suppressClickTimerRef.current) {
             window.clearTimeout(suppressClickTimerRef.current);
@@ -1283,10 +1275,9 @@ export function SchedulePage() {
             return;
         }
 
-        moveAppointmentToSlot(droppedId, date, startTime);
+        void moveAppointmentToSlot(droppedId, date, startTime);
         dragCommittedRef.current = true;
         setMoveAppointmentId(null);
-        triggerSync();
         suppressNextSlotClickRef.current = true;
         if (suppressClickTimerRef.current) {
             window.clearTimeout(suppressClickTimerRef.current);
@@ -1363,12 +1354,11 @@ export function SchedulePage() {
         }
 
         if (state?.activated && touchDragPreviewRef.current) {
-            moveAppointmentToSlot(
+            void moveAppointmentToSlot(
                 state.appointmentId,
                 touchDragPreviewRef.current.date,
                 touchDragPreviewRef.current.startTime
             );
-            triggerSync();
             suppressNextSlotClickRef.current = true;
             suppressNextChipClickRef.current = true;
             // Reset suppression after synthetic click events fire (~300ms after touchend)
@@ -1495,14 +1485,12 @@ export function SchedulePage() {
         if (moveAppointmentId) {
             void moveAppointmentToSlot(moveAppointmentId, date, startTime);
             setMoveAppointmentId(null);
-            triggerSync();
             return;
         }
         // Handle copy mode - duplicating an appointment to a new slot
         if (copyAppointmentId) {
             void copyAppointmentToSlot(copyAppointmentId, date, startTime);
             setCopyAppointmentId(null);
-            triggerSync();
             return;
         }
         // For adding new appointments, require long press (handled separately)
@@ -2619,7 +2607,7 @@ export function SchedulePage() {
                             <div className={`grid ${viewMode === 'day' ? 'grid-cols-[60px_1fr]' : 'grid-cols-[60px_repeat(7,1fr)]'}`}>
                                 {/* GMT offset */}
                                 <div className="py-2 px-1 text-right">
-                                    <span className="text-[10px] text-[var(--color-text-tertiary)]">GMT-07</span>
+                                    <span className="text-[10px] text-[var(--color-text-tertiary)]">{Intl.DateTimeFormat().resolvedOptions().timeZone}</span>
                                 </div>
 
                                 {/* Day headers */}
