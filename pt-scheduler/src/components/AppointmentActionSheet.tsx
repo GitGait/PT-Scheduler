@@ -141,10 +141,15 @@ export function AppointmentActionSheet({
     }, [editingIndex]);
 
     const saveNotes = () => {
+        let finalNotes = notes;
+        const trimmed = newNoteText.trim();
+        if (trimmed && finalNotes.length < MAX_CHIP_NOTES) {
+            finalNotes = [...finalNotes, trimmed];
+        }
         if (applyToAll && !isPersonal) {
-            onPatientChipNote(notes);
+            onPatientChipNote(finalNotes);
         } else {
-            onChipNote(notes);
+            onChipNote(finalNotes);
         }
         onClose();
     };
