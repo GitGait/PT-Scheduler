@@ -297,6 +297,7 @@ export function SchedulePage() {
     const touchDragPreviewRef = useRef<{ date: string; startTime: string } | null>(null);
     const dragCommittedRef = useRef(false);
     const dragPreviewRef = useRef<{ date: string; startTime: string } | null>(null);
+    const draggingAppointmentIdRef = useRef<string | null>(null);
     const [touchDragGhost, setTouchDragGhost] = useState<{ x: number; y: number; name: string; duration: number } | null>(null);
 
     const [homeCoordinates, setHomeCoordinates] = useState<{ lat: number; lng: number } | null>(() => {
@@ -1049,6 +1050,7 @@ export function SchedulePage() {
             return;
         }
         dragCommittedRef.current = false;
+        draggingAppointmentIdRef.current = appointmentId;
 
         // Lock scroll position BEFORE any state changes that trigger re-renders.
         // State updates (draggingAppointmentId, moveAppointmentId, dragPreview)
@@ -1074,12 +1076,13 @@ export function SchedulePage() {
 
         // Fallback: if drop didn't fire but we have a valid preview, commit the move.
         // This fixes the browser quirk where HTML5 drop events intermittently fail to fire.
-        if (!dragCommittedRef.current && draggingAppointmentId && dragPreviewRef.current) {
+        // Uses ref instead of state to avoid stale closure when dragend fires before re-render.
+        if (!dragCommittedRef.current && draggingAppointmentIdRef.current && dragPreviewRef.current) {
             const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
             const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
             pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 10 };
             moveAppointmentToSlot(
-                draggingAppointmentId,
+                draggingAppointmentIdRef.current,
                 dragPreviewRef.current.date,
                 dragPreviewRef.current.startTime
             );
@@ -1088,6 +1091,7 @@ export function SchedulePage() {
 
         dragCommittedRef.current = false;
         dragPreviewRef.current = null;
+        draggingAppointmentIdRef.current = null;
         setDraggingAppointmentId(null);
         setDragPreview(null);
         setMoveAppointmentId(null);
@@ -2852,6 +2856,10 @@ export function SchedulePage() {
                                                             handleAppointmentDragStart(event, appointment.id)
                                                         }
                                                         onDragEnd={handleAppointmentDragEnd}
+                                                        onDragOver={(event) => {
+                                                            event.preventDefault();
+                                                            event.dataTransfer.dropEffect = "move";
+                                                        }}
                                                         onTouchStart={(event) =>
                                                             handleChipTouchStart(event, appointment.id)
                                                         }
