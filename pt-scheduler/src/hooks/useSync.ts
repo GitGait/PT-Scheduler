@@ -286,9 +286,20 @@ export function useSync(config: SyncConfig | null) {
                 .toArray();
 
             let deletedAny = false;
+            const fiveMinutesAgo = new Date(Date.now() - 5 * 60_000);
             for (const appointment of localAppointments) {
                 // Only check appointments that were synced to calendar
                 if (!appointment.calendarEventId) {
+                    continue;
+                }
+
+                // Skip appointments still being synced (not yet propagated to Google Calendar)
+                if (appointment.syncStatus === "pending" || appointment.syncStatus === "local") {
+                    continue;
+                }
+
+                // Skip recently updated appointments (Google Calendar API propagation delay)
+                if (appointment.updatedAt > fiveMinutesAgo) {
                     continue;
                 }
 

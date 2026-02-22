@@ -44,11 +44,29 @@ Which patient is the best match? Respond with JSON only.`
 // OCR screenshot extraction prompt
 // ---------------------------------------------------------------------------
 
-export function buildOCRPrompt(): { system: string; userPrefix: string } {
+export function buildOCRPrompt(targetWeekStart: string): { system: string; userPrefix: string } {
+  const weekStart = new Date(targetWeekStart + "T00:00:00");
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekEnd.getDate() + 6);
+
+  const formatDate = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const dayName = (d: Date) => dayNames[d.getDay()];
+
+  const weekStartStr = formatDate(weekStart);
+  const weekEndStr = formatDate(weekEnd);
+
   return {
     system: `You are an appointment extraction assistant for a home health physical therapy scheduling app.
 You will receive an image of a weekly schedule screenshot (typically from a staffing agency portal).
 Extract every appointment you can identify.
+
+DATE CONTEXT (critical — use this to resolve dates):
+- Today's date: ${formatDate(new Date())}
+- Target week: ${dayName(weekStart)} ${weekStartStr} through ${dayName(weekEnd)} ${weekEndStr}
+- If the screenshot shows day numbers (e.g. 23, 24, 25) or day names (Monday, Tuesday...), resolve them to full YYYY-MM-DD dates within the target week above.
+- If no start times are shown, assign sequential times starting at 08:00 with 60-minute gaps for each patient on the same day.
 
 Rules:
 - Extract patient name exactly as shown (do not correct spelling).

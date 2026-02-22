@@ -5,7 +5,7 @@ import { Card, CardHeader } from "../components/ui/Card";
 import { processScreenshotFile } from "../api/ocr";
 import { geocodeAddress } from "../api/geocode";
 import { matchPatient, type MatchCandidate, type MatchTier } from "../utils/matching";
-import { usePatientStore, useAppointmentStore } from "../stores";
+import { usePatientStore, useAppointmentStore, useScheduleStore } from "../stores";
 import type { ExtractedAppointment, Patient } from "../types";
 import {
     Upload,
@@ -16,7 +16,9 @@ import {
     Camera,
     FileText,
     UserPlus,
+    Calendar,
 } from "lucide-react";
+import { startOfWeek, addDays, format } from "date-fns";
 
 interface OCRResult extends ExtractedAppointment {
     matchedPatientId?: string;
@@ -124,6 +126,28 @@ export function ScanPage() {
     const [isImporting, setIsImporting] = useState(false);
     const [importSuccess, setImportSuccess] = useState<number | null>(null);
     const [importRouteMessage, setImportRouteMessage] = useState<string | null>(null);
+
+    // Target week picker — defaults to next Monday
+    const getNextMonday = () => {
+        const today = new Date();
+        const nextMon = startOfWeek(addDays(today, 7), { weekStartsOn: 1 });
+        return format(nextMon, "yyyy-MM-dd");
+    };
+    const getThisMonday = () => {
+        const today = new Date();
+        return format(startOfWeek(today, { weekStartsOn: 1 }), "yyyy-MM-dd");
+    };
+    const [targetWeek, setTargetWeek] = useState(getNextMonday);
+    const [weekMode, setWeekMode] = useState<"this" | "next" | "custom">("next");
+
+    const targetWeekEnd = format(addDays(new Date(targetWeek + "T00:00:00"), 6), "yyyy-MM-dd");
+    const targetWeekLabel = `${format(new Date(targetWeek + "T00:00:00"), "EEE MMM d")} – ${format(new Date(targetWeekEnd + "T00:00:00"), "EEE MMM d")}`;
+
+    const handleWeekMode = (mode: "this" | "next" | "custom") => {
+        setWeekMode(mode);
+        if (mode === "this") setTargetWeek(getThisMonday());
+        else if (mode === "next") setTargetWeek(getNextMonday());
+    };
 
     useEffect(() => {
         loadPatients();
@@ -376,7 +400,7 @@ export function ScanPage() {
             setImportRouteMessage(null);
 
             try {
-                const response = await processScreenshotFile(file);
+                const response = await processScreenshotFile(file, targetWeek);
                 const newResults: OCRResult[] = response.appointments.map((apt) => {
                     const normalized = parseVisitTypeAndName({
                         rawName: apt.rawName,
@@ -407,7 +431,7 @@ export function ScanPage() {
                 setIsProcessing(false);
             }
         },
-        [runMatchingForResult]
+        [runMatchingForResult, targetWeek]
     );
 
     const handleDrop = useCallback(
@@ -557,6 +581,19 @@ export function ScanPage() {
                 );
             }
 
+            // Navigate schedule to the week containing imported appointments
+            const earliestDate = importedAppointments
+                .map((a) => a.date)
+                .sort()[0];
+            if (earliestDate) {
+                useScheduleStore.getState().setSelectedDate(earliestDate);
+            }
+
+            // Force SchedulePage to reload data even if already mounted
+            if (typeof window !== "undefined") {
+                window.dispatchEvent(new Event("pt-scheduler:appointments-synced"));
+            }
+
             setImportSuccess(confirmedResults.length);
             setResults([]);
         } catch (err) {
@@ -590,6 +627,63 @@ export function ScanPage() {
     return (
         <div className="pb-20 p-4 max-w-2xl mx-auto">
             <h1 className="text-xl font-medium text-[var(--color-text-primary)] mb-4">Scan Schedule</h1>
+
+            {/* Target Week Picker */}
+            <div className="mb-4 p-3 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                    <Calendar className="w-4 h-4 text-[var(--color-text-secondary)]" />
+                    <span className="text-sm font-medium text-[var(--color-text-primary)]">Import for week:</span>
+                </div>
+                <div className="flex gap-2 mb-2">
+                    <button
+                        onClick={() => handleWeekMode("this")}
+                        className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                            weekMode === "this"
+                                ? "bg-[var(--color-primary)] text-white border-[var(--color-primary)]"
+                                : "bg-[var(--color-surface)] text-[var(--color-text-primary)] border-[var(--color-border)] hover:bg-[var(--color-surface-hover)]"
+                        }`}
+                    >
+                        This Week
+                    </button>
+                    <button
+                        onClick={() => handleWeekMode("next")}
+                        className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                            weekMode === "next"
+                                ? "bg-[var(--color-primary)] text-white border-[var(--color-primary)]"
+                                : "bg-[var(--color-surface)] text-[var(--color-text-primary)] border-[var(--color-border)] hover:bg-[var(--color-surface-hover)]"
+                        }`}
+                    >
+                        Next Week
+                    </button>
+                    <button
+                        onClick={() => handleWeekMode("custom")}
+                        className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                            weekMode === "custom"
+                                ? "bg-[var(--color-primary)] text-white border-[var(--color-primary)]"
+                                : "bg-[var(--color-surface)] text-[var(--color-text-primary)] border-[var(--color-border)] hover:bg-[var(--color-surface-hover)]"
+                        }`}
+                    >
+                        Custom
+                    </button>
+                </div>
+                {weekMode === "custom" && (
+                    <input
+                        type="date"
+                        value={targetWeek}
+                        onChange={(e) => {
+                            if (e.target.value) {
+                                const picked = new Date(e.target.value + "T00:00:00");
+                                const monday = startOfWeek(picked, { weekStartsOn: 1 });
+                                setTargetWeek(format(monday, "yyyy-MM-dd"));
+                            }
+                        }}
+                        className="input-google text-sm mb-2"
+                    />
+                )}
+                <p className="text-xs text-[var(--color-text-secondary)]">
+                    Importing for: <span className="font-medium">{targetWeekLabel}</span>
+                </p>
+            </div>
 
             {/* Upload Area */}
             <div
@@ -707,7 +801,7 @@ export function ScanPage() {
                                         )}
                                     </div>
                                     <p className="text-sm text-[var(--color-text-secondary)] mt-1">
-                                        {result.date} at {result.time} ({result.duration} min)
+                                        {format(new Date(result.date + "T00:00:00"), "EEE")} {result.date} at {result.time} ({result.duration} min)
                                     </p>
                                     {result.visitType && (
                                         <p className="text-sm text-[var(--color-text-secondary)] mt-1">

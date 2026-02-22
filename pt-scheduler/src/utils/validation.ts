@@ -159,7 +159,10 @@ export const ocrRequestSchema = z.object({
     .refine(
       (val) => val.startsWith("data:image/"),
       "Image must be a valid data URL"
-    )
+    ),
+  targetWeekStart: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD format")
 });
 
 export const optimizeRequestSchema = z.object({
