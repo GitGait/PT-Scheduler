@@ -295,6 +295,8 @@ export function SchedulePage() {
     } | null>(null);
     const touchDragTimerRef = useRef<number | null>(null);
     const touchDragPreviewRef = useRef<{ date: string; startTime: string } | null>(null);
+    const dragCommittedRef = useRef(false);
+    const dragPreviewRef = useRef<{ date: string; startTime: string } | null>(null);
     const [touchDragGhost, setTouchDragGhost] = useState<{ x: number; y: number; name: string; duration: number } | null>(null);
 
     const [homeCoordinates, setHomeCoordinates] = useState<{ lat: number; lng: number } | null>(() => {
@@ -1041,6 +1043,13 @@ export function SchedulePage() {
         event: DragEvent<HTMLDivElement>,
         appointmentId: string
     ) => {
+        // Block HTML5 drag when touch drag is active
+        if (touchDragRef.current) {
+            event.preventDefault();
+            return;
+        }
+        dragCommittedRef.current = false;
+
         // Lock scroll position BEFORE any state changes that trigger re-renders.
         // State updates (draggingAppointmentId, moveAppointmentId, dragPreview)
         // cause re-renders that can reset scroll position in the flex layout.
@@ -1054,18 +1063,38 @@ export function SchedulePage() {
         setMoveAppointmentId(appointmentId);
         const existing = appointments.find((apt) => apt.id === appointmentId);
         if (existing) {
-            setDragPreview({ date: existing.date, startTime: existing.startTime });
+            const preview = { date: existing.date, startTime: existing.startTime };
+            setDragPreview(preview);
+            dragPreviewRef.current = preview;
         }
     };
 
     const handleAppointmentDragEnd = (event: DragEvent<HTMLDivElement>) => {
         event.preventDefault();
+
+        // Fallback: if drop didn't fire but we have a valid preview, commit the move.
+        // This fixes the browser quirk where HTML5 drop events intermittently fail to fire.
+        if (!dragCommittedRef.current && draggingAppointmentId && dragPreviewRef.current) {
+            const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
+            const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
+            pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 10 };
+            moveAppointmentToSlot(
+                draggingAppointmentId,
+                dragPreviewRef.current.date,
+                dragPreviewRef.current.startTime
+            );
+            triggerSync();
+        }
+
+        dragCommittedRef.current = false;
+        dragPreviewRef.current = null;
         setDraggingAppointmentId(null);
         setDragPreview(null);
         setMoveAppointmentId(null);
     };
 
     const updateDragPreview = (date: string, startTime: string) => {
+        dragPreviewRef.current = { date, startTime };
         setDragPreview((current) => {
             if (current?.date === date && current.startTime === startTime) {
                 return current;
@@ -1181,6 +1210,7 @@ export function SchedulePage() {
             void moveNote(noteId, date, startMinutes);
             setDraggingNoteId(null);
             setNoteDragPreview(null);
+            dragCommittedRef.current = true;
             return;
         }
 
@@ -1195,12 +1225,14 @@ export function SchedulePage() {
         setDragPreview(null);
 
         if (!droppedId) {
+            dragCommittedRef.current = true;
             return;
         }
 
         const startTime = getStartTimeFromColumnPosition(event);
 
         moveAppointmentToSlot(droppedId, date, startTime);
+        dragCommittedRef.current = true;
         setMoveAppointmentId(null);
         triggerSync();
         suppressNextSlotClickRef.current = true;
@@ -1227,6 +1259,7 @@ export function SchedulePage() {
             void moveNote(noteId, date, startMinutes);
             setDraggingNoteId(null);
             setNoteDragPreview(null);
+            dragCommittedRef.current = true;
             suppressNextSlotClickRef.current = true;
             if (suppressClickTimerRef.current) {
                 window.clearTimeout(suppressClickTimerRef.current);
@@ -1242,10 +1275,12 @@ export function SchedulePage() {
         setDragPreview(null);
 
         if (!droppedId) {
+            dragCommittedRef.current = true;
             return;
         }
 
         moveAppointmentToSlot(droppedId, date, startTime);
+        dragCommittedRef.current = true;
         setMoveAppointmentId(null);
         triggerSync();
         suppressNextSlotClickRef.current = true;
