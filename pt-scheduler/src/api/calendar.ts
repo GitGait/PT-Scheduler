@@ -334,8 +334,13 @@ function buildCalendarEvent(
         privateMetadata[CALENDAR_METADATA_KEYS.visitType] = appointment.visitType ?? "";
     }
 
-    if (appointment.chipNote) {
-        privateMetadata[CALENDAR_METADATA_KEYS.chipNote] = appointment.chipNote;
+    // Write chipNotes as JSON array; fall back to legacy chipNote
+    const allNotes: string[] = [
+        ...(appointment.chipNotes ?? []),
+        ...((appointment.chipNote && !(appointment.chipNotes ?? []).includes(appointment.chipNote)) ? [appointment.chipNote] : []),
+    ];
+    if (allNotes.length > 0) {
+        privateMetadata[CALENDAR_METADATA_KEYS.chipNote] = JSON.stringify(allNotes);
     }
 
     return {

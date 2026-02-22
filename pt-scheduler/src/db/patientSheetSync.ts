@@ -23,6 +23,9 @@ export async function reconcilePatientsFromSheetSnapshot(
         if (existing?.chipNote && !patient.chipNote) {
             patient.chipNote = existing.chipNote;
         }
+        if (existing?.chipNotes?.length && !patient.chipNotes?.length) {
+            patient.chipNotes = existing.chipNotes;
+        }
         await db.patients.put(patient);
     }
 

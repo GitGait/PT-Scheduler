@@ -37,6 +37,7 @@ export interface Patient {
   referralSource?: string;
   notes: string;
   chipNote?: string;
+  chipNotes?: string[];
   sheetsRowIndex?: number;
   forOtherPtAt?: Date;
   createdAt: Date;
@@ -65,6 +66,7 @@ export interface Appointment {
   personalCategory?: string;  // For personal events (patientId === "__personal__")
   title?: string;             // Free-text title for personal events
   chipNote?: string;           // Short note displayed as banner on the chip
+  chipNotes?: string[];        // Multiple stacked chip notes (replaces chipNote)
   createdAt: Date;
   updatedAt: Date;
 }

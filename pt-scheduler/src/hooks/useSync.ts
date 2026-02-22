@@ -224,7 +224,25 @@ export function useSync(config: SyncConfig | null) {
                     continue;
                 }
 
-                const chipNote = metadata[CALENDAR_METADATA_KEYS.chipNote] ?? existing?.chipNote;
+                // Parse chipNotes from calendar metadata — supports both
+                // new JSON array format and old plain-string format.
+                const rawChipNote = metadata[CALENDAR_METADATA_KEYS.chipNote];
+                let chipNotes: string[] | undefined;
+                if (rawChipNote) {
+                    try {
+                        const parsed: unknown = JSON.parse(rawChipNote);
+                        if (Array.isArray(parsed) && parsed.every((v): v is string => typeof v === "string")) {
+                            chipNotes = parsed;
+                        }
+                    } catch {
+                        // Legacy plain-string format
+                        chipNotes = [rawChipNote];
+                    }
+                }
+                // Fall back to existing local data
+                if (!chipNotes?.length) {
+                    chipNotes = existing?.chipNotes ?? (existing?.chipNote ? [existing.chipNote] : undefined);
+                }
 
                 const appointmentRecord: Record<string, unknown> = {
                     id: appointmentId,
@@ -241,10 +259,10 @@ export function useSync(config: SyncConfig | null) {
                     updatedAt: new Date(),
                 };
 
-                // Only include chipNote when it has a value — passing
+                // Only include chipNotes when they have values — passing
                 // undefined to Dexie's .update() deletes the property.
-                if (chipNote) {
-                    appointmentRecord.chipNote = chipNote;
+                if (chipNotes?.length) {
+                    appointmentRecord.chipNotes = chipNotes;
                 }
 
                 if (isPersonalEvent) {

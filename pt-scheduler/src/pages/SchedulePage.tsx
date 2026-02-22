@@ -72,6 +72,7 @@ interface ClearedWeekAppointmentSnapshot {
     status: Appointment["status"];
     notes?: string;
     chipNote?: string;
+    chipNotes?: string[];
     personalCategory?: string;
     title?: string;
 }
@@ -1160,6 +1161,7 @@ export function SchedulePage() {
                 title: source.title,
                 notes: source.notes,
                 chipNote: source.chipNote,
+                chipNotes: source.chipNotes,
                 status: 'scheduled',
             });
         });
@@ -1684,6 +1686,7 @@ export function SchedulePage() {
                     status: appointment.status,
                     notes: appointment.notes,
                     chipNote: appointment.chipNote,
+                    chipNotes: appointment.chipNotes,
                     personalCategory: appointment.personalCategory,
                     title: appointment.title,
                 })),
@@ -1758,6 +1761,7 @@ export function SchedulePage() {
                     syncStatus: "local",
                     notes: appointment.notes,
                     chipNote: appointment.chipNote,
+                    chipNotes: appointment.chipNotes,
                 });
             }
 
@@ -2912,16 +2916,35 @@ export function SchedulePage() {
                                                             ))}
                                                         </div>
 
-                                                        {/* Chip quick note banner */}
-                                                        {(appointment.chipNote ?? patient?.chipNote) && (
-                                                            <div
-                                                                className="absolute bottom-0 left-0 right-0 bg-yellow-400 text-yellow-950 text-[10px] font-semibold px-1.5 py-0.5 truncate leading-tight pointer-events-none"
-                                                                style={{ zIndex: 2 }}
-                                                                title={appointment.chipNote ?? patient?.chipNote}
-                                                            >
-                                                                {appointment.chipNote ?? patient?.chipNote}
-                                                            </div>
-                                                        )}
+                                                        {/* Chip quick note banners (stacked) */}
+                                                        {(() => {
+                                                            const allNotes: string[] = [
+                                                                ...(appointment.chipNotes ?? []),
+                                                                ...((appointment.chipNote && !(appointment.chipNotes ?? []).includes(appointment.chipNote)) ? [appointment.chipNote] : []),
+                                                            ];
+                                                            const patientAllNotes: string[] = allNotes.length === 0 ? [
+                                                                ...(patient?.chipNotes ?? []),
+                                                                ...((patient?.chipNote && !(patient?.chipNotes ?? []).includes(patient?.chipNote)) ? [patient.chipNote] : []),
+                                                            ] : [];
+                                                            const displayNotes = allNotes.length > 0 ? allNotes : patientAllNotes;
+                                                            if (displayNotes.length === 0) return null;
+                                                            return (
+                                                                <div
+                                                                    className="absolute bottom-0 left-0 right-0 pointer-events-none flex flex-col"
+                                                                    style={{ zIndex: 2 }}
+                                                                    title={displayNotes.join('\n')}
+                                                                >
+                                                                    {displayNotes.map((note, idx) => (
+                                                                        <div
+                                                                            key={idx}
+                                                                            className="bg-yellow-400 text-yellow-950 text-[10px] font-semibold px-1.5 py-0.5 truncate leading-tight border-t border-yellow-500/30 first:border-t-0"
+                                                                        >
+                                                                            {note}
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            );
+                                                        })()}
 
                                                         {/* Invisible resize handles - larger in day view for easier grabbing */}
                                                         {/* Top resize handle */}
@@ -3534,15 +3557,21 @@ export function SchedulePage() {
                         onHold={() => {
                             void putOnHold(actionSheetAppointmentId);
                         }}
-                        onChipNote={(text) => {
-                            void update(actionSheetAppointmentId, { chipNote: text || undefined });
+                        onChipNote={(notes) => {
+                            void update(actionSheetAppointmentId, {
+                                chipNotes: notes.length > 0 ? notes : undefined,
+                                chipNote: undefined,
+                            });
                         }}
-                        onPatientChipNote={(text) => {
+                        onPatientChipNote={(notes) => {
                             if (actionAppointment.patientId) {
-                                void updatePatient(actionAppointment.patientId, { chipNote: text || undefined });
+                                void updatePatient(actionAppointment.patientId, {
+                                    chipNotes: notes.length > 0 ? notes : undefined,
+                                    chipNote: undefined,
+                                });
                             }
-                            // Clear appointment-level chipNote so patient-level takes over
-                            void update(actionSheetAppointmentId, { chipNote: undefined });
+                            // Clear appointment-level notes so patient-level takes over
+                            void update(actionSheetAppointmentId, { chipNotes: undefined, chipNote: undefined });
                         }}
                         onDelete={() => {
                             void handleDeleteAppointment(actionAppointment);
