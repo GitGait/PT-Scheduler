@@ -111,7 +111,7 @@ export function useSync(config: SyncConfig | null) {
     /**
      * Sync appointments from Google Calendar to local database for cross-device visibility.
      */
-    const syncAppointmentsFromCalendar = useCallback(async () => {
+    const syncAppointmentsFromCalendar = useCallback(async (skipIds?: Set<string>) => {
         if (!config?.calendarId || !isSignedIn()) return;
 
         // Prevent concurrent sync operations to avoid data inconsistency
@@ -221,6 +221,13 @@ export function useSync(config: SyncConfig | null) {
                 // These will be pushed to the calendar by processQueue; pulling
                 // old calendar data here would revert the user's local edits.
                 if (existing && (existing.syncStatus === "pending" || existing.syncStatus === "local")) {
+                    continue;
+                }
+
+                // Skip appointments that were just pushed — Google Calendar
+                // may not have propagated the update yet, so pulling now would
+                // overwrite the local change with stale remote data.
+                if (skipIds?.has(appointmentId)) {
                     continue;
                 }
 
@@ -437,9 +444,10 @@ export function useSync(config: SyncConfig | null) {
     /**
      * Process the sync queue in batches.
      */
-    const processQueue = useCallback(async () => {
-        if (!config || !isSignedIn() || !isOnline) return;
-        if (queueRunInFlightRef.current) return;
+    const processQueue = useCallback(async (): Promise<Set<string>> => {
+        const pushedAppointmentIds = new Set<string>();
+        if (!config || !isSignedIn() || !isOnline) return pushedAppointmentIds;
+        if (queueRunInFlightRef.current) return pushedAppointmentIds;
 
         queueRunInFlightRef.current = true;
         setIsSyncing(true);
@@ -455,6 +463,10 @@ export function useSync(config: SyncConfig | null) {
                     await processSyncItem(item, config);
                     if (queueItemId !== undefined) {
                         await db.syncQueue.delete(queueItemId);
+                    }
+                    // Track appointment IDs that were successfully pushed
+                    if (item.entity === "appointment" && item.data?.entityId) {
+                        pushedAppointmentIds.add(item.data.entityId as string);
                     }
                 } catch (err) {
                     await handleSyncItemError(item, err);
@@ -476,6 +488,7 @@ export function useSync(config: SyncConfig | null) {
             queueRunInFlightRef.current = false;
             setIsSyncing(false);
         }
+        return pushedAppointmentIds;
     }, [config, isOnline, refreshPendingCount]);
 
     useEffect(() => {
@@ -492,16 +505,20 @@ export function useSync(config: SyncConfig | null) {
                 return;
             }
 
-            // Push local changes first to avoid pull overwriting them
+            // Push local changes first to avoid pull overwriting them.
+            // Track which appointment IDs were pushed so we can skip them
+            // during the pull — Google Calendar may return stale data if
+            // the push hasn't propagated yet.
+            let pushedIds: Set<string> | undefined;
             const pending = await syncQueueDB.getPendingCount();
             if (pending > 0) {
-                await processQueue();
+                pushedIds = await processQueue();
             }
 
             await backfillLocalAppointmentsToCalendar();
             await syncPatientsFromSheets();
             await syncDayNotesFromSheets();
-            await syncAppointmentsFromCalendar();
+            await syncAppointmentsFromCalendar(pushedIds);
         };
 
         const runFastSync = async () => {
@@ -512,14 +529,17 @@ export function useSync(config: SyncConfig | null) {
             // Push local changes first so the calendar has current data
             // before we pull, preventing stale calendar data from
             // overwriting recent local edits.
+            // Track which appointment IDs were pushed so we can skip them
+            // during the immediate pull.
+            let pushedIds: Set<string> | undefined;
             const pending = await syncQueueDB.getPendingCount();
             if (pending > 0) {
-                await processQueue();
+                pushedIds = await processQueue();
             }
 
             await syncPatientsFromSheets();
             await syncDayNotesFromSheets();
-            await syncAppointmentsFromCalendar();
+            await syncAppointmentsFromCalendar(pushedIds);
         };
 
         void runFullSync();
