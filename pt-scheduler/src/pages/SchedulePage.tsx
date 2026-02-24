@@ -967,6 +967,11 @@ export function SchedulePage() {
             return;
         }
 
+        if (newIsPersonalEvent && newRepeatInterval !== "none" && !newRepeatUntil) {
+            setAddError("Please set a 'Repeat until' date for recurring events.");
+            return;
+        }
+
         setIsSaving(true);
         setAddError(null);
 
@@ -3369,7 +3374,18 @@ export function SchedulePage() {
                                                 </label>
                                                 <select
                                                     value={newRepeatInterval}
-                                                    onChange={(e) => setNewRepeatInterval(e.target.value as "none" | "weekly" | "biweekly")}
+                                                    onChange={(e) => {
+                                                        const val = e.target.value as "none" | "weekly" | "biweekly";
+                                                        setNewRepeatInterval(val);
+                                                        if (val !== "none" && !newRepeatUntil) {
+                                                            const d = new Date(newAppointmentDate + "T00:00:00");
+                                                            d.setMonth(d.getMonth() + 3);
+                                                            setNewRepeatUntil(toLocalIsoDate(d));
+                                                        }
+                                                        if (val === "none") {
+                                                            setNewRepeatUntil("");
+                                                        }
+                                                    }}
                                                     className="w-full input-google"
                                                 >
                                                     <option value="none">None</option>
@@ -3390,6 +3406,20 @@ export function SchedulePage() {
                                                         min={newAppointmentDate}
                                                         className="w-full input-google"
                                                     />
+                                                    {newRepeatUntil && (() => {
+                                                        const stepDays = newRepeatInterval === "weekly" ? 7 : 14;
+                                                        const start = new Date(newAppointmentDate + "T00:00:00");
+                                                        const end = new Date(newRepeatUntil + "T00:00:00");
+                                                        let count = 1;
+                                                        const cur = new Date(start);
+                                                        cur.setDate(cur.getDate() + stepDays);
+                                                        while (cur <= end) { count++; cur.setDate(cur.getDate() + stepDays); }
+                                                        return (
+                                                            <p className="text-xs text-[var(--color-text-secondary)] mt-1">
+                                                                {count} occurrence{count !== 1 ? "s" : ""} will be created
+                                                            </p>
+                                                        );
+                                                    })()}
                                                 </div>
                                             )}
                                         </>
