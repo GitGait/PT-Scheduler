@@ -24,30 +24,30 @@ export function getSaturdayOfWeek(dateStr: string): Date {
 }
 
 /**
- * Find PT18 appointments from the last 28 days and discharge patients
- * whose PT18 week's Saturday has passed.
+ * Find PT18/PT19 appointments from the last 28 days and discharge patients
+ * whose discharge visit week's Saturday has passed.
  */
 export async function processAutoDischarges(): Promise<number> {
   const today = new Date();
   const todayStr = toLocalIsoDate(today);
 
-  // Look back 28 days for PT18 appointments
+  // Look back 28 days for PT18/PT19 appointments
   const lookbackDate = new Date(today);
   lookbackDate.setDate(lookbackDate.getDate() - 28);
   const lookbackStr = toLocalIsoDate(lookbackDate);
 
   const appointments = await appointmentDB.byRange(lookbackStr, todayStr);
 
-  // Filter to PT18 appointments that are scheduled or completed (not cancelled/no-show)
-  const pt18Appointments = appointments.filter(
+  // Filter to PT18/PT19 appointments that are scheduled or completed (not cancelled/no-show)
+  const dischargeAppointments = appointments.filter(
     (appt: Appointment) =>
-      appt.visitType === "PT18" &&
+      (appt.visitType === "PT18" || appt.visitType === "PT19") &&
       (appt.status === "scheduled" || appt.status === "completed")
   );
 
   let dischargedCount = 0;
 
-  for (const appt of pt18Appointments) {
+  for (const appt of dischargeAppointments) {
     const saturday = getSaturdayOfWeek(appt.date);
     const saturdayStr = toLocalIsoDate(saturday);
 
