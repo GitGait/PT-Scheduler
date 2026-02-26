@@ -451,7 +451,10 @@ export function SchedulePage() {
 
         const exists = patients.some((patient) => patient.id === newPatientId);
         if (!exists) {
-            setNewPatientId(patients[0].id);
+            const firstActive = patients.find(
+                (p) => p.status === "active" || p.status === "evaluation"
+            );
+            setNewPatientId((firstActive || patients[0]).id);
         }
     }, [patients, newPatientId]);
 
@@ -3433,11 +3436,29 @@ export function SchedulePage() {
                                                 onChange={(e) => setNewPatientId(e.target.value)}
                                                 className="w-full input-google"
                                             >
-                                                {[...patients].sort((a, b) => a.fullName.localeCompare(b.fullName)).map((patient) => (
-                                                    <option key={patient.id} value={patient.id}>
-                                                        {patient.fullName}
-                                                    </option>
-                                                ))}
+                                                {(() => {
+                                                    const schedulable = [...patients]
+                                                        .filter((p) => p.id !== PERSONAL_PATIENT_ID && p.status !== "discharged")
+                                                        .sort((a, b) => a.fullName.localeCompare(b.fullName));
+                                                    const active = schedulable.filter((p) => p.status !== "for-other-pt");
+                                                    const otherPt = schedulable.filter((p) => p.status === "for-other-pt");
+                                                    return (
+                                                        <>
+                                                            <optgroup label="Active Patients">
+                                                                {active.map((p) => (
+                                                                    <option key={p.id} value={p.id}>{p.fullName}</option>
+                                                                ))}
+                                                            </optgroup>
+                                                            {otherPt.length > 0 && (
+                                                                <optgroup label="Other PT">
+                                                                    {otherPt.map((p) => (
+                                                                        <option key={p.id} value={p.id}>{p.fullName}</option>
+                                                                    ))}
+                                                                </optgroup>
+                                                            )}
+                                                        </>
+                                                    );
+                                                })()}
                                             </select>
                                         </div>
                                     )}

@@ -18,7 +18,12 @@ export async function reconcilePatientsFromSheetSnapshot(
     spreadsheetId: string,
     sheetPatients: Patient[]
 ): Promise<PatientSheetSyncResult> {
+    const pendingPatientIds = await getPendingPatientSyncIds();
+
     for (const patient of sheetPatients) {
+        if (pendingPatientIds.has(patient.id)) {
+            continue; // Skip — local version has unsaved changes
+        }
         const existing = await db.patients.get(patient.id);
         if (existing?.chipNote && !patient.chipNote) {
             patient.chipNote = existing.chipNote;
@@ -33,7 +38,6 @@ export async function reconcilePatientsFromSheetSnapshot(
         sheetPatients.map((patient) => patient.id).filter(Boolean)
     );
     const previouslyTrackedIds = readTrackedSheetPatientIds(spreadsheetId);
-    const pendingPatientIds = await getPendingPatientSyncIds();
 
     let deleted = 0;
     for (const patientId of previouslyTrackedIds) {
