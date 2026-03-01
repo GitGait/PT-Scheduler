@@ -2711,7 +2711,7 @@ export function SchedulePage() {
                                         onDragOver={(event) => {
                                             event.preventDefault();
                                             event.dataTransfer.dropEffect = "move";
-                                            if (draggingAppointmentId) {
+                                            if (draggingAppointmentIdRef.current) {
                                                 updateDragPreview(
                                                     date,
                                                     getStartTimeFromColumnPosition(event)
@@ -2756,7 +2756,7 @@ export function SchedulePage() {
                                                         event.preventDefault();
                                                         event.dataTransfer.dropEffect = "move";
                                                         event.stopPropagation();
-                                                        if (draggingAppointmentId) {
+                                                        if (draggingAppointmentIdRef.current) {
                                                             updateDragPreview(date, slotTime);
                                                         }
                                                         if (draggingNoteId) {

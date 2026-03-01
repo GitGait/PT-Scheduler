@@ -23,20 +23,6 @@ Home health physical therapy scheduling PWA. Built and running. Currently in act
 | PWA | vite-plugin-pwa |
 | Package Manager | npm |
 
-## Commands
-```bash
-cd pt-scheduler
-npm run dev          # Dev server
-npm run build        # tsc + vite build (use to verify changes)
-npm test             # Vitest (single run)
-npm run test:watch   # Vitest in watch mode
-npm run test:coverage # Vitest with coverage
-npx tsc --noEmit     # Type-check only (no output)
-vercel --prod        # Deploy to production
-```
-
-Single-file test: `npm test -- src/utils/matching.test.ts`
-
 ## Deploy Rule
 **Always deploy after completing changes.** Full sequence:
 ```bash
@@ -75,17 +61,6 @@ Do all four steps. Don't skip any. If build fails, fix it before committing.
 - Google Sign-In via GIS. Auth state in `src/api/auth.ts`.
 - Offline-first: all data in IndexedDB via Dexie.js, synced to Google when online.
 - Sync queue in `src/hooks/syncQueue.ts` handles retry with exponential backoff.
-
-## Conventions
-- Zod schemas in `validation.ts` are the single source of truth for API types. Derive types with `z.infer<typeof schema>`.
-- Functional React components with hooks only — no class components.
-- Add to existing Zustand stores before creating new ones.
-- Use existing CSS custom properties for theming, not new color values.
-- Database operations go through `src/db/operations.ts` helpers.
-- Patient matching uses 3-tier confidence: auto (>=90%), confirm (>=70%), manual (<70%).
-- Test files live next to source files as `*.test.ts` or `*.test.tsx`.
-- Mock external APIs in tests — never call real APIs.
-- See `.claude/rules/` for full code-style, architecture, and testing details.
 
 ## Do NOT
 - Use `any` types or leave unused variables.
