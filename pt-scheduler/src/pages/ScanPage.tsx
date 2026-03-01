@@ -487,6 +487,12 @@ export function ScanPage() {
 
     const handleImportConfirmed = async () => {
         const confirmedResults = results.filter((r) => r.confirmed);
+        const regularResults = confirmedResults.filter(
+            (r) => normalizeVisitType(r.visitType) !== "NOMNC"
+        );
+        const nomncResults = confirmedResults.filter(
+            (r) => normalizeVisitType(r.visitType) === "NOMNC"
+        );
 
         if (confirmedResults.length === 0) {
             setError("No confirmed appointments to import.");
@@ -504,8 +510,9 @@ export function ScanPage() {
                 startTime: string;
                 duration: number;
             }> = [];
+            const importedMap = new Map<string, string>();
 
-            for (const result of confirmedResults) {
+            for (const result of regularResults) {
                 let patientId = result.matchedPatientId;
 
                 // If no matched patient, create a new one from the OCR name
@@ -545,6 +552,8 @@ export function ScanPage() {
                     notes: notesWithVisitType || undefined,
                 });
 
+                importedMap.set(`${patientId}-${result.date}`, appointmentId);
+
                 importedAppointments.push({
                     appointmentId,
                     patientId,
@@ -552,6 +561,35 @@ export function ScanPage() {
                     startTime: result.time,
                     duration: result.duration,
                 });
+            }
+
+            // Attach NOMNC chip notes to matching real visits
+            for (const result of nomncResults) {
+                const patientId = result.matchedPatientId;
+                if (!patientId) continue;
+
+                const key = `${patientId}-${result.date}`;
+                let targetId = importedMap.get(key);
+
+                // Check existing appointments if not in this batch
+                if (!targetId) {
+                    const existing = useAppointmentStore.getState().appointments.find(
+                        (a) => a.patientId === patientId && a.date === result.date
+                    );
+                    if (existing) targetId = existing.id;
+                }
+
+                if (targetId) {
+                    const target = useAppointmentStore.getState().appointments.find(
+                        (a) => a.id === targetId
+                    );
+                    const existingNotes = target?.chipNotes ?? [];
+                    if (!existingNotes.includes("NOMNC")) {
+                        await updateAppointment(targetId, {
+                            chipNotes: [...existingNotes, "NOMNC"],
+                        });
+                    }
+                }
             }
 
             const optimization = await optimizeImportedAppointments(importedAppointments);
@@ -594,7 +632,7 @@ export function ScanPage() {
                 window.dispatchEvent(new Event("pt-scheduler:appointments-synced"));
             }
 
-            setImportSuccess(confirmedResults.length);
+            setImportSuccess(regularResults.length);
             setResults([]);
         } catch (err) {
             setError(err instanceof Error ? err.message : "Failed to import appointments.");
