@@ -33,6 +33,62 @@ export function getDeletedPatientIds(): Set<string> {
 }
 
 // =============================================================================
+// Deleted Appointment Tracking (prevents sync reload from resurrecting deleted appointments)
+// =============================================================================
+
+const DELETED_APPOINTMENTS_KEY = "ptScheduler.deletedAppointmentIds";
+const DELETED_APPOINTMENT_TTL_MS = 60 * 60 * 1000; // 1 hour
+
+export function trackDeletedAppointmentId(id: string): void {
+    const entries = getRawDeletedAppointmentEntries();
+    entries[id] = Date.now();
+    localStorage.setItem(DELETED_APPOINTMENTS_KEY, JSON.stringify(entries));
+}
+
+export function getDeletedAppointmentIds(): Set<string> {
+    const entries = getRawDeletedAppointmentEntries();
+    const now = Date.now();
+    const ids = new Set<string>();
+    for (const [id, timestamp] of Object.entries(entries)) {
+        if (now - timestamp < DELETED_APPOINTMENT_TTL_MS) {
+            ids.add(id);
+        }
+    }
+    return ids;
+}
+
+export function clearDeletedAppointmentId(id: string): void {
+    const entries = getRawDeletedAppointmentEntries();
+    delete entries[id];
+    localStorage.setItem(DELETED_APPOINTMENTS_KEY, JSON.stringify(entries));
+}
+
+export function cleanExpiredDeletedAppointmentIds(): void {
+    const entries = getRawDeletedAppointmentEntries();
+    const now = Date.now();
+    let changed = false;
+    for (const [id, timestamp] of Object.entries(entries)) {
+        if (now - timestamp >= DELETED_APPOINTMENT_TTL_MS) {
+            delete entries[id];
+            changed = true;
+        }
+    }
+    if (changed) {
+        localStorage.setItem(DELETED_APPOINTMENTS_KEY, JSON.stringify(entries));
+    }
+}
+
+function getRawDeletedAppointmentEntries(): Record<string, number> {
+    try {
+        const raw = localStorage.getItem(DELETED_APPOINTMENTS_KEY);
+        if (!raw) return {};
+        return JSON.parse(raw) as Record<string, number>;
+    } catch {
+        return {};
+    }
+}
+
+// =============================================================================
 // Patient Operations
 // =============================================================================
 

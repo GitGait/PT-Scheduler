@@ -1,10 +1,19 @@
 import { create } from "zustand";
 import type { Appointment, AppointmentStatus } from "../types";
-import { appointmentDB, syncQueueDB } from "../db/operations";
+import { appointmentDB, syncQueueDB, trackDeletedAppointmentId, clearDeletedAppointmentId } from "../db/operations";
 import { useSyncStore } from "./syncStore";
 import { deleteCalendarEvent } from "../api/calendar";
 import { isSignedIn } from "../api/auth";
 import { db } from "../db/schema";
+
+// IDs of appointments currently being deleted — prevents loadByRange from
+// resurrecting them before the DB write completes.
+const deletingIds = new Set<string>();
+
+// IDs of appointments currently being updated — prevents loadByRange from
+// overwriting optimistic state with stale DB data (especially when calendar
+// sync is not configured and syncStatus stays "synced").
+const mutatingIds = new Set<string>();
 
 interface AppointmentState {
     appointments: Appointment[];
@@ -87,8 +96,45 @@ export const useAppointmentStore = create<AppointmentState & AppointmentActions>
         try {
             const allInRange = await appointmentDB.byRange(startDate, endDate);
             // On-hold appointments live exclusively in onHoldAppointments
-            const appointments = allInRange.filter((a) => a.status !== "on-hold");
-            set({ appointments, loading: false });
+            const dbAppts = allInRange.filter((a) => a.status !== "on-hold");
+
+            // Merge instead of full-replace: preserve optimistic updates
+            // for pending/local/mutating appointments and skip in-flight deletes.
+            const currentAppts = get().appointments;
+            const preserveById = new Map<string, Appointment>();
+            for (const a of currentAppts) {
+                if (a.syncStatus === "pending" || a.syncStatus === "local" || mutatingIds.has(a.id)) {
+                    preserveById.set(a.id, a);
+                }
+            }
+
+            const merged: Appointment[] = [];
+            const seenIds = new Set<string>();
+
+            for (const dbAppt of dbAppts) {
+                // Skip appointments being deleted right now
+                if (deletingIds.has(dbAppt.id)) continue;
+
+                seenIds.add(dbAppt.id);
+
+                // Keep the optimistic version for pending/local/mutating appointments
+                const preserved = preserveById.get(dbAppt.id);
+                if (preserved) {
+                    merged.push(preserved);
+                } else {
+                    merged.push(dbAppt);
+                }
+            }
+
+            // Preserve pending/local/mutating appointments from state that aren't
+            // in DB results (e.g., cross-week drags where the new date is outside range)
+            for (const [id, appt] of preserveById) {
+                if (!seenIds.has(id) && !deletingIds.has(id)) {
+                    merged.push(appt);
+                }
+            }
+
+            set({ appointments: merged, loading: false });
         } catch (err) {
             set({
                 error: err instanceof Error ? err.message : "Failed to load appointments",
@@ -151,6 +197,7 @@ export const useAppointmentStore = create<AppointmentState & AppointmentActions>
 
     update: async (id, changes) => {
         set({ error: null });
+        mutatingIds.add(id);
         const shouldSync = hasCalendarSyncConfigured();
         const previous = get().appointments.find((a) => a.id === id);
         const optimisticUpdatedAt = new Date();
@@ -180,11 +227,19 @@ export const useAppointmentStore = create<AppointmentState & AppointmentActions>
                     ? state.appointments.map((a) => (a.id === id ? previous : a))
                     : state.appointments,
             }));
+        } finally {
+            // Delay cleanup so loadByRange preserves optimistic state through
+            // any sync-triggered reloads that fire shortly after the update.
+            setTimeout(() => mutatingIds.delete(id), 3000);
         }
     },
 
     delete: async (id) => {
         set({ error: null });
+        // Mark as deleting so loadByRange won't resurrect from DB
+        deletingIds.add(id);
+        // Track in localStorage so sync pull won't re-import from Google Calendar
+        trackDeletedAppointmentId(id);
         try {
             const appointment = await appointmentDB.get(id);
 
@@ -207,8 +262,11 @@ export const useAppointmentStore = create<AppointmentState & AppointmentActions>
                 try {
                     await deleteCalendarEvent(calendarId, eventId);
                     await db.calendarEvents.delete(eventId);
+                    // Calendar delete succeeded — no need to keep tracking
+                    clearDeletedAppointmentId(id);
                 } catch (calErr) {
                     // If calendar delete fails, queue it for retry
+                    // Keep the deleted tracking so sync won't re-import
                     console.warn("Immediate calendar delete failed, queuing for retry:", calErr);
                     await enqueueAppointmentSync("delete", id, eventId);
                 }
@@ -218,6 +276,10 @@ export const useAppointmentStore = create<AppointmentState & AppointmentActions>
             }
         } catch (err) {
             set({ error: err instanceof Error ? err.message : "Failed to delete appointment" });
+        } finally {
+            // Delay cleanup so loadByRange skips this ID through any
+            // sync-triggered reloads that fire shortly after the delete.
+            setTimeout(() => deletingIds.delete(id), 3000);
         }
     },
 

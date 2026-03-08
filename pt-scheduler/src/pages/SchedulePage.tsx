@@ -294,6 +294,7 @@ export function SchedulePage() {
     const dragCommittedRef = useRef(false);
     const dragPreviewRef = useRef<{ date: string; startTime: string } | null>(null);
     const draggingAppointmentIdRef = useRef<string | null>(null);
+    const mutationCooldownRef = useRef(0);
     const [touchDragGhost, setTouchDragGhost] = useState<{ x: number; y: number; name: string; duration: number } | null>(null);
 
     const [homeCoordinates, setHomeCoordinates] = useState<{ lat: number; lng: number } | null>(() => {
@@ -378,6 +379,16 @@ export function SchedulePage() {
     useEffect(() => {
         const handleAppointmentsSynced = () => {
             if (!weekStart || !weekEnd) {
+                return;
+            }
+            // Don't reload during active drag/resize — the natural
+            // triggerSync() after drop/resize-end will refresh data.
+            if (
+                touchDragRef.current?.activated ||
+                draggingAppointmentIdRef.current ||
+                resizeSessionRef.current ||
+                Date.now() - mutationCooldownRef.current < 3000
+            ) {
                 return;
             }
             // Preserve scroll position when sync replaces appointments
@@ -1353,6 +1364,7 @@ export function SchedulePage() {
 
     const handleChipTouchEnd = () => {
         const state = touchDragRef.current;
+        const preview = touchDragPreviewRef.current;
 
         // Lock scroll position BEFORE any state changes
         if (state?.activated) {
@@ -1361,12 +1373,15 @@ export function SchedulePage() {
             pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 10 };
         }
 
-        if (state?.activated && touchDragPreviewRef.current) {
-            void moveAppointmentToSlot(
-                state.appointmentId,
-                touchDragPreviewRef.current.date,
-                touchDragPreviewRef.current.startTime
-            );
+        // Clear timer and preview ref immediately
+        if (touchDragTimerRef.current) {
+            clearTimeout(touchDragTimerRef.current);
+            touchDragTimerRef.current = null;
+        }
+        touchDragPreviewRef.current = null;
+        setTouchDragGhost(null);
+
+        if (state?.activated && preview) {
             suppressNextSlotClickRef.current = true;
             suppressNextChipClickRef.current = true;
             // Reset suppression after synthetic click events fire (~300ms after touchend)
@@ -1378,17 +1393,29 @@ export function SchedulePage() {
             suppressChipClickTimerRef.current = window.setTimeout(() => {
                 suppressNextChipClickRef.current = false;
             }, 400);
-        }
 
-        if (touchDragTimerRef.current) {
-            clearTimeout(touchDragTimerRef.current);
-            touchDragTimerRef.current = null;
+            // Set cooldown BEFORE starting async work
+            mutationCooldownRef.current = Date.now();
+
+            // Keep touchDragRef.current alive through the async move so
+            // handleAppointmentsSynced guard stays active during the operation.
+            void (async () => {
+                await moveAppointmentToSlot(
+                    state.appointmentId,
+                    preview.date,
+                    preview.startTime
+                );
+                // Clear guard source and drag visual state AFTER move completes
+                touchDragRef.current = null;
+                setDraggingAppointmentId(null);
+                setDragPreview(null);
+            })();
+        } else {
+            // Non-activated touch — clear everything immediately
+            touchDragRef.current = null;
+            setDraggingAppointmentId(null);
+            setDragPreview(null);
         }
-        touchDragRef.current = null;
-        touchDragPreviewRef.current = null;
-        setDraggingAppointmentId(null);
-        setDragPreview(null);
-        setTouchDragGhost(null);
     };
 
     const handleNoteTouchEnd = () => {
@@ -1571,6 +1598,7 @@ export function SchedulePage() {
             return next;
         });
 
+        mutationCooldownRef.current = Date.now();
         await deleteAppointment(appointment.id);
         triggerSync();
     };

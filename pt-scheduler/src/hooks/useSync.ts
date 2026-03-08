@@ -22,7 +22,7 @@ import {
 import { db } from "../db/schema";
 import { reconcilePatientsFromSheetSnapshot } from "../db/patientSheetSync";
 import { reconcileDayNotesFromSheetSnapshot } from "../db/dayNoteSheetSync";
-import { syncQueueDB, getDeletedPatientIds } from "../db/operations";
+import { syncQueueDB, getDeletedPatientIds, getDeletedAppointmentIds, cleanExpiredDeletedAppointmentIds } from "../db/operations";
 import type { AppointmentStatus, SyncQueueItem, VisitType } from "../types";
 import { VISIT_TYPE_CODES } from "../types";
 import { PERSONAL_PATIENT_ID, parsePersonalCategory } from "../utils/personalEventColors";
@@ -124,6 +124,10 @@ export function useSync(config: SyncConfig | null) {
             let importedAny = false;
             let importedPatientsAny = false;
             const deletedPatientIds = getDeletedPatientIds();
+
+            // Clean expired deleted-appointment entries on the natural 2-min sync cadence
+            cleanExpiredDeletedAppointmentIds();
+            const deletedAppointmentIds = getDeletedAppointmentIds();
             const now = new Date();
             const timeMin = new Date(now);
             timeMin.setDate(timeMin.getDate() - CALENDAR_LOOKBACK_DAYS);
@@ -228,6 +232,12 @@ export function useSync(config: SyncConfig | null) {
                 // may not have propagated the update yet, so pulling now would
                 // overwrite the local change with stale remote data.
                 if (skipIds?.has(appointmentId)) {
+                    continue;
+                }
+
+                // Skip appointments that were recently deleted locally —
+                // Google Calendar may not have propagated the delete yet.
+                if (deletedAppointmentIds.has(appointmentId)) {
                     continue;
                 }
 
