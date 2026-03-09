@@ -1574,7 +1574,7 @@ export function PatientsPage() {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[var(--color-text-secondary)]" />
                     <input
                         type="search"
-                        placeholder="Search patients..."
+                        placeholder="Search by name or phone..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
                         className="w-full pl-10 pr-4 py-2 bg-[var(--color-surface-hover)] border-none rounded-lg text-[var(--color-text-primary)] placeholder-[var(--color-text-tertiary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]"

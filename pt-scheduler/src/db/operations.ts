@@ -98,14 +98,20 @@ export const patientDB = {
         return db.patients.get(id);
     },
 
-    /** Search patients by fullName (case-insensitive partial match) */
+    /** Search patients by name, nickname, or phone number (case-insensitive partial match) */
     async search(query: string): Promise<Patient[]> {
         const lowerQuery = query.toLowerCase();
+        const digitQuery = query.replace(/\D/g, "");
         return db.patients
             .filter(
                 (p) =>
                     p.fullName.toLowerCase().includes(lowerQuery) ||
-                    p.nicknames.some((n) => n.toLowerCase().includes(lowerQuery))
+                    p.nicknames.some((n) => n.toLowerCase().includes(lowerQuery)) ||
+                    (digitQuery.length >= 3 &&
+                        (p.phone.replace(/\D/g, "").includes(digitQuery) ||
+                            p.alternateContacts?.some((c) =>
+                                c.phone.replace(/\D/g, "").includes(digitQuery)
+                            )))
             )
             .toArray();
     },
