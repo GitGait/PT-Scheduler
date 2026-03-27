@@ -2858,6 +2858,7 @@ export function SchedulePage() {
                                                     sameStartGroup.findIndex((apt) => apt.id === appointment.id)
                                                 );
                                                 // Divide width among overlapping appointments in both views
+                                                const isDayView = viewMode === 'day';
                                                 const widthPct = 100 / groupSize;
                                                 const leftStyle = groupSize === 1 ? '4px' : `calc(${groupIndex * widthPct}% + 2px)`;
                                                 const widthStyle = groupSize === 1 ? 'calc(100% - 8px)' : `calc(${widthPct}% - 4px)`;
