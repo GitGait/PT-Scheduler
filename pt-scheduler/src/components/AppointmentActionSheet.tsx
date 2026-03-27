@@ -93,10 +93,22 @@ export function AppointmentActionSheet({
     const [editingText, setEditingText] = useState("");
     const editInputRef = useRef<HTMLInputElement>(null);
 
-    const copyToClipboard = useCallback((text: string, key: string) => {
-        void navigator.clipboard.writeText(text);
-        setCopiedKey(key);
-        setTimeout(() => setCopiedKey(null), 1500);
+    // Reset local state when the appointment changes so stale data doesn't persist
+    useEffect(() => {
+        setNotes(effectiveNotes);
+        setChipNoteMode(false);
+        setNewNoteText("");
+        setEditingIndex(null);
+    }, [appointment?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+    const copyToClipboard = useCallback(async (text: string, key: string) => {
+        try {
+            await navigator.clipboard.writeText(text);
+            setCopiedKey(key);
+            setTimeout(() => setCopiedKey(null), 1500);
+        } catch {
+            // Clipboard write failed — do not show success indicator
+        }
     }, []);
 
     const addNote = () => {
@@ -154,6 +166,18 @@ export function AppointmentActionSheet({
         onClose();
     };
 
+    // Close on Escape key
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                onClose();
+            }
+        };
+        document.addEventListener("keydown", handleKeyDown);
+        return () => document.removeEventListener("keydown", handleKeyDown);
+    }, [isOpen, onClose]);
+
     if (!isOpen) {
         return null;
     }
@@ -179,6 +203,8 @@ export function AppointmentActionSheet({
             onClick={onClose}
         >
             <div
+                role="dialog"
+                aria-modal="true"
                 className="bg-[var(--color-surface)] rounded-t-xl shadow-2xl w-full max-w-md mx-4 mb-0 animate-slide-up safe-area-pb max-h-[80vh] overflow-y-auto"
                 onClick={(e) => e.stopPropagation()}
             >

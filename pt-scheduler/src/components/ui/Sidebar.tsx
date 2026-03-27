@@ -270,6 +270,14 @@ interface MiniCalendarProps {
 function MiniCalendar({ selectedDate, onDateSelect }: MiniCalendarProps) {
   const [viewMonth, setViewMonth] = useState(startOfMonth(selectedDate));
 
+  // Keep viewMonth in sync when selectedDate changes to a different month
+  useEffect(() => {
+    const selectedMonth = startOfMonth(selectedDate);
+    if (selectedMonth.getTime() !== viewMonth.getTime()) {
+      setViewMonth(selectedMonth);
+    }
+  }, [selectedDate]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const weeks = useMemo(() => {
     const monthStart = startOfMonth(viewMonth);
     const monthEnd = endOfMonth(viewMonth);

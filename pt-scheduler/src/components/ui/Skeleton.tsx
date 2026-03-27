@@ -92,10 +92,10 @@ export function ScheduleGridSkeleton() {
                     className="flex-1 border-l border-[var(--color-border-light)] p-1"
                     style={{ height: 48 }}
                   >
-                    {/* Random appointment skeletons */}
-                    {Math.random() > 0.7 && (
+                    {/* Deterministic appointment skeletons */}
+                    {(i * 7 + j) % 3 === 0 && (
                       <Skeleton
-                        height={Math.random() > 0.5 ? 44 : 88}
+                        height={(i + j) % 2 === 0 ? 44 : 88}
                         className="rounded"
                       />
                     )}
@@ -139,7 +139,7 @@ export function AppointmentChipSkeleton({ count = 3 }: { count?: number }) {
         <Skeleton
           key={i}
           variant="chip"
-          height={48 + Math.floor(Math.random() * 24)}
+          height={48 + ((i * 13 + 7) % 24)}
         />
       ))}
     </SkeletonGroup>

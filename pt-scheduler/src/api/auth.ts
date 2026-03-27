@@ -22,6 +22,7 @@ let refreshTimerId: ReturnType<typeof setTimeout> | null = null;
 // Pending sign-in promise handlers (resolved by the GIS code callback)
 let pendingResolve: ((token: string) => void) | null = null;
 let pendingReject: ((err: Error) => void) | null = null;
+let pendingPromise: Promise<string> | null = null;
 
 interface CodeResponse {
     code: string;
@@ -123,10 +124,23 @@ function scheduleTokenRefresh(expiresInSeconds: number): void {
  * Exchange refresh token cookie for a new access token via the server.
  */
 async function refreshViaServer(): Promise<string> {
-    const resp = await fetch("/api/auth/refresh", {
-        method: "POST",
-        credentials: "include",
-    });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+    let resp: Response;
+    try {
+        resp = await fetch("/api/auth/refresh", {
+            method: "POST",
+            credentials: "include",
+            signal: controller.signal,
+        });
+    } catch (err) {
+        if (err instanceof Error && err.name === "AbortError") {
+            throw new Error("Auth refresh timed out after 15s");
+        }
+        throw err;
+    } finally {
+        clearTimeout(timeout);
+    }
 
     if (!resp.ok) {
         throw new Error("Refresh failed");
@@ -177,17 +191,31 @@ export function initAuth(clientId: string): Promise<void> {
                         );
                         pendingResolve = null;
                         pendingReject = null;
+                        pendingPromise = null;
                         return;
                     }
 
                     try {
                         console.log("[Auth] Exchanging code with server...");
-                        const resp = await fetch("/api/auth/exchange", {
-                            method: "POST",
-                            headers: { "Content-Type": "application/json" },
-                            credentials: "include",
-                            body: JSON.stringify({ code: response.code }),
-                        });
+                        const exchangeController = new AbortController();
+                        const exchangeTimeout = setTimeout(() => exchangeController.abort(), 15_000);
+                        let resp: Response;
+                        try {
+                            resp = await fetch("/api/auth/exchange", {
+                                method: "POST",
+                                headers: { "Content-Type": "application/json" },
+                                credentials: "include",
+                                body: JSON.stringify({ code: response.code }),
+                                signal: exchangeController.signal,
+                            });
+                        } catch (fetchErr) {
+                            if (fetchErr instanceof Error && fetchErr.name === "AbortError") {
+                                throw new Error("Token exchange timed out after 15s");
+                            }
+                            throw fetchErr;
+                        } finally {
+                            clearTimeout(exchangeTimeout);
+                        }
                         console.log("[Auth] Exchange response:", resp.status, resp.statusText);
 
                         if (!resp.ok) {
@@ -217,11 +245,13 @@ export function initAuth(clientId: string): Promise<void> {
 
                     pendingResolve = null;
                     pendingReject = null;
+                    pendingPromise = null;
                 },
                 error_callback: (error: { type: string }) => {
                     pendingReject?.(new Error(error.type || "Sign-in cancelled"));
                     pendingResolve = null;
                     pendingReject = null;
+                    pendingPromise = null;
                 },
             });
             resolve();
@@ -236,7 +266,11 @@ export function initAuth(clientId: string): Promise<void> {
  * Opens Google sign-in popup.
  */
 export function signIn(): Promise<string> {
-    return new Promise((resolve, reject) => {
+    if (pendingPromise) {
+        return pendingPromise;
+    }
+
+    pendingPromise = new Promise((resolve, reject) => {
         if (!codeClient) {
             reject(new Error("Auth not initialized"));
             return;
@@ -246,6 +280,7 @@ export function signIn(): Promise<string> {
         pendingReject = reject;
         codeClient.requestCode();
     });
+    return pendingPromise;
 }
 
 /**
@@ -272,6 +307,7 @@ export async function tryRestoreSignIn(): Promise<boolean> {
  */
 export function signOut(): void {
     clearToken();
+    window.dispatchEvent(new Event(AUTH_STATE_CHANGED_EVENT));
 
     // Clear the server-side refresh token cookie
     fetch("/api/auth/refresh", {

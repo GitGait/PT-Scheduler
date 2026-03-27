@@ -221,6 +221,9 @@ export const useAppointmentStore = create<AppointmentState & AppointmentActions>
             });
             await enqueueAppointmentSync("update", id);
         } catch (err) {
+            // Immediately remove from mutatingIds so loadByRange won't
+            // re-apply the failed optimistic update during the 3-second window.
+            mutatingIds.delete(id);
             set((state) => ({
                 error: err instanceof Error ? err.message : "Failed to update appointment",
                 appointments: previous

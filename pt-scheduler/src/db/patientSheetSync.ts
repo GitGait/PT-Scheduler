@@ -24,19 +24,20 @@ export async function reconcilePatientsFromSheetSnapshot(
         if (pendingPatientIds.has(patient.id)) {
             continue; // Skip — local version has unsaved changes
         }
+        const patientToSave = { ...patient };
         const existing = await db.patients.get(patient.id);
         if (existing) {
             // Preserve local-only fields that the sheet doesn't have
-            if (existing.chipNote && !patient.chipNote) {
-                patient.chipNote = existing.chipNote;
+            if (existing.chipNote && !patientToSave.chipNote) {
+                patientToSave.chipNote = existing.chipNote;
             }
-            if (existing.chipNotes?.length && !patient.chipNotes?.length) {
-                patient.chipNotes = existing.chipNotes;
+            if (existing.chipNotes?.length && !patientToSave.chipNotes?.length) {
+                patientToSave.chipNotes = existing.chipNotes;
             }
             // Preserve original creation timestamp
-            patient.createdAt = existing.createdAt;
+            patientToSave.createdAt = existing.createdAt;
         }
-        await db.patients.put(patient);
+        await db.patients.put(patientToSave);
     }
 
     const currentSheetIds = new Set(

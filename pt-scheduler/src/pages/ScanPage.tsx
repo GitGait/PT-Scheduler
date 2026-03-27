@@ -12,7 +12,6 @@ import {
     Check,
     X,
     AlertCircle,
-    ChevronDown,
     Camera,
     FileText,
     UserPlus,

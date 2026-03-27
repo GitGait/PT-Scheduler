@@ -1636,7 +1636,6 @@ export function SchedulePage() {
 
             // Start optimized routes at 9:00 AM
             const OPTIMIZE_START_MINUTES = 9 * 60;
-            const dayStartMinutes = OPTIMIZE_START_MINUTES;
 
             const withCoordinates: Array<{
                 appointment: Appointment;
@@ -1669,8 +1668,8 @@ export function SchedulePage() {
                 ...withoutCoordinates,
             ];
 
-            // Start at 9:00 AM (540 minutes from midnight)
-            let nextStartMinutes = 540;
+            // Start at the optimized route start time
+            let nextStartMinutes = OPTIMIZE_START_MINUTES;
             for (const appointment of orderedAppointments) {
                 // Snap to 15-minute slots
                 const snappedMinutes = Math.round(nextStartMinutes / 15) * 15;
@@ -1825,6 +1824,8 @@ export function SchedulePage() {
                     notes: appointment.notes,
                     chipNote: appointment.chipNote,
                     chipNotes: appointment.chipNotes,
+                    personalCategory: appointment.personalCategory,
+                    title: appointment.title,
                 });
             }
 
@@ -1864,13 +1865,16 @@ export function SchedulePage() {
             const points: DayMapPoint[] = [];
             const homeBase = getHomeBase();
             const home = homeCoordinates ?? { lat: homeBase.lat, lng: homeBase.lng };
-            points.push({
-                id: "home",
-                label: "Home",
-                lat: home.lat,
-                lng: home.lng,
-                isHome: true,
-            });
+            const hasValidHome = !(home.lat === 0 && home.lng === 0);
+            if (hasValidHome) {
+                points.push({
+                    id: "home",
+                    label: "Home",
+                    lat: home.lat,
+                    lng: home.lng,
+                    isHome: true,
+                });
+            }
 
             const seenPatientIds = new Set<string>();
             let unresolvedCount = 0;
@@ -1901,20 +1905,24 @@ export function SchedulePage() {
                 });
             }
 
-            if (points.length === 1) {
+            const hasPatientPoints = points.some((p) => !p.isHome);
+            if (!hasPatientPoints) {
                 setDayMapError("Could not map any patient addresses for this day.");
                 setDayMapInfoMessage(null);
                 setDayMapPoints(points);
                 return;
             }
 
+            const warnings: string[] = [];
+            if (!hasValidHome) {
+                warnings.push("Home address not set — home marker omitted.");
+            }
             if (unresolvedCount > 0) {
-                setDayMapInfoMessage(
+                warnings.push(
                     `${unresolvedCount} patient${unresolvedCount === 1 ? "" : "s"} could not be mapped (missing/invalid address).`
                 );
-            } else {
-                setDayMapInfoMessage(null);
             }
+            setDayMapInfoMessage(warnings.length > 0 ? warnings.join(" ") : null);
 
             setDayMapPoints(points);
         } catch (err) {
@@ -1926,6 +1934,10 @@ export function SchedulePage() {
     };
 
     const handleCloseDayMap = () => {
+        if (dayMapInstanceRef.current) {
+            dayMapInstanceRef.current.remove();
+            dayMapInstanceRef.current = null;
+        }
         setIsDayMapOpen(false);
         setIsDayMapLoading(false);
     };
@@ -3056,7 +3068,7 @@ export function SchedulePage() {
 
                                                 // Handle all-day events or events outside visible range
                                                 const blockStart = Math.max(startMinutes, DAY_START_MINUTES);
-                                                const blockEnd = Math.min(endMinutes || DAY_END_MINUTES, DAY_END_MINUTES);
+                                                const blockEnd = Math.min(endMinutes ?? DAY_END_MINUTES, DAY_END_MINUTES);
 
                                                 if (blockEnd <= blockStart) {
                                                     return null;
@@ -3599,7 +3611,8 @@ export function SchedulePage() {
                         <div className="p-2">
                             <button
                                 onClick={() => {
-                                    window.open(buildAppleMapsHref(mapsMenuAddress)!, '_blank');
+                                    const href = buildAppleMapsHref(mapsMenuAddress);
+                                    if (href) window.open(href, '_blank');
                                     setMapsMenuAddress(null);
                                 }}
                                 className="w-full py-3 px-4 text-left text-[var(--color-primary)] hover:bg-[var(--color-surface-hover)] rounded-lg font-medium"
@@ -3608,7 +3621,8 @@ export function SchedulePage() {
                             </button>
                             <button
                                 onClick={() => {
-                                    window.open(buildGoogleMapsHref(mapsMenuAddress)!, '_blank');
+                                    const href = buildGoogleMapsHref(mapsMenuAddress);
+                                    if (href) window.open(href, '_blank');
                                     setMapsMenuAddress(null);
                                 }}
                                 className="w-full py-3 px-4 text-left text-[var(--color-primary)] hover:bg-[var(--color-surface-hover)] rounded-lg font-medium"
@@ -3648,9 +3662,11 @@ export function SchedulePage() {
                                 if (isIOS()) {
                                     // Use location.href so iOS intercepts and opens Maps app
                                     // without creating a blank in-app browser overlay
-                                    window.location.href = buildAppleMapsHref(actionPatient.address)!;
+                                    const href = buildAppleMapsHref(actionPatient.address);
+                                    if (href) window.location.href = href;
                                 } else {
-                                    window.open(buildGoogleMapsHref(actionPatient.address)!, '_blank');
+                                    const href = buildGoogleMapsHref(actionPatient.address);
+                                    if (href) window.open(href, '_blank');
                                 }
                             }
                         }}

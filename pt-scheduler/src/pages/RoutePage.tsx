@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useAppointmentStore, usePatientStore } from "../stores";
 import { Card, CardHeader } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
@@ -57,9 +58,11 @@ interface RouteStop {
 }
 
 export function RoutePage() {
+    const navigate = useNavigate();
     const [selectedDate, setSelectedDate] = useState(todayIso);
     const [isOptimizing, setIsOptimizing] = useState(false);
     const [routeStops, setRouteStops] = useState<RouteStop[]>([]);
+    const failedGeocodeIdsRef = useRef<Set<string>>(new Set());
     const homeBase = getHomeBase();
     const homeBaseAddress = homeBase.address || "Home Base (not configured)";
     const [homeCoordinates, setHomeCoordinates] = useState<{ lat: number; lng: number }>(() => {
@@ -138,6 +141,7 @@ export function RoutePage() {
                 if (!patient?.address?.trim()) continue;
                 if (patient.lat !== undefined && patient.lng !== undefined) continue;
                 if (resolvedCoordinates[patient.id]) continue;
+                if (failedGeocodeIdsRef.current.has(patient.id)) continue;
 
                 try {
                     const result = await geocodeAddress(patient.address);
@@ -145,7 +149,7 @@ export function RoutePage() {
                         updates[patient.id] = { lat: result.lat, lng: result.lng };
                     }
                 } catch {
-                    // Skip
+                    failedGeocodeIdsRef.current.add(patient.id);
                 }
             }
             if (!cancelled && Object.keys(updates).length > 0) {
@@ -210,7 +214,7 @@ export function RoutePage() {
 
         void fetchDistances();
         return () => { cancelled = true; };
-    }, [dayAppointments, homeCoordinates, resolvedCoordinates]);
+    }, [dayAppointments, homeCoordinates, resolvedCoordinates, patientById]);
 
     // Build route stops using real driving distances when available
     useEffect(() => {
@@ -437,8 +441,8 @@ export function RoutePage() {
             <div className="space-y-3">
                 {routeStops.length === 0 ? (
                     <RouteEmptyState
-                        hasAppointments={false}
-                        onViewSchedule={() => window.location.href = "/"}
+                        hasAppointments={dayAppointments.length > 0}
+                        onViewSchedule={() => navigate("/")}
                     />
                 ) : (
                     routeStops.map((stop) => {

@@ -8,7 +8,7 @@ import {
     serializeAlternateContactsField,
 } from "../api/sheets";
 import type { Patient, PatientStatus } from "../types";
-import { Phone, MapPin, Navigation, Edit2, X, Trash2 } from "lucide-react";
+import { Phone, Navigation, Edit2, X, Trash2 } from "lucide-react";
 
 interface EditFormData {
     fullName: string;
@@ -37,7 +37,7 @@ export function PatientDetailPage() {
     useEffect(() => {
         const found = patients.find((p) => p.id === id);
         setPatient(found ?? null);
-        if (found) {
+        if (found && !isEditing) {
             setFormData({
                 fullName: found.fullName,
                 nicknames: found.nicknames.join(", "),
@@ -48,7 +48,7 @@ export function PatientDetailPage() {
                 status: found.status,
             });
         }
-    }, [id, patients]);
+    }, [id, patients, isEditing]);
 
     if (!patient) {
         return (
@@ -64,8 +64,6 @@ export function PatientDetailPage() {
     const handleStatusToggle = async () => {
         if (patient.status === "active" || patient.status === "evaluation") {
             await discharge(patient.id);
-        } else if (patient.status === "for-other-pt") {
-            await reactivate(patient.id);
         } else {
             await reactivate(patient.id);
         }
@@ -374,7 +372,7 @@ export function PatientDetailPage() {
                                         )}
                                     </span>
                                     <a
-                                        href={`tel:${contact.phone}`}
+                                        href={buildPhoneHref(contact.phone) ?? "#"}
                                         className="text-[var(--color-primary)] hover:underline"
                                     >
                                         {contact.phone}

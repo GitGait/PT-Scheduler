@@ -94,9 +94,9 @@ export const usePatientStore = create<PatientState & PatientActions>((set, get) 
             if (newPatient) {
                 set((state) => ({
                     patients: [...state.patients, newPatient],
-                    loading: false,
                 }));
             }
+            set({ loading: false });
             return id;
         } catch (err) {
             set({

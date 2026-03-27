@@ -115,7 +115,7 @@ export async function updateCalendarEvent(
 
     const event = buildCalendarEvent(appointment, patientName, address, patientPhone);
 
-    const url = `${CALENDAR_API_BASE}/calendars/${encodeURIComponent(calendarId)}/events/${eventId}`;
+    const url = `${CALENDAR_API_BASE}/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`;
     const response = await fetchWithTimeout(url, {
         method: "PUT",
         headers: {
@@ -143,7 +143,7 @@ export async function deleteCalendarEvent(
         throw new Error("Not authenticated");
     }
 
-    const url = `${CALENDAR_API_BASE}/calendars/${encodeURIComponent(calendarId)}/events/${eventId}`;
+    const url = `${CALENDAR_API_BASE}/calendars/${encodeURIComponent(calendarId)}/events/${encodeURIComponent(eventId)}`;
     const response = await fetchWithTimeout(url, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },

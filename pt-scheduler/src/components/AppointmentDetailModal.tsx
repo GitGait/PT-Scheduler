@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { X, Phone, MapPin, Clock, FileText, Save, Loader2, Tag, Users, Plus, Trash2 } from "lucide-react";
 import { Button } from "./ui/Button";
 import type { Appointment, Patient, VisitType } from "../types";
@@ -68,6 +68,37 @@ export function AppointmentDetailModal({
         setSuccessMessage(null);
     }, [patient, appointment, isOpen]);
 
+    // Close on Escape key
+    useEffect(() => {
+        if (!isOpen) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                onClose();
+            }
+        };
+        document.addEventListener("keydown", handleKeyDown);
+        return () => document.removeEventListener("keydown", handleKeyDown);
+    }, [isOpen, onClose]);
+
+    // Track auto-close timer so it can be cleaned up
+    const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    useEffect(() => {
+        return () => {
+            if (autoCloseTimerRef.current) {
+                clearTimeout(autoCloseTimerRef.current);
+            }
+        };
+    }, []);
+
+    const scheduleAutoClose = useCallback(() => {
+        if (autoCloseTimerRef.current) {
+            clearTimeout(autoCloseTimerRef.current);
+        }
+        autoCloseTimerRef.current = setTimeout(() => {
+            onClose();
+        }, 1000);
+    }, [onClose]);
+
     if (!isOpen) {
         return null;
     }
@@ -90,14 +121,12 @@ export function AppointmentDetailModal({
 
                 if (titleChanged || categoryChanged || notesChanged) {
                     await onSaveAppointment(appointment.id, {
-                        title: personalTitle.trim() || undefined,
+                        title: personalTitle.trim(),
                         personalCategory,
                         notes: notes || undefined,
                     });
                     setSuccessMessage("Changes saved successfully!");
-                    setTimeout(() => {
-                        onClose();
-                    }, 1000);
+                    scheduleAutoClose();
                 } else {
                     onClose();
                 }
@@ -138,9 +167,7 @@ export function AppointmentDetailModal({
 
                 if (patientChanged || appointmentChanged) {
                     setSuccessMessage("Changes saved successfully!");
-                    setTimeout(() => {
-                        onClose();
-                    }, 1000);
+                    scheduleAutoClose();
                 } else {
                     onClose();
                 }
@@ -176,6 +203,8 @@ export function AppointmentDetailModal({
             onClick={onClose}
         >
             <div
+                role="dialog"
+                aria-modal="true"
                 className="bg-[var(--color-surface)] rounded-lg shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto animate-slide-in"
                 onClick={(event) => event.stopPropagation()}
             >

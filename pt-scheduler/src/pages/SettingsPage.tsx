@@ -500,7 +500,7 @@ export function SettingsPage() {
                             Sign Out
                         </Button>
                     ) : (
-                        <Button size="sm" variant="primary" onClick={handleSignIn} disabled={authBusy || !hasClientId}>
+                        <Button size="sm" variant="primary" onClick={() => void handleSignIn()} disabled={authBusy || !hasClientId}>
                             {authBusy ? "Signing In..." : authReady ? "Sign In with Google" : "Initialize & Sign In"}
                         </Button>
                     )}

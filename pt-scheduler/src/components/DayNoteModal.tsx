@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, Trash2, Pencil, Check } from "lucide-react";
 import type { DayNote, DayNoteColor } from "../types";
 import { getDayNoteColor, DAY_NOTE_COLORS } from "../utils/dayNoteColors";
@@ -26,10 +26,25 @@ export function DayNoteModal({ date, notes, onClose, onCreate, onUpdate, onDelet
     const handleAdd = async () => {
         const trimmed = newText.trim();
         if (!trimmed) return;
-        await onCreate({ date, text: trimmed, color: newColor, startMinutes: prefillStartMinutes ?? 720 });
-        setNewText("");
-        setNewColor("yellow");
+        try {
+            await onCreate({ date, text: trimmed, color: newColor, startMinutes: prefillStartMinutes ?? 720 });
+            setNewText("");
+            setNewColor("yellow");
+        } catch {
+            // Leave input text intact so the user can retry
+        }
     };
+
+    // Close on Escape key
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape") {
+                onClose();
+            }
+        };
+        document.addEventListener("keydown", handleKeyDown);
+        return () => document.removeEventListener("keydown", handleKeyDown);
+    }, [onClose]);
 
     const startEdit = (note: DayNote) => {
         setEditingId(note.id);
@@ -49,6 +64,8 @@ export function DayNoteModal({ date, notes, onClose, onCreate, onUpdate, onDelet
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={onClose}>
             <div className="absolute inset-0 bg-black/40" />
             <div
+                role="dialog"
+                aria-modal="true"
                 className="relative w-full max-w-md max-h-[80vh] bg-[var(--color-surface)] rounded-xl shadow-xl border border-[var(--color-border)] flex flex-col overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
             >

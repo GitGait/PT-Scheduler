@@ -14,6 +14,7 @@ const ALT_CONTACT_PART_SEPARATOR = "|";
 const PATIENTS_SHEET_TITLE = "Patients";
 const DISCHARGE_SHEET_TITLE = "Discharge";
 const FOR_OTHER_PT_SHEET_TITLE = "For Other PT";
+const DEFAULT_PATIENTS_RANGE = `${PATIENTS_SHEET_TITLE}!A:K`;
 
 type AlternateContact = Patient["alternateContacts"][number];
 
@@ -88,7 +89,7 @@ export function serializeAlternateContactsField(contacts: AlternateContact[]): s
  */
 export async function fetchPatientsFromSheet(
     spreadsheetId: string,
-    range = `${PATIENTS_SHEET_TITLE}!A:K`
+    range = DEFAULT_PATIENTS_RANGE
 ): Promise<Patient[]> {
     const token = await getAccessToken();
     if (!token) {
@@ -127,7 +128,7 @@ export async function fetchPatientsFromSheet(
         }
     };
 
-    if (range !== `${PATIENTS_SHEET_TITLE}!A:K`) {
+    if (range !== DEFAULT_PATIENTS_RANGE) {
         const rows = await fetchPatientSheetRows(spreadsheetId, token, range, false);
         if (rows.length < 2) {
             return [];
@@ -305,7 +306,11 @@ function parsePatientRow(
 
     const id = getValue("id");
     const fullName = getValue("fullName") || getValue("name");
-    const parsedStatus = ((getValue("status") as Patient["status"]) || "active");
+    const validStatuses = ["active", "discharged", "for-other-pt"] as const;
+    const rawStatus = getValue("status");
+    const parsedStatus: Patient["status"] = validStatuses.includes(rawStatus as typeof validStatuses[number])
+        ? (rawStatus as Patient["status"])
+        : "active";
 
     if (!id || !fullName) {
         return null;

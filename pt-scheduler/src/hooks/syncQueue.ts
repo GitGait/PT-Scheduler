@@ -33,8 +33,8 @@ export function makeIdempotencyKey(item: SyncQueueItem): string {
   if (item.idempotencyKey) return item.idempotencyKey;
 
   const dataId =
-    typeof item.data.id === "string" || typeof item.data.id === "number"
-      ? String(item.data.id)
+    typeof item.data.entityId === "string" || typeof item.data.entityId === "number"
+      ? String(item.data.entityId)
       : generateFallbackId();
 
   return `${item.entity}:${item.type}:${dataId}`;

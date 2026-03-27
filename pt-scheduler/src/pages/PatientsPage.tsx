@@ -1720,7 +1720,7 @@ export function PatientsPage() {
                     searchQuery ? (
                         <SearchEmptyState
                             query={searchQuery}
-                            onClearSearch={() => search("")}
+                            onClearSearch={() => { setSearchQuery(""); search(""); }}
                         />
                     ) : (
                         <PatientsEmptyState onAddPatient={handleOpenAdd} />

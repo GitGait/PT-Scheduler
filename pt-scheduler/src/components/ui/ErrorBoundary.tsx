@@ -19,7 +19,7 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div
           role="alert"
-          className="m-4 rounded border border-red-700 bg-red-950 p-4 text-red-100"
+          className="m-4 rounded border border-red-300 bg-red-50 text-red-800 dark:border-red-700 dark:bg-red-950 dark:text-red-100 p-4"
         >
           Something went wrong. Refresh the app and try again.
         </div>
