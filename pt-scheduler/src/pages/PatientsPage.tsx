@@ -358,9 +358,6 @@ function buildPatientDedupKeys(patient: PatientIdentityLike): string[] {
     if (name && address) {
         keys.push(`name_address:${name}|${address}`);
     }
-    if (name && (!phone || !address)) {
-        keys.push(`name_partial:${name}`);
-    }
     if (name && !phone && !address) {
         keys.push(`name_only:${name}`);
     }

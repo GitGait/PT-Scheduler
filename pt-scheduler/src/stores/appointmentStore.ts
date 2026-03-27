@@ -293,10 +293,12 @@ export const useAppointmentStore = create<AppointmentState & AppointmentActions>
     },
 
     putOnHold: async (id: string) => {
+        // Capture appointment BEFORE async update which may filter it from state
+        const appointmentBefore = get().appointments.find((a) => a.id === id);
         const { update } = get();
         await update(id, { status: "on-hold" as AppointmentStatus });
         // Move from appointments to onHoldAppointments
-        const appointment = get().appointments.find((a) => a.id === id);
+        const appointment = appointmentBefore ?? get().appointments.find((a) => a.id === id);
         if (appointment) {
             set((state) => ({
                 appointments: state.appointments.filter((a) => a.id !== id),

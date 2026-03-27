@@ -18,7 +18,12 @@ export async function reconcileDayNotesFromSheetSnapshot(
     spreadsheetId: string,
     sheetNotes: DayNote[]
 ): Promise<DayNoteSheetSyncResult> {
+    const pendingDayNoteIds = await getPendingDayNoteSyncIds();
     for (const note of sheetNotes) {
+        // Skip overwriting notes that have pending local changes
+        if (pendingDayNoteIds.has(note.id)) {
+            continue;
+        }
         await db.dayNotes.put(note);
     }
 
@@ -26,7 +31,6 @@ export async function reconcileDayNotesFromSheetSnapshot(
         sheetNotes.map((note) => note.id).filter(Boolean)
     );
     const previouslyTrackedIds = readTrackedSheetDayNoteIds(spreadsheetId);
-    const pendingDayNoteIds = await getPendingDayNoteSyncIds();
 
     let deleted = 0;
     for (const noteId of previouslyTrackedIds) {

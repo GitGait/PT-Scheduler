@@ -1000,7 +1000,7 @@ export function SchedulePage() {
                     const cur = new Date(startDate);
                     cur.setDate(cur.getDate() + stepDays);
                     while (cur <= endDate) {
-                        dates.push(cur.toISOString().slice(0, 10));
+                        dates.push(toLocalIsoDate(cur));
                         cur.setDate(cur.getDate() + stepDays);
                     }
                 }
@@ -2843,11 +2843,10 @@ export function SchedulePage() {
                                                     0,
                                                     sameStartGroup.findIndex((apt) => apt.id === appointment.id)
                                                 );
-                                                // In day view, use full width for better readability
-                                                const isDayView = viewMode === 'day';
-                                                const widthPct = isDayView ? 100 : (100 / groupSize);
-                                                const leftStyle = isDayView ? '4px' : `calc(${groupIndex * widthPct}% + 2px)`;
-                                                const widthStyle = isDayView ? 'calc(100% - 8px)' : `calc(${widthPct}% - 4px)`;
+                                                // Divide width among overlapping appointments in both views
+                                                const widthPct = 100 / groupSize;
+                                                const leftStyle = groupSize === 1 ? '4px' : `calc(${groupIndex * widthPct}% + 2px)`;
+                                                const widthStyle = groupSize === 1 ? 'calc(100% - 8px)' : `calc(${widthPct}% - 4px)`;
                                                 const isActiveMove =
                                                     moveAppointmentId === appointment.id ||
                                                     copyAppointmentId === appointment.id ||

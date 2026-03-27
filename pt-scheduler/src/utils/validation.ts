@@ -10,7 +10,8 @@ export const extractedAppointmentSchema = z.object({
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD format"),
   time: z.string().regex(/^\d{2}:\d{2}$/, "Must be HH:mm format"),
   duration: z.number().int().min(15).max(240),
-  uncertain: z.boolean().optional()
+  uncertain: z.boolean().optional(),
+  notes: z.string().optional()
 });
 
 export const ocrResponseSchema = z.object({

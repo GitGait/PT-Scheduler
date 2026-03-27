@@ -89,6 +89,7 @@ export const usePatientStore = create<PatientState & PatientActions>((set, get) 
         set({ loading: true, error: null });
         try {
             const id = await patientDB.add(patient);
+            await enqueuePatientSync("create", id);
             const newPatient = await patientDB.get(id);
             if (newPatient) {
                 set((state) => ({

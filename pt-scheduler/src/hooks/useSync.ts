@@ -181,7 +181,9 @@ export function useSync(config: SyncConfig | null) {
                         "";
 
                     const existingPatient = await db.patients.get(patientId);
-                    if (!existingPatient && patientId !== PERSONAL_PATIENT_ID && !deletedPatientIds.has(patientId)) {
+                    if (patientId === PERSONAL_PATIENT_ID || deletedPatientIds.has(patientId)) {
+                        // Personal events and deleted patients: skip patient upsert
+                    } else if (!existingPatient) {
                         await db.patients.add({
                             id: patientId,
                             fullName: patientName,
@@ -485,9 +487,11 @@ export function useSync(config: SyncConfig | null) {
 
             const remaining = (await syncQueueDB.getPending()).length;
             if (remaining > 0) {
-                setTimeout(() => {
-                    void processQueue();
-                }, BATCH_DELAY_MS);
+                await new Promise<void>((resolve) => setTimeout(resolve, BATCH_DELAY_MS));
+                const moreIds = await processQueue();
+                for (const id of moreIds) {
+                    pushedAppointmentIds.add(id);
+                }
             }
 
             await refreshPendingCount();
