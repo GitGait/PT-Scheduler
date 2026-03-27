@@ -20,6 +20,7 @@ export async function reconcilePatientsFromSheetSnapshot(
 ): Promise<PatientSheetSyncResult> {
     const pendingPatientIds = await getPendingPatientSyncIds();
 
+    let upsertedCount = 0;
     for (const patient of sheetPatients) {
         if (pendingPatientIds.has(patient.id)) {
             continue; // Skip — local version has unsaved changes
@@ -38,6 +39,7 @@ export async function reconcilePatientsFromSheetSnapshot(
             patientToSave.createdAt = existing.createdAt;
         }
         await db.patients.put(patientToSave);
+        upsertedCount++;
     }
 
     const currentSheetIds = new Set(
@@ -65,7 +67,7 @@ export async function reconcilePatientsFromSheetSnapshot(
 
     writeTrackedSheetPatientIds(spreadsheetId, currentSheetIds);
     return {
-        upserted: sheetPatients.length,
+        upserted: upsertedCount,
         deleted,
     };
 }

@@ -290,7 +290,7 @@ export function SettingsPage() {
             await loadAll();
 
             if (syncResult.upserted === 0 && syncResult.deleted === 0) {
-                setStatusMessage("No patient rows were found in the sheet.");
+                setStatusMessage("All patients are already up to date.");
             } else {
                 const parts = [
                     `Imported/updated ${syncResult.upserted} patient${
@@ -633,15 +633,15 @@ export function SettingsPage() {
                         </Button>
                     </div>
                 ) : (
-                    <p className="text-sm text-green-700 dark:text-green-300">All changes synced</p>
+                    <p className="text-sm text-[var(--color-event-green)]">All changes synced</p>
                 )}
             </Card>
 
             {(statusMessage || statusError) && (
                 <Card className="mb-4">
                     <CardHeader title="Status" />
-                    {statusMessage && <p className="text-sm text-green-700 dark:text-green-300">{statusMessage}</p>}
-                    {statusError && <p className="text-sm text-red-600 dark:text-red-400">{statusError}</p>}
+                    {statusMessage && <p className="text-sm text-[var(--color-event-green)]">{statusMessage}</p>}
+                    {statusError && <p className="text-sm text-[var(--color-event-red)]">{statusError}</p>}
                 </Card>
             )}
 

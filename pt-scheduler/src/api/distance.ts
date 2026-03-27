@@ -20,6 +20,13 @@ export async function getDistanceMatrix(
         return { distances: [] };
     }
 
+    // Validate coordinates before sending to API
+    for (const loc of locations) {
+        if (loc.lat < -90 || loc.lat > 90 || loc.lng < -180 || loc.lng > 180) {
+            throw new Error(`Invalid coordinates for location "${loc.id}": lat=${loc.lat}, lng=${loc.lng}`);
+        }
+    }
+
     const payload = await fetchJsonWithTimeout<unknown>(
         "/api/distance-matrix",
         {

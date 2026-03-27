@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { useAppointmentStore, usePatientStore } from "../stores";
 import { Card, CardHeader } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
-import { RouteStopSkeleton } from "../components/ui/Skeleton";
 import { RouteEmptyState } from "../components/ui/EmptyState";
 import { geocodeAddress } from "../api/geocode";
 import { optimizeRoute } from "../api/optimize";
@@ -75,6 +74,7 @@ export function RoutePage() {
         Record<string, { miles: number; minutes: number }>
     >({});
     const [isLoadingDistances, setIsLoadingDistances] = useState(false);
+    const [optimizeError, setOptimizeError] = useState<string | null>(null);
 
     const { patients, loadAll: loadPatients } = usePatientStore();
     const { appointments, loadByRange, markComplete } = useAppointmentStore();
@@ -276,6 +276,7 @@ export function RoutePage() {
         if (dayAppointments.length < 2) return;
 
         setIsOptimizing(true);
+        setOptimizeError(null);
         try {
             const locationsWithCoords = dayAppointments
                 .map((apt) => {
@@ -335,6 +336,7 @@ export function RoutePage() {
             setRouteStops(newStops);
         } catch (err) {
             console.error("Route optimization failed:", err);
+            setOptimizeError(err instanceof Error ? err.message : "Route optimization failed. Please try again.");
         } finally {
             setIsOptimizing(false);
         }
@@ -422,6 +424,14 @@ export function RoutePage() {
                         <p className="text-xs text-[var(--color-text-secondary)]">Appt (min)</p>
                     </div>
                 </div>
+            )}
+
+            {isLoadingDistances && (
+                <p className="text-sm text-[var(--color-text-secondary)] mb-3">Loading distances...</p>
+            )}
+
+            {optimizeError && (
+                <p className="text-sm text-[var(--color-event-red)] mb-3">{optimizeError}</p>
             )}
 
             {/* Home Base */}

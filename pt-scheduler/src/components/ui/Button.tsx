@@ -35,7 +35,7 @@ export function Button({
         transition-all duration-150
         focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:ring-offset-2 focus:ring-offset-[var(--color-background)]
         disabled:opacity-50 disabled:cursor-not-allowed
-        min-h-[36px] min-w-[36px]
+        min-w-[36px]
         ${variantStyles[variant]}
         ${sizeStyles[size]}
         ${className}

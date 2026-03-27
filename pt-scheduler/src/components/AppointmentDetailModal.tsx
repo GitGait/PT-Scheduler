@@ -216,6 +216,7 @@ export function AppointmentDetailModal({
                     <button
                         onClick={onClose}
                         className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-hover)]"
+                        aria-label="Close"
                     >
                         <X className="w-5 h-5 text-[var(--color-text-secondary)]" />
                     </button>
@@ -313,7 +314,7 @@ export function AppointmentDetailModal({
                                 </label>
                                 <div className="space-y-3">
                                     {altContacts.map((contact, index) => (
-                                        <div key={index} className="flex gap-2 items-start">
+                                        <div key={contact.phone || index} className="flex gap-2 items-start">
                                             <div className="flex-1 grid grid-cols-3 gap-2">
                                                 <input
                                                     type="text"

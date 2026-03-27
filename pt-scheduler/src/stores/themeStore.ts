@@ -12,6 +12,7 @@ const THEME_STORAGE_KEY = "pt-scheduler-theme";
 
 // Apply theme to document
 function applyTheme(mode: ThemeMode) {
+    if (typeof document === "undefined") return;
     const root = document.documentElement;
 
     if (mode === "system") {

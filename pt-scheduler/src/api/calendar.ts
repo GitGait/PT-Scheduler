@@ -237,6 +237,7 @@ export async function fetchCalendarEvents(
     const data = await response.json();
     const items = data.items || [];
 
+    // TODO: handle nextPageToken for >250 events
     const events = items
         .filter((item: { start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string } }) =>
             Boolean(item.start?.dateTime || item.start?.date) && Boolean(item.end?.dateTime || item.end?.date)
@@ -244,8 +245,8 @@ export async function fetchCalendarEvents(
         .map((item: { id?: string; summary?: string; location?: string; start?: { dateTime?: string; date?: string }; end?: { dateTime?: string; date?: string } }) => ({
             id: item.id || "",
             summary: item.summary || "",
-            startDateTime: item.start?.dateTime || `${item.start?.date}T00:00:00`,
-            endDateTime: item.end?.dateTime || `${item.end?.date}T23:59:59`,
+            startDateTime: item.start?.dateTime ?? (item.start?.date ? `${item.start.date}T00:00:00` : ""),
+            endDateTime: item.end?.dateTime ?? (item.end?.date ? `${item.end.date}T23:59:59` : ""),
             location: item.location,
         }));
 
@@ -287,6 +288,7 @@ export async function listCalendarEvents(
     const data = parseWithSchema(calendarEventListResponseSchema, raw, "Calendar events response");
     const items = data.items;
 
+    // TODO: handle nextPageToken for >2500 events
     return items
         .filter((item): item is CalendarEventListItem & { id: string } => Boolean(item.id))
         .filter((item) => Boolean(item.start?.dateTime) && Boolean(item.end?.dateTime))

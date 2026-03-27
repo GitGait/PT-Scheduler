@@ -1335,7 +1335,7 @@ export function SchedulePage() {
                 // action-sheet "click slot to place" path. Setting it during
                 // touch drag would show the "Moving..." banner, which causes
                 // a layout shift that pushes the grid down mid-drag.
-                const existing = appointments.find((a) => a.id === appointmentId);
+                const existing = useAppointmentStore.getState().appointments.find((a) => a.id === appointmentId);
                 if (existing) {
                     const preview = { date: existing.date, startTime: existing.startTime };
                     setDragPreview(preview);
@@ -1347,7 +1347,7 @@ export function SchedulePage() {
                     if (isPersonalEvent(existing)) {
                         ghostName = existing.title || getPersonalCategoryLabel(existing.personalCategory);
                     } else {
-                        const patient = patients.find((p) => p.id === existing.patientId);
+                        const patient = usePatientStore.getState().patients.find((p) => p.id === existing.patientId);
                         ghostName = patient?.fullName ?? 'Appointment';
                     }
                     setTouchDragGhost({
@@ -1696,6 +1696,7 @@ export function SchedulePage() {
                     ? err.message
                     : "Failed to auto arrange appointments for this day."
             );
+            setTimeout(() => setAutoArrangeError(null), 5000);
         } finally {
             setAutoArrangeInProgressByDay((current) => ({
                 ...current,
@@ -1717,6 +1718,7 @@ export function SchedulePage() {
         if (weekAppointments.length === 0) {
             setWeekActionError(null);
             setWeekActionMessage("No appointments to clear for this week.");
+            setTimeout(() => setWeekActionMessage(null), 5000);
             return;
         }
 
@@ -1779,6 +1781,7 @@ export function SchedulePage() {
                 setWeekActionMessage(
                     `Cleared ${weekAppointments.length} appointment${weekAppointments.length === 1 ? "" : "s"} for this week.`
                 );
+                setTimeout(() => setWeekActionMessage(null), 5000);
             }
         } catch (err) {
             setWeekActionError(
@@ -1793,6 +1796,7 @@ export function SchedulePage() {
         if (!lastClearedWeekSnapshot || lastClearedWeekSnapshot.appointments.length === 0) {
             setWeekActionError(null);
             setWeekActionMessage("There is no cleared week to restore.");
+            setTimeout(() => setWeekActionMessage(null), 5000);
             return;
         }
 
@@ -1832,6 +1836,7 @@ export function SchedulePage() {
             await loadByRange(lastClearedWeekSnapshot.weekStart, lastClearedWeekSnapshot.weekEnd);
 
             setWeekActionMessage(`Restored ${count} appointment${count === 1 ? "" : "s"} to the week.`);
+            setTimeout(() => setWeekActionMessage(null), 5000);
             setLastClearedWeekSnapshot(null);
             triggerSync();
         } catch (err) {
@@ -2500,9 +2505,6 @@ export function SchedulePage() {
         return () => clearInterval(interval);
     }, []);
 
-    // Check if today is in the current week view
-    const todayInWeek = weekDates.includes(todayIso());
-
     return (
         <div className="h-full min-h-0 flex flex-col bg-[var(--color-background)] transition-colors duration-200">
             {/* Header with navigation */}
@@ -2518,7 +2520,7 @@ export function SchedulePage() {
                         <button
                             onClick={() => navigateWeek(-1)}
                             className="w-7 h-7 flex items-center justify-center rounded-l-md hover:bg-[var(--color-border)] active:bg-[var(--color-border)] transition-colors"
-                            aria-label="Previous week"
+                            aria-label={viewMode === 'day' ? 'Previous day' : 'Previous week'}
                         >
                             <ChevronLeft className="w-4 h-4 text-[var(--color-text-secondary)]" />
                         </button>
@@ -2526,7 +2528,7 @@ export function SchedulePage() {
                         <button
                             onClick={() => navigateWeek(1)}
                             className="w-7 h-7 flex items-center justify-center rounded-r-md hover:bg-[var(--color-border)] active:bg-[var(--color-border)] transition-colors"
-                            aria-label="Next week"
+                            aria-label={viewMode === 'day' ? 'Next day' : 'Next week'}
                         >
                             <ChevronRight className="w-4 h-4 text-[var(--color-text-secondary)]" />
                         </button>
@@ -2983,7 +2985,7 @@ export function SchedulePage() {
                                                             )}
                                                             {showAlternateContactRows && patient?.alternateContacts?.map((contact, idx) => (
                                                                 <div
-                                                                    key={idx}
+                                                                    key={contact.phone || idx}
                                                                     className={`inline-flex w-fit max-w-full items-center gap-1 overflow-hidden whitespace-nowrap text-ellipsis opacity-85 ${
                                                                         isDayView ? 'text-[14px] min-h-[17px]' : 'text-[12px] min-h-[14px]'
                                                                     }`}
@@ -3014,7 +3016,7 @@ export function SchedulePage() {
                                                                 >
                                                                     {displayNotes.map((note, idx) => (
                                                                         <div
-                                                                            key={idx}
+                                                                            key={note + idx}
                                                                             className="bg-yellow-400 text-yellow-950 text-[10px] font-semibold px-1.5 py-0.5 truncate leading-tight border-t border-yellow-500/30 first:border-t-0"
                                                                         >
                                                                             {note}

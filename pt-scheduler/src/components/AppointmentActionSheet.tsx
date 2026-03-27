@@ -74,6 +74,7 @@ export function AppointmentActionSheet({
     onDelete,
 }: AppointmentActionSheetProps) {
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
+    const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [chipNoteMode, setChipNoteMode] = useState(false);
     const isPersonal = isPersonalEvent(appointment);
 
@@ -101,11 +102,23 @@ export function AppointmentActionSheet({
         setEditingIndex(null);
     }, [appointment?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
+    // Clean up copy timer on unmount
+    useEffect(() => {
+        return () => {
+            if (copyTimerRef.current) {
+                clearTimeout(copyTimerRef.current);
+            }
+        };
+    }, []);
+
     const copyToClipboard = useCallback(async (text: string, key: string) => {
         try {
             await navigator.clipboard.writeText(text);
             setCopiedKey(key);
-            setTimeout(() => setCopiedKey(null), 1500);
+            if (copyTimerRef.current) {
+                clearTimeout(copyTimerRef.current);
+            }
+            copyTimerRef.current = setTimeout(() => setCopiedKey(null), 1500);
         } catch {
             // Clipboard write failed — do not show success indicator
         }

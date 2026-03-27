@@ -68,16 +68,6 @@ export function TopNav({ onMenuClick, showMenuButton = true }: TopNavProps) {
     };
   }, []);
 
-  // Try to restore sign-in on mount
-  useEffect(() => {
-    const restore = async () => {
-      const restored = await tryRestoreSignIn();
-      // Don't let a failed restore (tokenClient not ready yet) override a valid token
-      setGoogleSignedIn(restored || isSignedIn());
-    };
-    void restore();
-  }, []);
-
   // Clear error timeout on unmount
   useEffect(() => {
     return () => {

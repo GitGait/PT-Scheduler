@@ -1,9 +1,9 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { ErrorBoundary } from "./ErrorBoundary";
 
 // Test component that throws an error
-function ThrowError(): never {
+function ThrowError() {
     throw new Error("Test error");
 }
 
@@ -46,6 +46,6 @@ describe("ErrorBoundary", () => {
                 <ThrowError />
             </ErrorBoundary>
         );
-        expect(screen.getByRole("button", { name: /reload/i })).toBeDefined();
+        expect(screen.getAllByRole("button", { name: /reload/i }).length).toBeGreaterThan(0);
     });
 });

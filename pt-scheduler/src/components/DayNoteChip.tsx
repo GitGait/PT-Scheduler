@@ -34,6 +34,8 @@ export function DayNoteChip({
 
     return (
         <div
+            role="button"
+            tabIndex={0}
             draggable
             onDragStart={onDragStart}
             onDragEnd={onDragEnd}
@@ -67,6 +69,7 @@ export function DayNoteChip({
                 <button
                     onClick={(e) => { e.stopPropagation(); onDelete(); }}
                     className="shrink-0 ml-auto opacity-0 group-hover:opacity-100 p-0.5 rounded hover:bg-black/20 transition-opacity"
+                    aria-label="Delete note"
                 >
                     <X size={12} />
                 </button>

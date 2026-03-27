@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/Button";
 import { Card, CardHeader } from "../components/ui/Card";
@@ -152,11 +152,11 @@ export function ScanPage() {
         loadPatients();
     }, [loadPatients]);
 
-    const patientCandidates: MatchCandidate[] = patients.map((p) => ({
+    const patientCandidates: MatchCandidate[] = useMemo(() => patients.map((p) => ({
         id: p.id,
         fullName: p.fullName,
         nicknames: p.nicknames,
-    }));
+    })), [patients]);
 
     const resolveHomeCoordinates = useCallback(async () => {
         const homeBase = getHomeBase();

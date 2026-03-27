@@ -15,7 +15,7 @@ export function Card({ children, className = "", onClick, noPadding = false }: C
             className={`
         bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)] transition-colors duration-200
         ${noPadding ? "" : "p-4"}
-        ${isClickable ? "cursor-pointer hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-text-tertiary)] transition-colors" : ""}
+        ${isClickable ? "cursor-pointer hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-text-tertiary)]" : ""}
         ${className}
       `}
             onClick={onClick}

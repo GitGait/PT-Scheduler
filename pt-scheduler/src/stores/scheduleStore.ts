@@ -1,6 +1,8 @@
 import { create } from "zustand";
 
-const toIsoDate = (date: Date): string => date.toISOString().split("T")[0];
+const toIsoDate = (date: Date): string => {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+};
 const defaultDate = (): string => {
     const today = new Date();
     // If Sunday, default to next Monday

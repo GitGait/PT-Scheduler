@@ -246,6 +246,7 @@ export async function deletePatientsFromSheetByIds(
  * Remove duplicate rows from Patients sheet using ID/name/phone/address keys.
  * Returns number of rows removed.
  */
+// TODO: batch these API calls to avoid rate limiting
 export async function removeDuplicatePatientRowsInSheet(
     spreadsheetId: string
 ): Promise<number> {

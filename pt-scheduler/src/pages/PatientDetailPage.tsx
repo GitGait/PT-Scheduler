@@ -8,7 +8,7 @@ import {
     serializeAlternateContactsField,
 } from "../api/sheets";
 import type { Patient, PatientStatus } from "../types";
-import { Phone, Navigation, Edit2, X, Trash2 } from "lucide-react";
+import { Phone, Navigation, Edit2, X, Trash2, Mail } from "lucide-react";
 
 interface EditFormData {
     fullName: string;
@@ -350,7 +350,7 @@ export function PatientDetailPage() {
                                 href={`mailto:${patient.email}`}
                                 className="flex items-center gap-2 text-[var(--color-primary)] hover:underline"
                             >
-                                ✉️ {patient.email}
+                                <Mail className="w-4 h-4" /> {patient.email}
                             </a>
                         )}
                     </div>

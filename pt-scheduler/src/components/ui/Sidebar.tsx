@@ -244,7 +244,7 @@ export function Sidebar({
                     <button
                       key={apt.id}
                       onClick={() => void handleRestoreFromHold(apt.id)}
-                      className="w-full text-left p-2 rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors border-l-3 border-amber-400 dark:border-amber-500"
+                      className="w-full text-left p-2 rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors border-l-4 border-amber-400 dark:border-amber-500"
                     >
                       <p className="text-sm font-medium text-[var(--color-text-primary)] truncate">{name}</p>
                       <p className="text-xs text-[var(--color-text-secondary)]">

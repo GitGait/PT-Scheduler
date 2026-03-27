@@ -38,8 +38,11 @@ interface AppointmentActions {
     clearError: () => void;
 }
 
-// Helper to get today's date as ISO string
-const today = () => new Date().toISOString().split("T")[0];
+// Helper to get today's date as local ISO string
+const today = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+};
 
 function hasCalendarSyncConfigured(): boolean {
     const calendarId = useSyncStore.getState().calendarId;

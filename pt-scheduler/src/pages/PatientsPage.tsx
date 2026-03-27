@@ -659,10 +659,6 @@ export function PatientsPage() {
         useState<DuplicateCleanupStatus | null>(() => loadDuplicateCleanupStatus());
 
     useEffect(() => {
-        loadAll();
-    }, [loadAll]);
-
-    useEffect(() => {
         if (searchQuery.trim()) {
             search(searchQuery);
         } else {
@@ -1737,7 +1733,7 @@ export function PatientsPage() {
                             <div className="flex items-center gap-3 mt-2">
                                 {patient.phone && (
                                     <a
-                                        href={buildPhoneHref(patient.phone)!}
+                                        href={buildPhoneHref(patient.phone) ?? "#"}
                                         onClick={(e) => e.stopPropagation()}
                                         className="inline-flex items-center gap-1 text-[var(--color-primary)] text-sm hover:underline"
                                         aria-label={`Call ${patient.fullName}`}
@@ -1748,7 +1744,7 @@ export function PatientsPage() {
                                 )}
                                 {patient.address && (
                                     <a
-                                        href={buildMapsHref(patient.address)!}
+                                        href={buildMapsHref(patient.address) ?? "#"}
                                         target="_blank"
                                         rel="noopener noreferrer"
                                         onClick={(e) => e.stopPropagation()}
@@ -1778,7 +1774,7 @@ export function PatientsPage() {
             {showCsvMappingModal && csvImportPayload && (
                 <div
                     className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
-                    onClick={() => setShowCsvMappingModal(false)}
+                    onClick={() => { setShowCsvMappingModal(false); setCsvImportPayload(null); setCsvMapping({ ...EMPTY_CSV_MAPPING }); setCsvMappingError(null); }}
                 >
                     <div
                         className="bg-[var(--color-surface)] rounded-lg shadow-2xl w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto animate-slide-in"

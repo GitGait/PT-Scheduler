@@ -183,7 +183,7 @@ export function initAuth(clientId: string): Promise<void> {
                 scope: SCOPES,
                 ux_mode: "popup",
                 callback: async (response: CodeResponse) => {
-                    console.log("[Auth] Code callback fired", response.error || "OK");
+                    if (import.meta.env.DEV) console.log("[Auth] Code callback fired", response.error || "OK");
                     if (response.error) {
                         console.error("[Auth] Code response error:", response.error, response.error_description);
                         pendingReject?.(

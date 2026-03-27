@@ -77,6 +77,7 @@ export function DayNoteModal({ date, notes, onClose, onCreate, onUpdate, onDelet
                     <button
                         onClick={onClose}
                         className="p-1 rounded-lg hover:bg-[var(--color-surface-hover)] text-[var(--color-text-tertiary)]"
+                        aria-label="Close"
                     >
                         <X size={18} />
                     </button>
@@ -215,6 +216,7 @@ function ColorPicker({ selected, onChange }: { selected: DayNoteColor; onChange:
                     }`}
                     style={{ backgroundColor: colorSwatches[color] }}
                     title={color}
+                    aria-label={color}
                 />
             ))}
         </div>

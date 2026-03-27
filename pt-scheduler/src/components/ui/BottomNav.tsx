@@ -11,7 +11,7 @@ const navItems: { to: string; label: string; icon: LucideIcon }[] = [
 
 export function BottomNav() {
     return (
-        <nav className="fixed bottom-0 left-0 right-0 bg-gray-900 border-t border-gray-700 safe-area-pb">
+        <nav className="fixed bottom-0 left-0 right-0 bg-[var(--color-surface)] border-t border-[var(--color-border)] safe-area-pb">
             <div className="flex justify-around items-center h-16">
                 {navItems.map(({ to, label, icon: Icon }) => (
                     <NavLink
@@ -19,8 +19,8 @@ export function BottomNav() {
                         to={to}
                         className={({ isActive }) =>
                             `flex flex-col items-center justify-center w-full h-full transition-colors ${isActive
-                                ? "text-blue-400"
-                                : "text-gray-400 hover:text-gray-200"
+                                ? "text-[var(--color-primary)]"
+                                : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]"
                             }`
                         }
                         aria-label={label}

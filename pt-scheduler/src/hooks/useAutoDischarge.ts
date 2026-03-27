@@ -75,9 +75,12 @@ export function useAutoDischarge(): void {
       if (elapsed < COOLDOWN_MS) return;
     }
 
-    localStorage.setItem(COOLDOWN_KEY, String(Date.now()));
-    processAutoDischarges().catch((err) => {
-      console.error("[AutoDischarge] Failed:", err);
-    });
+    processAutoDischarges()
+      .then(() => {
+        localStorage.setItem(COOLDOWN_KEY, String(Date.now()));
+      })
+      .catch((err) => {
+        console.error("[AutoDischarge] Failed:", err);
+      });
   }, []);
 }

@@ -9,6 +9,7 @@ import { prepareImageForOCR, validateImageSize } from "../utils/image";
  */
 export async function processScreenshot(imageBase64: string, targetWeekStart: string): Promise<OCRResponse> {
   // Validate size before sending
+  // Note: large images (>5MB) may cause memory pressure on mobile devices
   validateImageSize(imageBase64);
 
   const payload = await fetchJsonWithTimeout<unknown>(
