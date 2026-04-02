@@ -2923,7 +2923,7 @@ export function SchedulePage() {
                                                         }}
                                                         title={isPersonal
                                                             ? chipName
-                                                            : `${getPatientName(appointment.patientId)}${patient?.phone ? ` - ${patient.phone}` : ''}${patient?.address ? ` - ${patient.address}` : ''}`
+                                                            : `${getPatientName(appointment.patientId)}${patient?.phoneNumbers[0]?.number ? ` - ${patient.phoneNumbers[0].number}` : ''}${patient?.address ? ` - ${patient.address}` : ''}`
                                                         }
                                                     >
                                                         {/* Main content area - full width, draggable from anywhere */}
@@ -2968,12 +2968,12 @@ export function SchedulePage() {
                                                                     </span>
                                                                 </div>
                                                             )}
-                                                            {showPhoneRow && patient?.phone && (
+                                                            {showPhoneRow && patient?.phoneNumbers[0]?.number && (
                                                                 <div className={`inline-flex w-fit max-w-full items-center gap-1 overflow-hidden whitespace-nowrap text-ellipsis opacity-90 ${
                                                                     isDayView ? 'text-[14px] min-h-[17px]' : 'text-[12px] min-h-[14px]'
                                                                 }`}>
                                                                     <Phone className={isDayView ? 'w-3.5 h-3.5 shrink-0' : 'w-2.5 h-2.5 shrink-0'} />
-                                                                    <span className="truncate">{patient.phone}</span>
+                                                                    <span className="truncate">{patient.phoneNumbers[0].number}</span>
                                                                 </div>
                                                             )}
                                                             {showAddressRow && patient?.address && (
