@@ -11,7 +11,7 @@ describe("patientDB", () => {
         const id = await patientDB.add({
             fullName: "Smith, Jane",
             nicknames: ["Janey"],
-            phone: "555-5678",
+            phoneNumbers: [{ number: "555-5678", label: "mobile" }],
             alternateContacts: [],
             address: "456 Oak Ave",
             status: "active",
@@ -29,7 +29,7 @@ describe("patientDB", () => {
         await patientDB.add({
             fullName: "Johnson, Robert",
             nicknames: ["Bob"],
-            phone: "555-1111",
+            phoneNumbers: [{ number: "555-1111" }],
             alternateContacts: [],
             address: "789 Elm St",
             status: "active",
@@ -48,7 +48,7 @@ describe("patientDB", () => {
         const id = await patientDB.add({
             fullName: "Williams, Sarah",
             nicknames: [],
-            phone: "555-2222",
+            phoneNumbers: [{ number: "555-2222" }],
             alternateContacts: [],
             address: "321 Pine St",
             status: "active",
@@ -69,7 +69,7 @@ describe("patientDB", () => {
             id: "upsert-test-id",
             fullName: "Brown, Mike",
             nicknames: [],
-            phone: "555-3333",
+            phoneNumbers: [{ number: "555-3333" }],
             alternateContacts: [],
             address: "111 Cedar Ln",
             status: "active" as const,
@@ -93,7 +93,7 @@ describe("patientDB", () => {
         await patientDB.add({
             fullName: "Active, One",
             nicknames: [],
-            phone: "555-0001",
+            phoneNumbers: [{ number: "555-0001" }],
             alternateContacts: [],
             address: "1 Active St",
             status: "active",
@@ -102,7 +102,7 @@ describe("patientDB", () => {
         await patientDB.add({
             fullName: "Discharged, One",
             nicknames: [],
-            phone: "555-0002",
+            phoneNumbers: [{ number: "555-0002" }],
             alternateContacts: [],
             address: "1 Discharged St",
             status: "discharged",

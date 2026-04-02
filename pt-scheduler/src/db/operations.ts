@@ -108,7 +108,9 @@ export const patientDB = {
                     p.fullName.toLowerCase().includes(lowerQuery) ||
                     p.nicknames.some((n) => n.toLowerCase().includes(lowerQuery)) ||
                     (digitQuery.length >= 3 &&
-                        (p.phone.replace(/\D/g, "").includes(digitQuery) ||
+                        (p.phoneNumbers.some((pn) =>
+                            pn.number.replace(/\D/g, "").includes(digitQuery)
+                        ) ||
                             p.alternateContacts?.some((c) =>
                                 c.phone.replace(/\D/g, "").includes(digitQuery)
                             )))
