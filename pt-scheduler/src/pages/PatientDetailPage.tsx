@@ -13,7 +13,7 @@ import { Phone, Navigation, Edit2, X, Trash2, Mail } from "lucide-react";
 interface EditFormData {
     fullName: string;
     nicknames: string;
-    phone: string;
+    phoneNumbers: { number: string; label: string }[];
     alternateContacts: string;
     address: string;
     notes: string;
@@ -41,7 +41,9 @@ export function PatientDetailPage() {
             setFormData({
                 fullName: found.fullName,
                 nicknames: found.nicknames.join(", "),
-                phone: found.phone,
+                phoneNumbers: found.phoneNumbers.length > 0
+                    ? found.phoneNumbers.map((pn) => ({ number: pn.number, label: pn.label ?? "" }))
+                    : [{ number: "", label: "" }],
                 alternateContacts: serializeAlternateContactsField(found.alternateContacts),
                 address: found.address,
                 notes: found.notes,
@@ -77,7 +79,9 @@ export function PatientDetailPage() {
         setFormData({
             fullName: patient.fullName,
             nicknames: patient.nicknames.join(", "),
-            phone: patient.phone,
+            phoneNumbers: patient.phoneNumbers.length > 0
+                ? patient.phoneNumbers.map((pn) => ({ number: pn.number, label: pn.label ?? "" }))
+                : [{ number: "", label: "" }],
             alternateContacts: serializeAlternateContactsField(patient.alternateContacts),
             address: patient.address,
             notes: patient.notes,
@@ -92,7 +96,7 @@ export function PatientDetailPage() {
         setIsEditing(false);
     };
 
-    const handleInputChange = (field: keyof EditFormData, value: string) => {
+    const handleInputChange = (field: keyof EditFormData, value: EditFormData[keyof EditFormData]) => {
         setFormData((prev) => prev ? { ...prev, [field]: value } : null);
     };
 
@@ -114,7 +118,12 @@ export function PatientDetailPage() {
                     .split(",")
                     .map((n) => n.trim())
                     .filter(Boolean),
-                phone: formData.phone.trim(),
+                phoneNumbers: formData.phoneNumbers
+                    .filter((pn) => pn.number.trim())
+                    .map((pn) => {
+                        const label = pn.label.trim();
+                        return label ? { number: pn.number.trim(), label } : { number: pn.number.trim() };
+                    }),
                 alternateContacts: parseAlternateContactsField(formData.alternateContacts),
                 address: formData.address.trim(),
                 notes: formData.notes.trim(),
@@ -207,14 +216,65 @@ export function PatientDetailPage() {
 
                     <div>
                         <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                            Phone
+                            Phone Numbers
                         </label>
-                        <input
-                            type="tel"
-                            value={formData.phone}
-                            onChange={(e) => handleInputChange("phone", e.target.value)}
-                            className="w-full input-google"
-                        />
+                        <div className="space-y-2">
+                            {formData.phoneNumbers.map((pn, idx) => (
+                                <div key={idx} className="flex gap-2 items-center">
+                                    <input
+                                        type="text"
+                                        value={pn.label}
+                                        onChange={(e) => {
+                                            const updated = [...formData.phoneNumbers];
+                                            updated[idx] = { ...updated[idx], label: e.target.value };
+                                            handleInputChange("phoneNumbers", updated);
+                                        }}
+                                        className="w-[30%] input-google"
+                                        placeholder="Label (optional)"
+                                    />
+                                    <input
+                                        type="tel"
+                                        value={pn.number}
+                                        onChange={(e) => {
+                                            const updated = [...formData.phoneNumbers];
+                                            updated[idx] = { ...updated[idx], number: e.target.value };
+                                            handleInputChange("phoneNumbers", updated);
+                                        }}
+                                        className="flex-1 input-google"
+                                        placeholder="555-123-4567"
+                                    />
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            if (formData.phoneNumbers.length <= 1) {
+                                                handleInputChange("phoneNumbers", [{ number: "", label: "" }]);
+                                            } else {
+                                                handleInputChange(
+                                                    "phoneNumbers",
+                                                    formData.phoneNumbers.filter((_, i) => i !== idx)
+                                                );
+                                            }
+                                        }}
+                                        className="p-1.5 rounded-full hover:bg-red-50 dark:hover:bg-red-950 transition-colors"
+                                        aria-label="Remove phone number"
+                                    >
+                                        <X className="w-4 h-4 text-red-500" />
+                                    </button>
+                                </div>
+                            ))}
+                            <button
+                                type="button"
+                                onClick={() =>
+                                    handleInputChange("phoneNumbers", [
+                                        ...formData.phoneNumbers,
+                                        { number: "", label: "" },
+                                    ])
+                                }
+                                className="text-sm text-[var(--color-primary)] hover:underline"
+                            >
+                                + Add phone number
+                            </button>
+                        </div>
                     </div>
 
                     <div>
@@ -334,14 +394,17 @@ export function PatientDetailPage() {
                 <Card>
                     <CardHeader title="Contact" />
                     <div className="space-y-2">
-                        {patient.phone ? (
-                            <a
-                                href={buildPhoneHref(patient.phone)!}
-                                className="flex items-center gap-2 text-[var(--color-primary)] hover:underline"
-                            >
-                                <Phone className="w-4 h-4" />
-                                {patient.phone}
-                            </a>
+                        {patient.phoneNumbers.length > 0 ? (
+                            patient.phoneNumbers.map((pn, idx) => (
+                                <a
+                                    key={idx}
+                                    href={buildPhoneHref(pn.number)!}
+                                    className="flex items-center gap-2 text-[var(--color-primary)] hover:underline"
+                                >
+                                    <Phone className="w-4 h-4" />
+                                    {pn.label ? `${pn.label}: ${pn.number}` : pn.number}
+                                </a>
+                            ))
                         ) : (
                             <p className="text-[var(--color-text-secondary)] text-sm">No phone number</p>
                         )}
