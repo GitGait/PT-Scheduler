@@ -36,7 +36,7 @@ function isCurrentWeek(date?: Date): boolean {
 interface PatientFormData {
     fullName: string;
     nicknames: string;
-    phone: string;
+    phoneNumbers: { number: string; label: string }[];
     address: string;
     email: string;
     alternateContacts: string;
@@ -47,7 +47,7 @@ interface PatientFormData {
 const emptyForm: PatientFormData = {
     fullName: "",
     nicknames: "",
-    phone: "",
+    phoneNumbers: [{ number: "", label: "" }],
     address: "",
     email: "",
     alternateContacts: "",
@@ -289,7 +289,7 @@ interface CsvParsedPatient {
     id?: string;
     fullName: string;
     nicknames: string[];
-    phone: string;
+    phoneNumbers: { number: string; label?: string }[];
     alternateContacts: Patient["alternateContacts"];
     address: string;
     lat?: number;
@@ -302,7 +302,7 @@ interface CsvParsedPatient {
 interface PatientIdentityLike {
     id?: string;
     fullName: string;
-    phone: string;
+    phoneNumbers: { number: string; label?: string }[];
     address: string;
 }
 
@@ -346,7 +346,7 @@ function buildPatientDedupKeys(patient: PatientIdentityLike): string[] {
     const keys: string[] = [];
     const id = normalizeIdentifier(patient.id);
     const name = normalizePersonName(patient.fullName);
-    const phone = normalizePhoneForMatch(patient.phone);
+    const phone = normalizePhoneForMatch(patient.phoneNumbers[0]?.number ?? "");
     const address = normalizeAddressForMatch(patient.address);
 
     if (id) {
@@ -407,7 +407,10 @@ function parsePatientRowFromCsv(
             .split(",")
             .map((n) => n.trim())
             .filter(Boolean),
-        phone: getMappedValue("phone"),
+        phoneNumbers: (() => {
+            const primary = getMappedValue("phone");
+            return primary.trim() ? [{ number: primary.trim() }] : [];
+        })(),
         alternateContacts: parseAlternateContactsField(getMappedValue("alternateContacts")),
         address: getMappedValue("address"),
         lat: Number.isFinite(lat) ? lat : undefined,
@@ -609,7 +612,7 @@ function mergePatientRecords(primary: Patient, duplicate: Patient): Patient {
         ...primary,
         fullName: preferredName.trim() || primary.fullName,
         nicknames: mergeNicknames(primary.nicknames, duplicate.nicknames),
-        phone: mergeStringValue(primary.phone, duplicate.phone),
+        phoneNumbers: primary.phoneNumbers.length > 0 ? primary.phoneNumbers : duplicate.phoneNumbers,
         alternateContacts: mergeAlternateContacts(
             primary.alternateContacts,
             duplicate.alternateContacts
@@ -692,7 +695,7 @@ export function PatientsPage() {
         setIsAddOpen(false);
     };
 
-    const handleInputChange = (field: keyof PatientFormData, value: string) => {
+    const handleInputChange = (field: keyof PatientFormData, value: PatientFormData[keyof PatientFormData]) => {
         setFormData((prev) => ({ ...prev, [field]: value }));
     };
 
@@ -860,7 +863,7 @@ export function PatientsPage() {
             const keys = buildPatientDedupKeys({
                 id: localPatient.id,
                 fullName: localPatient.fullName,
-                phone: localPatient.phone,
+                phoneNumbers: localPatient.phoneNumbers,
                 address: localPatient.address,
             });
             for (const key of keys) {
@@ -903,7 +906,7 @@ export function PatientsPage() {
                     id: normalizedId,
                     fullName: parsed.fullName,
                     nicknames: parsed.nicknames,
-                    phone: parsed.phone,
+                    phoneNumbers: parsed.phoneNumbers,
                     alternateContacts: parsed.alternateContacts,
                     address: parsed.address,
                     lat: parsed.lat,
@@ -925,7 +928,7 @@ export function PatientsPage() {
                 const createdId = await add({
                     fullName: parsed.fullName,
                     nicknames: parsed.nicknames,
-                    phone: parsed.phone,
+                    phoneNumbers: parsed.phoneNumbers,
                     alternateContacts: parsed.alternateContacts,
                     address: parsed.address,
                     lat: parsed.lat,
@@ -940,7 +943,7 @@ export function PatientsPage() {
                     const keys = buildPatientDedupKeys({
                         id: storedPatient.id,
                         fullName: storedPatient.fullName,
-                        phone: storedPatient.phone,
+                        phoneNumbers: storedPatient.phoneNumbers,
                         address: storedPatient.address,
                     });
                     for (const key of keys) {
@@ -957,7 +960,7 @@ export function PatientsPage() {
             const storedKeys = buildPatientDedupKeys({
                 id: storedPatient.id,
                 fullName: storedPatient.fullName,
-                phone: storedPatient.phone,
+                phoneNumbers: storedPatient.phoneNumbers,
                 address: storedPatient.address,
             });
             for (const key of storedKeys) {
@@ -1165,7 +1168,10 @@ export function PatientsPage() {
                 parsedRows.push({
                     fullName,
                     nicknames: [],
-                    phone: extracted.phone.trim() || inferPhoneFromUnstructuredText(rawText),
+                    phoneNumbers: (() => {
+                        const p = extracted.phone.trim() || inferPhoneFromUnstructuredText(rawText);
+                        return p ? [{ number: p }] : [];
+                    })(),
                     alternateContacts: extracted.alternateContacts,
                     address: mergeAddressWithCity(extracted.address, city),
                     email: extracted.email.trim() || undefined,
@@ -1461,7 +1467,9 @@ export function PatientsPage() {
             setFormData((prev) => ({
                 ...prev,
                 fullName: extracted.fullName || prev.fullName,
-                phone: extracted.phone || prev.phone,
+                phoneNumbers: extracted.phone
+                    ? [{ number: extracted.phone, label: "" }]
+                    : prev.phoneNumbers,
                 address: extracted.address || prev.address,
                 email: extracted.email || prev.email,
                 alternateContacts:
@@ -1505,7 +1513,12 @@ export function PatientsPage() {
                     .split(",")
                     .map((n) => n.trim())
                     .filter(Boolean),
-                phone: formData.phone.trim(),
+                phoneNumbers: formData.phoneNumbers
+                    .filter((pn) => pn.number.trim())
+                    .map((pn) => {
+                        const label = pn.label.trim();
+                        return label ? { number: pn.number.trim(), label } : { number: pn.number.trim() };
+                    }),
                 alternateContacts: parseAlternateContactsField(formData.alternateContacts),
                 address: formData.address.trim(),
                 email: normalizedEmail || undefined,
@@ -1731,15 +1744,15 @@ export function PatientsPage() {
                                 />
                             </Link>
                             <div className="flex items-center gap-3 mt-2">
-                                {patient.phone && (
+                                {patient.phoneNumbers[0]?.number && (
                                     <a
-                                        href={buildPhoneHref(patient.phone) ?? "#"}
+                                        href={buildPhoneHref(patient.phoneNumbers[0].number) ?? "#"}
                                         onClick={(e) => e.stopPropagation()}
                                         className="inline-flex items-center gap-1 text-[var(--color-primary)] text-sm hover:underline"
                                         aria-label={`Call ${patient.fullName}`}
                                     >
                                         <Phone className="w-4 h-4" />
-                                        {patient.phone}
+                                        {patient.phoneNumbers[0].number}
                                     </a>
                                 )}
                                 {patient.address && (
@@ -1943,15 +1956,65 @@ export function PatientsPage() {
 
                             <div>
                                 <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                                    Phone
+                                    Phone Numbers
                                 </label>
-                                <input
-                                    type="tel"
-                                    value={formData.phone}
-                                    onChange={(e) => handleInputChange("phone", e.target.value)}
-                                    className="w-full input-google"
-                                    placeholder="555-123-4567"
-                                />
+                                <div className="space-y-2">
+                                    {formData.phoneNumbers.map((pn, idx) => (
+                                        <div key={idx} className="flex gap-2 items-center">
+                                            <input
+                                                type="text"
+                                                value={pn.label}
+                                                onChange={(e) => {
+                                                    const updated = [...formData.phoneNumbers];
+                                                    updated[idx] = { ...updated[idx], label: e.target.value };
+                                                    handleInputChange("phoneNumbers", updated);
+                                                }}
+                                                className="w-[30%] input-google"
+                                                placeholder="Label (optional)"
+                                            />
+                                            <input
+                                                type="tel"
+                                                value={pn.number}
+                                                onChange={(e) => {
+                                                    const updated = [...formData.phoneNumbers];
+                                                    updated[idx] = { ...updated[idx], number: e.target.value };
+                                                    handleInputChange("phoneNumbers", updated);
+                                                }}
+                                                className="flex-1 input-google"
+                                                placeholder="555-123-4567"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    if (formData.phoneNumbers.length <= 1) {
+                                                        handleInputChange("phoneNumbers", [{ number: "", label: "" }]);
+                                                    } else {
+                                                        handleInputChange(
+                                                            "phoneNumbers",
+                                                            formData.phoneNumbers.filter((_, i) => i !== idx)
+                                                        );
+                                                    }
+                                                }}
+                                                className="p-1.5 rounded-full hover:bg-red-50 dark:hover:bg-red-950 transition-colors"
+                                                aria-label="Remove phone number"
+                                            >
+                                                <X className="w-4 h-4 text-red-500" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    <button
+                                        type="button"
+                                        onClick={() =>
+                                            handleInputChange("phoneNumbers", [
+                                                ...formData.phoneNumbers,
+                                                { number: "", label: "" },
+                                            ])
+                                        }
+                                        className="text-sm text-[var(--color-primary)] hover:underline"
+                                    >
+                                        + Add phone number
+                                    </button>
+                                </div>
                             </div>
 
                             <div>
