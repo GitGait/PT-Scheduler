@@ -14,7 +14,7 @@ const ALT_CONTACT_PART_SEPARATOR = "|";
 const PATIENTS_SHEET_TITLE = "Patients";
 const DISCHARGE_SHEET_TITLE = "Discharge";
 const FOR_OTHER_PT_SHEET_TITLE = "For Other PT";
-const DEFAULT_PATIENTS_RANGE = `${PATIENTS_SHEET_TITLE}!A:K`;
+const DEFAULT_PATIENTS_RANGE = `${PATIENTS_SHEET_TITLE}!A:L`;
 
 type AlternateContact = Patient["alternateContacts"][number];
 
@@ -82,6 +82,48 @@ export function serializeAlternateContactsField(contacts: AlternateContact[]): s
                 : `${firstName}${ALT_CONTACT_PART_SEPARATOR}${phone}`;
         })
         .join(`${ALT_CONTACT_ENTRY_SEPARATOR} `);
+}
+
+const PHONE_ENTRY_SEPARATOR = ";";
+const PHONE_LABEL_SEPARATOR = ":";
+
+/** Serialize additional phone numbers (index 1+) to "Label:Number; Label:Number" format */
+export function serializeAdditionalPhonesField(
+    phoneNumbers: Patient["phoneNumbers"]
+): string {
+    if (phoneNumbers.length <= 1) return "";
+    return phoneNumbers
+        .slice(1)
+        .map((entry) => {
+            const label = entry.label?.trim();
+            const number = entry.number.trim();
+            if (!number) return "";
+            return label ? `${label}${PHONE_LABEL_SEPARATOR}${number}` : number;
+        })
+        .filter(Boolean)
+        .join(`${PHONE_ENTRY_SEPARATOR} `);
+}
+
+/** Parse "Label:Number; Number; Label:Number" into PhoneEntry[] (excludes primary) */
+export function parseAdditionalPhonesField(
+    value: string
+): { number: string; label?: string }[] {
+    if (!value.trim()) return [];
+    return value
+        .split(PHONE_ENTRY_SEPARATOR)
+        .map((entry) => {
+            const trimmed = entry.trim();
+            if (!trimmed) return null;
+            const colonIndex = trimmed.indexOf(PHONE_LABEL_SEPARATOR);
+            if (colonIndex > 0) {
+                const label = trimmed.slice(0, colonIndex).trim();
+                const number = trimmed.slice(colonIndex + 1).trim();
+                if (!number) return null;
+                return label ? { number, label } : { number };
+            }
+            return { number: trimmed };
+        })
+        .filter((entry): entry is { number: string; label?: string } => entry !== null);
 }
 
 /**
@@ -324,7 +366,16 @@ function parsePatientRow(
         id,
         fullName,
         nicknames: getValue("nicknames").split(",").map((n) => n.trim()).filter(Boolean),
-        phone: getValue("phone"),
+        phoneNumbers: (() => {
+            const primary = getValue("phone");
+            const additional = parseAdditionalPhonesField(
+                getValue("additionalPhones") || getValue("additionalphones")
+            );
+            const entries: { number: string; label?: string }[] = [];
+            if (primary.trim()) entries.push({ number: primary.trim() });
+            entries.push(...additional);
+            return entries;
+        })(),
         alternateContacts: parseAlternateContactsField(
             getValue("alternateContacts") || getValue("alternateContact")
         ),
@@ -424,6 +475,7 @@ const DEFAULT_PATIENT_HEADERS = [
     "status",
     "notes",
     "forOtherPtAt",
+    "additionalPhones",
 ];
 
 async function upsertPatientToNamedSheet(
@@ -625,7 +677,8 @@ function buildPatientRowForHeaders(headers: string[], patient: Patient): string[
     setCell(["id"], patient.id);
     setCell(["fullname", "name"], patient.fullName);
     setCell(["nicknames"], patient.nicknames.join(", "));
-    setCell(["phone", "phonenumber"], patient.phone);
+    setCell(["phone", "phonenumber"], patient.phoneNumbers[0]?.number ?? "");
+    setCell(["additionalphones"], serializeAdditionalPhonesField(patient.phoneNumbers));
     setCell(["alternatecontacts", "alternatecontact"], serializeAlternateContactsField(patient.alternateContacts));
     setCell(["address"], patient.address);
     setCell(["lat", "latitude"], patient.lat?.toString() || "");
@@ -680,7 +733,7 @@ async function fetchPatientSheetRows(
     sheetOrRange: string,
     throwIfMissing = true
 ): Promise<string[][]> {
-    const range = sheetOrRange.includes("!") ? sheetOrRange : `${sheetOrRange}!A:K`;
+    const range = sheetOrRange.includes("!") ? sheetOrRange : `${sheetOrRange}!A:L`;
     const fetchUrl = `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(range)}`;
     const response = await fetchWithTimeout(fetchUrl, {
         headers: { Authorization: `Bearer ${token}` },

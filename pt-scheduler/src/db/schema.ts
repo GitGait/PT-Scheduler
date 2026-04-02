@@ -112,6 +112,30 @@ export class PTSchedulerDB extends Dexie {
                         }
                     });
             });
+
+        // Version 6: Replace phone string with phoneNumbers array
+        this.version(6)
+            .stores({
+                patients: "id, fullName, status",
+                appointments: "id, patientId, date, status, syncStatus, visitType",
+                recurringBlocks: "id, patientId, dayOfWeek",
+                calendarEvents: "id, appointmentId, googleEventId",
+                syncQueue: "++id, timestamp, status, nextRetryAt",
+                routeCache: "id, date, expiresAt",
+                dayNotes: "id, date",
+            })
+            .upgrade((tx) => {
+                return tx
+                    .table("patients")
+                    .toCollection()
+                    .modify((patient) => {
+                        const oldPhone = (patient as Record<string, unknown>).phone as string | undefined;
+                        patient.phoneNumbers = oldPhone?.trim()
+                            ? [{ number: oldPhone.trim() }]
+                            : [];
+                        delete (patient as Record<string, unknown>).phone;
+                    });
+            });
     }
 }
 
