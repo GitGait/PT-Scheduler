@@ -10,6 +10,7 @@ export type {
   GeocodeResponse,
   AIMatchResponse,
   AlternateContact,
+  PhoneEntry,
   ExtractPatientResponse,
   DistanceMatrixElement,
   DistanceMatrixResponse
@@ -25,7 +26,7 @@ export interface Patient {
   id: string;
   fullName: string;
   nicknames: string[];
-  phone: string;
+  phoneNumbers: import("../utils/validation").PhoneEntry[];
   alternateContacts: import("../utils/validation").AlternateContact[];
   address: string;
   lat?: number;

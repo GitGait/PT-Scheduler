@@ -48,6 +48,11 @@ export const alternateContactSchema = z.object({
   relationship: z.string().optional()
 });
 
+export const phoneEntrySchema = z.object({
+  number: z.string(),
+  label: z.string().optional(),
+});
+
 export const extractPatientResponseSchema = z.object({
   fullName: z.string().default(""),
   phone: z.string().default(""),
@@ -135,6 +140,7 @@ export type OptimizeResponse = z.infer<typeof optimizeResponseSchema>;
 export type GeocodeResponse = z.infer<typeof geocodeResponseSchema>;
 export type AIMatchResponse = z.infer<typeof aiMatchResponseSchema>;
 export type AlternateContact = z.infer<typeof alternateContactSchema>;
+export type PhoneEntry = z.infer<typeof phoneEntrySchema>;
 export type ExtractPatientResponse = z.infer<typeof extractPatientResponseSchema>;
 export type CSVColumnMapping = z.infer<typeof csvColumnMappingSchema>;
 export type CSVMappingResponse = z.infer<typeof csvMappingResponseSchema>;
