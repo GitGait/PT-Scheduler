@@ -189,7 +189,7 @@ export function useSync(config: SyncConfig | null) {
                             id: patientId,
                             fullName: patientName,
                             nicknames: [],
-                            phone: patientPhone,
+                            phoneNumbers: patientPhone?.trim() ? [{ number: patientPhone.trim() }] : [],
                             alternateContacts: [],
                             address: patientAddress,
                             status: "active",
@@ -201,17 +201,19 @@ export function useSync(config: SyncConfig | null) {
                     } else {
                         const nextFullName =
                             existingPatient.fullName.trim() || patientName || "Unknown Patient";
-                        const nextPhone = existingPatient.phone?.trim() || patientPhone;
+                        const nextPhone = existingPatient.phoneNumbers[0]?.number?.trim() || patientPhone;
                         const nextAddress = existingPatient.address?.trim() || patientAddress;
 
                         if (
                             nextFullName !== existingPatient.fullName ||
-                            nextPhone !== existingPatient.phone ||
+                            nextPhone !== (existingPatient.phoneNumbers[0]?.number ?? "") ||
                             nextAddress !== existingPatient.address
                         ) {
                             await db.patients.update(existingPatient.id, {
                                 fullName: nextFullName,
-                                phone: nextPhone,
+                                phoneNumbers: nextPhone?.trim()
+                                    ? [{ number: nextPhone.trim() }, ...existingPatient.phoneNumbers.slice(1)]
+                                    : existingPatient.phoneNumbers,
                                 address: nextAddress,
                                 updatedAt: new Date(),
                             });
@@ -413,7 +415,7 @@ export function useSync(config: SyncConfig | null) {
                     const patient = await db.patients.get(appointment.patientId);
                     patientName = patient?.fullName ?? "Unknown";
                     address = patient?.address;
-                    patientPhone = patient?.phone;
+                    patientPhone = patient?.phoneNumbers[0]?.number;
                 }
 
                 const eventId = await createCalendarEvent(
@@ -758,7 +760,7 @@ async function processSyncItem(item: SyncQueueItem, config: SyncConfig): Promise
                     const patient = await db.patients.get(appointment.patientId);
                     patientName = patient?.fullName ?? "Unknown";
                     address = patient?.address;
-                    patientPhone = patient?.phone;
+                    patientPhone = patient?.phoneNumbers[0]?.number;
                 }
                 const eventId = await createCalendarEvent(
                     config.calendarId,
@@ -788,7 +790,7 @@ async function processSyncItem(item: SyncQueueItem, config: SyncConfig): Promise
                     const patient = await db.patients.get(appointment.patientId);
                     patientName = patient?.fullName ?? "Unknown";
                     address = patient?.address;
-                    patientPhone = patient?.phone;
+                    patientPhone = patient?.phoneNumbers[0]?.number;
                 }
                 const calEvent =
                     (appointment.calendarEventId
