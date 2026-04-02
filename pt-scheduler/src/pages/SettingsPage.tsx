@@ -390,7 +390,7 @@ export function SettingsPage() {
                 const patient = patientMap.get(appointment.patientId);
                 const patientName = patient?.fullName ?? "Unknown";
                 const address = patient?.address;
-                const patientPhone = patient?.phone;
+                const patientPhone = patient?.phoneNumbers[0]?.number;
 
                 try {
                     const eventId = await createCalendarEvent(
@@ -553,7 +553,7 @@ export function SettingsPage() {
                     Tab name: <span className="font-semibold">Patients</span>
                 </p>
                 <p className="mt-2 break-all rounded bg-[var(--color-surface-hover)] p-2 font-mono text-xs text-[var(--color-text-primary)]">
-                    id,fullName,nicknames,phone,alternateContacts,address,lat,lng,status,notes
+                    id,fullName,nicknames,phone,alternateContacts,address,lat,lng,status,notes,additionalPhones
                 </p>
                 <p className="mt-2 text-xs text-[var(--color-text-secondary)]">
                     alternateContacts format: Name|Phone|Relationship; Name|Phone

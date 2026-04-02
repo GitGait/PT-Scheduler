@@ -519,7 +519,7 @@ export function ScanPage() {
                     patientId = await addPatient({
                         fullName: result.rawName,
                         nicknames: [],
-                        phone: "",
+                        phoneNumbers: [],
                         alternateContacts: [],
                         address: "",
                         status: "active",
