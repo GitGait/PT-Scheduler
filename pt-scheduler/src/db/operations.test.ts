@@ -116,6 +116,28 @@ describe("patientDB", () => {
         const all = await patientDB.getAll();
         expect(all).toHaveLength(2);
     });
+
+    it("should search patients by phone number across all entries", async () => {
+        await patientDB.add({
+            fullName: "MultiPhone, Test",
+            nicknames: [],
+            phoneNumbers: [
+                { number: "555-1111", label: "Cell" },
+                { number: "555-2222", label: "Home" },
+            ],
+            alternateContacts: [],
+            address: "1 Test St",
+            status: "active",
+            notes: "",
+        });
+
+        const byFirst = await patientDB.search("5551111");
+        expect(byFirst).toHaveLength(1);
+
+        const bySecond = await patientDB.search("5552222");
+        expect(bySecond).toHaveLength(1);
+        expect(bySecond[0].fullName).toBe("MultiPhone, Test");
+    });
 });
 
 describe("appointmentDB", () => {

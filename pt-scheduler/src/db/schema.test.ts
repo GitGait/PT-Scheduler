@@ -34,7 +34,7 @@ describe("PTSchedulerDB Schema", () => {
             id: "test-patient-1",
             fullName: "Doe, John",
             nicknames: ["Johnny"],
-            phone: "555-1234",
+            phoneNumbers: [{ number: "555-1234" }],
             alternateContacts: [],
             address: "123 Main St",
             status: "active" as const,
