@@ -29,7 +29,7 @@ export function AppointmentDetailModal({
     onSaveAppointment,
     onSyncToSheet,
 }: AppointmentDetailModalProps) {
-    const [phone, setPhone] = useState("");
+    const [phoneNumbers, setPhoneNumbers] = useState<{ number: string; label: string }[]>([{ number: "", label: "" }]);
     const [address, setAddress] = useState("");
     const [notes, setNotes] = useState("");
     const [visitType, setVisitType] = useState<VisitType>(null);
@@ -56,7 +56,11 @@ export function AppointmentDetailModal({
         initializedRef.current = true;
 
         if (patient) {
-            setPhone(patient.phone || "");
+            setPhoneNumbers(
+                patient.phoneNumbers.length > 0
+                    ? patient.phoneNumbers.map((pn) => ({ number: pn.number, label: pn.label ?? "" }))
+                    : [{ number: "", label: "" }]
+            );
             setAddress(patient.address || "");
             setAltContacts(patient.alternateContacts?.length ? [...patient.alternateContacts] : []);
         }
@@ -135,14 +139,21 @@ export function AppointmentDetailModal({
                 const cleanedContacts = altContacts.filter(c => c.firstName.trim() && c.phone.trim());
 
                 // Check if patient data changed
+                const cleanedPhones = phoneNumbers
+                    .filter((pn) => pn.number.trim())
+                    .map((pn) => {
+                        const label = pn.label.trim();
+                        return label ? { number: pn.number.trim(), label } : { number: pn.number.trim() };
+                    });
+                const phonesChanged = JSON.stringify(cleanedPhones) !== JSON.stringify(patient!.phoneNumbers ?? []);
                 const altContactsChanged = JSON.stringify(cleanedContacts) !== JSON.stringify(patient!.alternateContacts ?? []);
-                const patientChanged = phone !== patient!.phone || address !== patient!.address || altContactsChanged;
+                const patientChanged = phonesChanged || address !== patient!.address || altContactsChanged;
                 const visitTypeChanged = visitType !== (appointment.visitType ?? null);
                 const appointmentChanged = notes !== (appointment.notes || "") || visitTypeChanged;
 
                 if (patientChanged) {
                     await onSavePatient(patient!.id, {
-                        phone,
+                        phoneNumbers: cleanedPhones,
                         address,
                         alternateContacts: cleanedContacts,
                     });
@@ -150,7 +161,7 @@ export function AppointmentDetailModal({
                     if (onSyncToSheet) {
                         const updatedPatient: Patient = {
                             ...patient!,
-                            phone,
+                            phoneNumbers: cleanedPhones,
                             address,
                             alternateContacts: cleanedContacts,
                         };
@@ -276,19 +287,62 @@ export function AppointmentDetailModal({
                         </>
                     ) : (
                         <>
-                            {/* Phone */}
+                            {/* Phone Numbers */}
                             <div>
                                 <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                                     <Phone className="w-4 h-4" />
-                                    Phone Number
+                                    Phone Numbers
                                 </label>
-                                <input
-                                    type="tel"
-                                    value={phone}
-                                    onChange={(e) => setPhone(e.target.value)}
-                                    placeholder="Enter phone number"
-                                    className="w-full input-google"
-                                />
+                                <div className="space-y-2">
+                                    {phoneNumbers.map((pn, idx) => (
+                                        <div key={idx} className="flex gap-2 items-center">
+                                            <input
+                                                type="text"
+                                                value={pn.label}
+                                                onChange={(e) => {
+                                                    const updated = [...phoneNumbers];
+                                                    updated[idx] = { ...updated[idx], label: e.target.value };
+                                                    setPhoneNumbers(updated);
+                                                }}
+                                                placeholder="Label"
+                                                className="w-[30%] input-google text-sm"
+                                            />
+                                            <input
+                                                type="tel"
+                                                value={pn.number}
+                                                onChange={(e) => {
+                                                    const updated = [...phoneNumbers];
+                                                    updated[idx] = { ...updated[idx], number: e.target.value };
+                                                    setPhoneNumbers(updated);
+                                                }}
+                                                placeholder="Phone number"
+                                                className="flex-1 input-google text-sm"
+                                            />
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    if (phoneNumbers.length <= 1) {
+                                                        setPhoneNumbers([{ number: "", label: "" }]);
+                                                    } else {
+                                                        setPhoneNumbers(phoneNumbers.filter((_, i) => i !== idx));
+                                                    }
+                                                }}
+                                                className="p-1.5 rounded-full hover:bg-red-50 dark:hover:bg-red-950 transition-colors"
+                                                aria-label="Remove phone number"
+                                            >
+                                                <Trash2 className="w-4 h-4 text-red-500" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    <button
+                                        type="button"
+                                        onClick={() => setPhoneNumbers([...phoneNumbers, { number: "", label: "" }])}
+                                        className="flex items-center gap-2 text-sm text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] transition-colors py-1"
+                                    >
+                                        <Plus className="w-4 h-4" />
+                                        Add Phone
+                                    </button>
+                                </div>
                             </div>
 
                             {/* Address */}
