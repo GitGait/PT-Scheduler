@@ -198,12 +198,13 @@ export function AppointmentActionSheet({
     const headerName = isPersonal
         ? (appointment.title || getPersonalCategoryLabel(appointment.personalCategory))
         : (patient?.fullName ?? "Unknown Patient");
-    const hasPhone = !isPersonal && Boolean(patient?.phone);
+    const primaryPhone = !isPersonal ? patient?.phoneNumbers[0]?.number : undefined;
+    const hasPhone = Boolean(primaryPhone);
     const hasAddress = !isPersonal && Boolean(patient?.address);
     const alternateContacts = isPersonal ? [] : (patient?.alternateContacts ?? []);
 
-    const phoneHref = buildPhoneHref(patient?.phone);
-    const smsHref = buildSmsHref(patient?.phone);
+    const phoneHref = buildPhoneHref(primaryPhone);
+    const smsHref = buildSmsHref(primaryPhone);
 
     const noteCount = effectiveNotes.length;
     const notePreview = noteCount > 0
@@ -250,11 +251,11 @@ export function AppointmentActionSheet({
                                 </div>
                                 <div className="flex flex-col">
                                     <span className="font-medium">Call Patient</span>
-                                    <span className="text-sm text-[var(--color-text-secondary)]">{formatPhoneDisplay(patient?.phone)}</span>
+                                    <span className="text-sm text-[var(--color-text-secondary)]">{formatPhoneDisplay(primaryPhone)}</span>
                                 </div>
                             </a>
                             <button
-                                onClick={() => copyToClipboard(patient?.phone ?? '', 'phone')}
+                                onClick={() => copyToClipboard(primaryPhone ?? '', 'phone')}
                                 className="p-2.5 mr-2 rounded-full hover:bg-[var(--color-surface-hover)] transition-colors"
                                 aria-label="Copy phone number"
                             >
@@ -279,7 +280,7 @@ export function AppointmentActionSheet({
                             </div>
                             <div className="flex flex-col">
                                 <span className="font-medium">Text Patient</span>
-                                <span className="text-sm text-[var(--color-text-secondary)]">{formatPhoneDisplay(patient?.phone)}</span>
+                                <span className="text-sm text-[var(--color-text-secondary)]">{formatPhoneDisplay(primaryPhone)}</span>
                             </div>
                         </a>
                     )}
