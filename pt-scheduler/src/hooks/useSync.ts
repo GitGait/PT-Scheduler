@@ -543,7 +543,7 @@ export function useSync(config: SyncConfig | null) {
             }
         };
 
-        const runFastSync = async () => {
+        const runFastSync = async (options?: { force?: boolean }) => {
             if (!isSignedIn()) {
                 return;
             }
@@ -561,7 +561,7 @@ export function useSync(config: SyncConfig | null) {
                     pushedIds = await processQueue();
                 }
 
-                await syncPatientsFromSheets();
+                await syncPatientsFromSheets(options?.force ? { force: true } : undefined);
                 await syncDayNotesFromSheets();
                 await syncAppointmentsFromCalendar(pushedIds);
             } finally {
@@ -580,7 +580,7 @@ export function useSync(config: SyncConfig | null) {
         };
 
         const handleRequestSync = () => {
-            void runFastSync();
+            void runFastSync({ force: true });
         };
 
         window.addEventListener("focus", handleWindowFocus);
