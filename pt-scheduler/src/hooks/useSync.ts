@@ -63,9 +63,8 @@ const LAST_SHEETS_SYNC_KEY_PREFIX = "ptScheduler.lastSheetsAutoSync.";
 const LAST_APPOINTMENT_BACKFILL_KEY_PREFIX = "ptScheduler.lastCalendarBackfill.";
 
 export function useSync(config: SyncConfig | null) {
-    const { isOnline, pendingCount, refreshPendingCount } = useSyncStore();
+    const { isOnline, isSyncing, pendingCount, refreshPendingCount } = useSyncStore();
     const { loadAll } = usePatientStore();
-    const [isSyncing, setIsSyncing] = useState(false);
     const [lastSyncError, setLastSyncError] = useState<string | null>(null);
     const queueRunInFlightRef = useRef(false);
     const calendarSyncLockRef = useRef(false);
@@ -465,7 +464,7 @@ export function useSync(config: SyncConfig | null) {
         if (queueRunInFlightRef.current) return pushedAppointmentIds;
 
         queueRunInFlightRef.current = true;
-        setIsSyncing(true);
+        useSyncStore.getState().beginSync();
         setLastSyncError(null);
 
         try {
@@ -503,7 +502,7 @@ export function useSync(config: SyncConfig | null) {
             setLastSyncError(err instanceof Error ? err.message : "Queue failed");
         } finally {
             queueRunInFlightRef.current = false;
-            setIsSyncing(false);
+            useSyncStore.getState().endSync();
         }
         return pushedAppointmentIds;
     }, [config, isOnline, refreshPendingCount]);

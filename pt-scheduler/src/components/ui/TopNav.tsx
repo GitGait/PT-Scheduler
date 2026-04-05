@@ -37,7 +37,9 @@ export function TopNav({ onMenuClick, showMenuButton = true }: TopNavProps) {
   const [googleSignedIn, setGoogleSignedIn] = useState(() => isSignedIn());
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
+  const [syncCooldown, setSyncCooldown] = useState(false);
   const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const syncCooldownRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Check sign-in status periodically and on visibility change
   useEffect(() => {
@@ -73,11 +75,14 @@ export function TopNav({ onMenuClick, showMenuButton = true }: TopNavProps) {
     };
   }, []);
 
-  // Clear error timeout on unmount
+  // Clear timeouts on unmount
   useEffect(() => {
     return () => {
       if (errorTimeoutRef.current) {
         clearTimeout(errorTimeoutRef.current);
+      }
+      if (syncCooldownRef.current) {
+        clearTimeout(syncCooldownRef.current);
       }
     };
   }, []);
@@ -205,19 +210,24 @@ export function TopNav({ onMenuClick, showMenuButton = true }: TopNavProps) {
           </span>
         </button>
         <button
-          onClick={() => window.dispatchEvent(new Event(REQUEST_SYNC_EVENT))}
-          disabled={isSyncing || !googleSignedIn || !syncReady}
+          onClick={() => {
+            window.dispatchEvent(new Event(REQUEST_SYNC_EVENT));
+            setSyncCooldown(true);
+            if (syncCooldownRef.current) clearTimeout(syncCooldownRef.current);
+            syncCooldownRef.current = setTimeout(() => setSyncCooldown(false), 10000);
+          }}
+          disabled={isSyncing || syncCooldown || !googleSignedIn || !syncReady}
           className={`w-10 h-10 flex items-center justify-center rounded-full transition-colors ${
-            isSyncing
+            isSyncing || syncCooldown
               ? "cursor-wait"
               : googleSignedIn && syncReady
               ? "hover:bg-[var(--color-surface-hover)] cursor-pointer"
               : "opacity-40 cursor-not-allowed"
           }`}
-          title={isSyncing ? "Syncing..." : !googleSignedIn ? "Sign in to sync" : !syncReady ? "Offline or not configured" : "Sync now"}
+          title={isSyncing ? "Syncing..." : syncCooldown ? "Sync in progress..." : !googleSignedIn ? "Sign in to sync" : !syncReady ? "Offline or not configured" : "Sync now"}
           aria-label="Sync now"
         >
-          <RefreshCw className={`w-5 h-5 text-[var(--color-text-secondary)] ${isSyncing ? "animate-spin" : ""}`} />
+          <RefreshCw className={`w-5 h-5 text-[var(--color-text-secondary)] ${isSyncing || syncCooldown ? "animate-spin" : ""}`} />
         </button>
         <button
           className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-hover)] transition-colors"
