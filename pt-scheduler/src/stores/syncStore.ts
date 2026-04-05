@@ -40,6 +40,8 @@ function saveStoredSyncConfig(config: StoredSyncConfig): void {
 interface SyncState {
     isOnline: boolean;
     isSyncing: boolean;
+    /** How many sync operations are in flight (internal, not for UI) */
+    _syncDepth: number;
     pendingCount: number;
     spreadsheetId: string;
     calendarId: string;
@@ -47,7 +49,9 @@ interface SyncState {
 
 interface SyncActions {
     setOnline: (online: boolean) => void;
-    setIsSyncing: (syncing: boolean) => void;
+    /** Increment/decrement the sync counter; isSyncing is true while depth > 0 */
+    beginSync: () => void;
+    endSync: () => void;
     refreshPendingCount: () => Promise<void>;
     setSyncConfig: (config: StoredSyncConfig) => void;
     clearSyncConfig: () => void;
@@ -58,6 +62,7 @@ const initialSyncConfig = loadStoredSyncConfig();
 export const useSyncStore = create<SyncState & SyncActions>((set) => ({
     isOnline: typeof navigator !== "undefined" ? navigator.onLine : true,
     isSyncing: false,
+    _syncDepth: 0,
     pendingCount: 0,
     spreadsheetId: initialSyncConfig.spreadsheetId,
     calendarId: initialSyncConfig.calendarId,
@@ -66,8 +71,18 @@ export const useSyncStore = create<SyncState & SyncActions>((set) => ({
         set({ isOnline: online });
     },
 
-    setIsSyncing: (syncing: boolean) => {
-        set({ isSyncing: syncing });
+    beginSync: () => {
+        set((state) => {
+            const next = state._syncDepth + 1;
+            return { _syncDepth: next, isSyncing: true };
+        });
+    },
+
+    endSync: () => {
+        set((state) => {
+            const next = Math.max(0, state._syncDepth - 1);
+            return { _syncDepth: next, isSyncing: next > 0 };
+        });
     },
 
     refreshPendingCount: async () => {

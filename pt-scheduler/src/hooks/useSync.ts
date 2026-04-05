@@ -522,7 +522,7 @@ export function useSync(config: SyncConfig | null) {
                 return;
             }
 
-            useSyncStore.getState().setIsSyncing(true);
+            useSyncStore.getState().beginSync();
             try {
                 // Push local changes first to avoid pull overwriting them.
                 // Track which appointment IDs were pushed so we can skip them
@@ -539,7 +539,7 @@ export function useSync(config: SyncConfig | null) {
                 await syncDayNotesFromSheets();
                 await syncAppointmentsFromCalendar(pushedIds);
             } finally {
-                useSyncStore.getState().setIsSyncing(false);
+                useSyncStore.getState().endSync();
             }
         };
 
@@ -548,7 +548,7 @@ export function useSync(config: SyncConfig | null) {
                 return;
             }
 
-            useSyncStore.getState().setIsSyncing(true);
+            useSyncStore.getState().beginSync();
             try {
                 // Push local changes first so the calendar has current data
                 // before we pull, preventing stale calendar data from
@@ -565,7 +565,7 @@ export function useSync(config: SyncConfig | null) {
                 await syncDayNotesFromSheets();
                 await syncAppointmentsFromCalendar(pushedIds);
             } finally {
-                useSyncStore.getState().setIsSyncing(false);
+                useSyncStore.getState().endSync();
             }
         };
 

@@ -33,6 +33,7 @@ const navItems = [
 
 export function TopNav({ onMenuClick, showMenuButton = true }: TopNavProps) {
   const isSyncing = useSyncStore((s) => s.isSyncing);
+  const syncReady = useSyncStore((s) => s.isOnline && !!(s.spreadsheetId || s.calendarId));
   const [googleSignedIn, setGoogleSignedIn] = useState(() => isSignedIn());
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
@@ -205,15 +206,15 @@ export function TopNav({ onMenuClick, showMenuButton = true }: TopNavProps) {
         </button>
         <button
           onClick={() => window.dispatchEvent(new Event(REQUEST_SYNC_EVENT))}
-          disabled={isSyncing || !googleSignedIn}
+          disabled={isSyncing || !googleSignedIn || !syncReady}
           className={`w-10 h-10 flex items-center justify-center rounded-full transition-colors ${
             isSyncing
               ? "cursor-wait"
-              : googleSignedIn
+              : googleSignedIn && syncReady
               ? "hover:bg-[var(--color-surface-hover)] cursor-pointer"
               : "opacity-40 cursor-not-allowed"
           }`}
-          title={isSyncing ? "Syncing..." : googleSignedIn ? "Sync now" : "Sign in to sync"}
+          title={isSyncing ? "Syncing..." : !googleSignedIn ? "Sign in to sync" : !syncReady ? "Offline or not configured" : "Sync now"}
           aria-label="Sync now"
         >
           <RefreshCw className={`w-5 h-5 text-[var(--color-text-secondary)] ${isSyncing ? "animate-spin" : ""}`} />
