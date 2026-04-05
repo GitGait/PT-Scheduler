@@ -368,7 +368,7 @@ export function AppointmentDetailModal({
                                 </label>
                                 <div className="space-y-3">
                                     {altContacts.map((contact, index) => (
-                                        <div key={contact.phone || index} className="flex gap-2 items-start">
+                                        <div key={index} className="flex gap-2 items-start">
                                             <div className="flex-1 grid grid-cols-3 gap-2">
                                                 <input
                                                     type="text"
