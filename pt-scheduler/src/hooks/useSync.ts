@@ -522,20 +522,25 @@ export function useSync(config: SyncConfig | null) {
                 return;
             }
 
-            // Push local changes first to avoid pull overwriting them.
-            // Track which appointment IDs were pushed so we can skip them
-            // during the pull — Google Calendar may return stale data if
-            // the push hasn't propagated yet.
-            let pushedIds: Set<string> | undefined;
-            const pending = await syncQueueDB.getPendingCount();
-            if (pending > 0) {
-                pushedIds = await processQueue();
-            }
+            useSyncStore.getState().setIsSyncing(true);
+            try {
+                // Push local changes first to avoid pull overwriting them.
+                // Track which appointment IDs were pushed so we can skip them
+                // during the pull — Google Calendar may return stale data if
+                // the push hasn't propagated yet.
+                let pushedIds: Set<string> | undefined;
+                const pending = await syncQueueDB.getPendingCount();
+                if (pending > 0) {
+                    pushedIds = await processQueue();
+                }
 
-            await backfillLocalAppointmentsToCalendar();
-            await syncPatientsFromSheets();
-            await syncDayNotesFromSheets();
-            await syncAppointmentsFromCalendar(pushedIds);
+                await backfillLocalAppointmentsToCalendar();
+                await syncPatientsFromSheets();
+                await syncDayNotesFromSheets();
+                await syncAppointmentsFromCalendar(pushedIds);
+            } finally {
+                useSyncStore.getState().setIsSyncing(false);
+            }
         };
 
         const runFastSync = async () => {
@@ -543,20 +548,25 @@ export function useSync(config: SyncConfig | null) {
                 return;
             }
 
-            // Push local changes first so the calendar has current data
-            // before we pull, preventing stale calendar data from
-            // overwriting recent local edits.
-            // Track which appointment IDs were pushed so we can skip them
-            // during the immediate pull.
-            let pushedIds: Set<string> | undefined;
-            const pending = await syncQueueDB.getPendingCount();
-            if (pending > 0) {
-                pushedIds = await processQueue();
-            }
+            useSyncStore.getState().setIsSyncing(true);
+            try {
+                // Push local changes first so the calendar has current data
+                // before we pull, preventing stale calendar data from
+                // overwriting recent local edits.
+                // Track which appointment IDs were pushed so we can skip them
+                // during the immediate pull.
+                let pushedIds: Set<string> | undefined;
+                const pending = await syncQueueDB.getPendingCount();
+                if (pending > 0) {
+                    pushedIds = await processQueue();
+                }
 
-            await syncPatientsFromSheets();
-            await syncDayNotesFromSheets();
-            await syncAppointmentsFromCalendar(pushedIds);
+                await syncPatientsFromSheets();
+                await syncDayNotesFromSheets();
+                await syncAppointmentsFromCalendar(pushedIds);
+            } finally {
+                useSyncStore.getState().setIsSyncing(false);
+            }
         };
 
         void runFullSync();

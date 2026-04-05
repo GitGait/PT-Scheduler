@@ -12,8 +12,11 @@ import {
   Loader2,
   CheckCircle2,
   AlertCircle,
+  RefreshCw,
 } from "lucide-react";
 import { isSignedIn, signIn, tryRestoreSignIn, AUTH_STATE_CHANGED_EVENT } from "../../api/auth";
+import { REQUEST_SYNC_EVENT } from "../../hooks/useSync";
+import { useSyncStore } from "../../stores";
 
 interface TopNavProps {
   onMenuClick: () => void;
@@ -29,6 +32,7 @@ const navItems = [
 ];
 
 export function TopNav({ onMenuClick, showMenuButton = true }: TopNavProps) {
+  const isSyncing = useSyncStore((s) => s.isSyncing);
   const [googleSignedIn, setGoogleSignedIn] = useState(() => isSignedIn());
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [signInError, setSignInError] = useState<string | null>(null);
@@ -198,6 +202,21 @@ export function TopNav({ onMenuClick, showMenuButton = true }: TopNavProps) {
               ? "Connected"
               : "Sign in"}
           </span>
+        </button>
+        <button
+          onClick={() => window.dispatchEvent(new Event(REQUEST_SYNC_EVENT))}
+          disabled={isSyncing || !googleSignedIn}
+          className={`w-10 h-10 flex items-center justify-center rounded-full transition-colors ${
+            isSyncing
+              ? "cursor-wait"
+              : googleSignedIn
+              ? "hover:bg-[var(--color-surface-hover)] cursor-pointer"
+              : "opacity-40 cursor-not-allowed"
+          }`}
+          title={isSyncing ? "Syncing..." : googleSignedIn ? "Sync now" : "Sign in to sync"}
+          aria-label="Sync now"
+        >
+          <RefreshCw className={`w-5 h-5 text-[var(--color-text-secondary)] ${isSyncing ? "animate-spin" : ""}`} />
         </button>
         <button
           className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-hover)] transition-colors"

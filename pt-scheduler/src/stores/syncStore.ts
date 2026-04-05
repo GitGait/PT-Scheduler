@@ -39,6 +39,7 @@ function saveStoredSyncConfig(config: StoredSyncConfig): void {
 
 interface SyncState {
     isOnline: boolean;
+    isSyncing: boolean;
     pendingCount: number;
     spreadsheetId: string;
     calendarId: string;
@@ -46,6 +47,7 @@ interface SyncState {
 
 interface SyncActions {
     setOnline: (online: boolean) => void;
+    setIsSyncing: (syncing: boolean) => void;
     refreshPendingCount: () => Promise<void>;
     setSyncConfig: (config: StoredSyncConfig) => void;
     clearSyncConfig: () => void;
@@ -55,12 +57,17 @@ const initialSyncConfig = loadStoredSyncConfig();
 
 export const useSyncStore = create<SyncState & SyncActions>((set) => ({
     isOnline: typeof navigator !== "undefined" ? navigator.onLine : true,
+    isSyncing: false,
     pendingCount: 0,
     spreadsheetId: initialSyncConfig.spreadsheetId,
     calendarId: initialSyncConfig.calendarId,
 
     setOnline: (online: boolean) => {
         set({ isOnline: online });
+    },
+
+    setIsSyncing: (syncing: boolean) => {
+        set({ isSyncing: syncing });
     },
 
     refreshPendingCount: async () => {
