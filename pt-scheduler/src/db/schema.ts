@@ -136,6 +136,17 @@ export class PTSchedulerDB extends Dexie {
                         delete (patient as Record<string, unknown>).phone;
                     });
             });
+
+        // Version 7: Add optional facilityName field to patients
+        this.version(7).stores({
+            patients: "id, fullName, status",
+            appointments: "id, patientId, date, status, syncStatus, visitType",
+            recurringBlocks: "id, patientId, dayOfWeek",
+            calendarEvents: "id, appointmentId, googleEventId",
+            syncQueue: "++id, timestamp, status, nextRetryAt",
+            routeCache: "id, date, expiresAt",
+            dayNotes: "id, date",
+        });
     }
 }
 

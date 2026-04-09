@@ -16,6 +16,7 @@ interface EditFormData {
     phoneNumbers: { number: string; label: string }[];
     alternateContacts: string;
     address: string;
+    facilityName: string;
     notes: string;
     status: PatientStatus;
 }
@@ -46,6 +47,7 @@ export function PatientDetailPage() {
                     : [{ number: "", label: "" }],
                 alternateContacts: serializeAlternateContactsField(found.alternateContacts),
                 address: found.address,
+                facilityName: found.facilityName || "",
                 notes: found.notes,
                 status: found.status,
             });
@@ -84,6 +86,7 @@ export function PatientDetailPage() {
                 : [{ number: "", label: "" }],
             alternateContacts: serializeAlternateContactsField(patient.alternateContacts),
             address: patient.address,
+            facilityName: patient.facilityName || "",
             notes: patient.notes,
             status: patient.status,
         });
@@ -126,6 +129,7 @@ export function PatientDetailPage() {
                     }),
                 alternateContacts: parseAlternateContactsField(formData.alternateContacts),
                 address: formData.address.trim(),
+                facilityName: formData.facilityName.trim() || undefined,
                 notes: formData.notes.trim(),
                 status: formData.status,
             };
@@ -294,6 +298,19 @@ export function PatientDetailPage() {
 
                     <div>
                         <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                            Facility Name
+                        </label>
+                        <input
+                            type="text"
+                            value={formData.facilityName}
+                            onChange={(e) => handleInputChange("facilityName", e.target.value)}
+                            className="w-full input-google"
+                            placeholder="e.g., Sunrise Senior Living (optional)"
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                             Address
                         </label>
                         <input
@@ -447,28 +464,37 @@ export function PatientDetailPage() {
                 )}
 
                 {/* Address */}
-                {patient.address && (
+                {(patient.address || patient.facilityName) && (
                     <Card>
                         <CardHeader title="Address" />
-                        <a
-                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(patient.address)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="block text-[var(--color-text-primary)] hover:text-[var(--color-primary)] hover:underline"
-                        >
-                            {patient.address}
-                        </a>
-                        <a
-                            href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(patient.address)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-block mt-2"
-                        >
-                            <Button size="sm" variant="primary">
-                                <Navigation className="w-4 h-4 mr-1" />
-                                Navigate
-                            </Button>
-                        </a>
+                        {patient.facilityName && (
+                            <p className="text-sm font-medium text-[var(--color-text-primary)] mb-1">
+                                {patient.facilityName}
+                            </p>
+                        )}
+                        {patient.address && (
+                            <>
+                                <a
+                                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(patient.address)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="block text-[var(--color-text-primary)] hover:text-[var(--color-primary)] hover:underline"
+                                >
+                                    {patient.address}
+                                </a>
+                                <a
+                                    href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(patient.address)}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-block mt-2"
+                                >
+                                    <Button size="sm" variant="primary">
+                                        <Navigation className="w-4 h-4 mr-1" />
+                                        Navigate
+                                    </Button>
+                                </a>
+                            </>
+                        )}
                     </Card>
                 )}
 

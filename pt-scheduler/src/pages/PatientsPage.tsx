@@ -38,6 +38,7 @@ interface PatientFormData {
     nicknames: string;
     phoneNumbers: { number: string; label: string }[];
     address: string;
+    facilityName: string;
     email: string;
     alternateContacts: string;
     notes: string;
@@ -49,6 +50,7 @@ const emptyForm: PatientFormData = {
     nicknames: "",
     phoneNumbers: [{ number: "", label: "" }],
     address: "",
+    facilityName: "",
     email: "",
     alternateContacts: "",
     notes: "",
@@ -197,6 +199,7 @@ const CSV_TARGET_FIELDS = [
     { key: "phone", label: "Phone" },
     { key: "alternateContacts", label: "Alternate Contacts" },
     { key: "address", label: "Address" },
+    { key: "facilityName", label: "Facility Name" },
     { key: "lat", label: "Latitude" },
     { key: "lng", label: "Longitude" },
     { key: "status", label: "Status" },
@@ -220,6 +223,7 @@ const EMPTY_CSV_MAPPING: CsvColumnMappingState = {
     phone: null,
     alternateContacts: null,
     address: null,
+    facilityName: null,
     lat: null,
     lng: null,
     status: null,
@@ -235,6 +239,7 @@ function toCsvMappingState(mapping?: Partial<CSVColumnMapping> | null): CsvColum
         phone: mapping?.phone ?? null,
         alternateContacts: mapping?.alternateContacts ?? null,
         address: mapping?.address ?? null,
+        facilityName: mapping?.facilityName ?? null,
         lat: mapping?.lat ?? null,
         lng: mapping?.lng ?? null,
         status: mapping?.status ?? null,
@@ -251,6 +256,7 @@ function guessCsvMapping(headers: string[]): CsvColumnMappingState {
         phone: ["phone", "phonenumber", "phone_number", "mobile", "cell"],
         alternateContacts: ["alternatecontacts", "alternate_contact", "emergencycontact", "contact"],
         address: ["address", "homeaddress", "streetaddress", "location"],
+        facilityName: ["facilityname", "facility", "facility_name", "assistedliving"],
         lat: ["lat", "latitude"],
         lng: ["lng", "long", "longitude"],
         status: ["status", "patientstatus", "state"],
@@ -292,6 +298,7 @@ interface CsvParsedPatient {
     phoneNumbers: { number: string; label?: string }[];
     alternateContacts: Patient["alternateContacts"];
     address: string;
+    facilityName?: string;
     lat?: number;
     lng?: number;
     email?: string;
@@ -413,6 +420,7 @@ function parsePatientRowFromCsv(
         })(),
         alternateContacts: parseAlternateContactsField(getMappedValue("alternateContacts")),
         address: getMappedValue("address"),
+        facilityName: getMappedValue("facilityName") || undefined,
         lat: Number.isFinite(lat) ? lat : undefined,
         lng: Number.isFinite(lng) ? lng : undefined,
         email: email || undefined,
@@ -909,6 +917,7 @@ export function PatientsPage() {
                     phoneNumbers: parsed.phoneNumbers,
                     alternateContacts: parsed.alternateContacts,
                     address: parsed.address,
+                    facilityName: parsed.facilityName,
                     lat: parsed.lat,
                     lng: parsed.lng,
                     email: parsed.email,
@@ -931,6 +940,7 @@ export function PatientsPage() {
                     phoneNumbers: parsed.phoneNumbers,
                     alternateContacts: parsed.alternateContacts,
                     address: parsed.address,
+                    facilityName: parsed.facilityName,
                     lat: parsed.lat,
                     lng: parsed.lng,
                     email: parsed.email,
@@ -1174,6 +1184,7 @@ export function PatientsPage() {
                     })(),
                     alternateContacts: extracted.alternateContacts,
                     address: mergeAddressWithCity(extracted.address, city),
+                    facilityName: extracted.facilityName.trim() || undefined,
                     email: extracted.email.trim() || undefined,
                     status: "active",
                     notes: extracted.notes.trim(),
@@ -1471,6 +1482,7 @@ export function PatientsPage() {
                     ? [{ number: extracted.phone, label: "" }]
                     : prev.phoneNumbers,
                 address: extracted.address || prev.address,
+                facilityName: extracted.facilityName || prev.facilityName,
                 email: extracted.email || prev.email,
                 alternateContacts:
                     extracted.alternateContacts.length > 0
@@ -1521,6 +1533,7 @@ export function PatientsPage() {
                     }),
                 alternateContacts: parseAlternateContactsField(formData.alternateContacts),
                 address: formData.address.trim(),
+                facilityName: formData.facilityName.trim() || undefined,
                 email: normalizedEmail || undefined,
                 status: formData.status,
                 notes: notesWithEmail,
@@ -1740,7 +1753,7 @@ export function PatientsPage() {
                             <Link to={`/patients/${patient.id}`} className="block">
                                 <CardHeader
                                     title={patient.fullName}
-                                    subtitle={patient.address || "No address"}
+                                    subtitle={patient.facilityName ? `${patient.facilityName} — ${patient.address || "No address"}` : patient.address || "No address"}
                                 />
                             </Link>
                             <div className="flex items-center gap-3 mt-2">
@@ -2015,6 +2028,19 @@ export function PatientsPage() {
                                         + Add phone number
                                     </button>
                                 </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                                    Facility Name
+                                </label>
+                                <input
+                                    type="text"
+                                    value={formData.facilityName}
+                                    onChange={(e) => handleInputChange("facilityName", e.target.value)}
+                                    className="w-full input-google"
+                                    placeholder="e.g., Sunrise Senior Living (optional)"
+                                />
                             </div>
 
                             <div>

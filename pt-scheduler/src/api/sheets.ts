@@ -14,7 +14,7 @@ const ALT_CONTACT_PART_SEPARATOR = "|";
 const PATIENTS_SHEET_TITLE = "Patients";
 const DISCHARGE_SHEET_TITLE = "Discharge";
 const FOR_OTHER_PT_SHEET_TITLE = "For Other PT";
-const DEFAULT_PATIENTS_RANGE = `${PATIENTS_SHEET_TITLE}!A:L`;
+const DEFAULT_PATIENTS_RANGE = `${PATIENTS_SHEET_TITLE}!A:M`;
 
 type AlternateContact = Patient["alternateContacts"][number];
 
@@ -380,6 +380,7 @@ function parsePatientRow(
             getValue("alternateContacts") || getValue("alternateContact")
         ),
         address: getValue("address"),
+        facilityName: getValue("facilityName") || getValue("facility") || undefined,
         lat: parseFloat(getValue("lat")) || undefined,
         lng: parseFloat(getValue("lng")) || undefined,
         email: getValue("email") || undefined,
@@ -470,6 +471,7 @@ const DEFAULT_PATIENT_HEADERS = [
     "phone",
     "alternateContacts",
     "address",
+    "facilityName",
     "lat",
     "lng",
     "status",
@@ -681,6 +683,7 @@ function buildPatientRowForHeaders(headers: string[], patient: Patient): string[
     setCell(["additionalphones"], serializeAdditionalPhonesField(patient.phoneNumbers));
     setCell(["alternatecontacts", "alternatecontact"], serializeAlternateContactsField(patient.alternateContacts));
     setCell(["address"], patient.address);
+    setCell(["facilityname", "facility"], patient.facilityName || "");
     setCell(["lat", "latitude"], patient.lat?.toString() || "");
     setCell(["lng", "longitude", "long"], patient.lng?.toString() || "");
     setCell(["status"], patient.status);
@@ -733,7 +736,7 @@ async function fetchPatientSheetRows(
     sheetOrRange: string,
     throwIfMissing = true
 ): Promise<string[][]> {
-    const range = sheetOrRange.includes("!") ? sheetOrRange : `${sheetOrRange}!A:L`;
+    const range = sheetOrRange.includes("!") ? sheetOrRange : `${sheetOrRange}!A:M`;
     const fetchUrl = `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(range)}`;
     const response = await fetchWithTimeout(fetchUrl, {
         headers: { Authorization: `Bearer ${token}` },

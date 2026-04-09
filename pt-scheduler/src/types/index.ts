@@ -29,6 +29,7 @@ export interface Patient {
   phoneNumbers: import("../utils/validation").PhoneEntry[];
   alternateContacts: import("../utils/validation").AlternateContact[];
   address: string;
+  facilityName?: string;
   lat?: number;
   lng?: number;
   email?: string;

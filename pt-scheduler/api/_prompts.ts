@@ -113,7 +113,8 @@ Extract structured patient information from the text.
 Rules:
 - Extract what you can find. Use empty string "" for missing fields.
 - Phone numbers should be digits only with dashes: "555-123-4567".
-- Address should be a single line suitable for geocoding.
+- If the patient lives in an assisted living facility, nursing home, or group home, extract the facility name into "facilityName". If no facility is mentioned, use empty string "".
+- Address should be a single line suitable for geocoding (do NOT include the facility name in the address).
 - alternateContacts is an array; return [] if none found.
 - Return ONLY valid JSON — no markdown, no explanation.
 
@@ -125,6 +126,7 @@ Response format (strict JSON):
     { "firstName": "string", "phone": "string" }
   ],
   "address": "123 Main St, City, ST 12345",
+  "facilityName": "",
   "email": "",
   "notes": "any other relevant info from the referral"
 }`,
@@ -164,6 +166,7 @@ Return ONLY strict JSON with this shape:
     "phone": string | null,
     "alternateContacts": string | null,
     "address": string | null,
+    "facilityName": string | null,
     "lat": string | null,
     "lng": string | null,
     "status": string | null,

@@ -58,6 +58,7 @@ export const extractPatientResponseSchema = z.object({
   phone: z.string().default(""),
   alternateContacts: z.array(alternateContactSchema).default([]),
   address: z.string().default(""),
+  facilityName: z.string().default(""),
   email: z.string().default(""),
   notes: z.string().default("")
 });
@@ -69,6 +70,7 @@ export const csvColumnMappingSchema = z.object({
   phone: z.string().nullable(),
   alternateContacts: z.string().nullable(),
   address: z.string().nullable(),
+  facilityName: z.string().nullable(),
   lat: z.string().nullable(),
   lng: z.string().nullable(),
   status: z.string().nullable(),
