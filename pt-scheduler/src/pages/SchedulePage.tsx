@@ -46,6 +46,7 @@ import {
     Navigation,
     Clock,
     Car,
+    Building2,
 } from "lucide-react";
 
 const SLOT_MINUTES = 15;
@@ -2881,6 +2882,7 @@ export function SchedulePage() {
                                                 const chipSubtitle = isPersonal
                                                     ? getPersonalCategoryLabel(appointment.personalCategory)
                                                     : (visitType ? `[${visitType}]` : null);
+                                                const showFacilityRow = !isPersonal && heightPx >= 46;
                                                 const showMilesRow = !isPersonal && heightPx >= 46;
                                                 const showPhoneRow = !isPersonal && heightPx >= 58;
                                                 const showAddressRow = !isPersonal && heightPx >= 72;
@@ -2923,7 +2925,7 @@ export function SchedulePage() {
                                                         }}
                                                         title={isPersonal
                                                             ? chipName
-                                                            : `${getPatientName(appointment.patientId)}${patient?.phoneNumbers[0]?.number ? ` - ${patient.phoneNumbers[0].number}` : ''}${patient?.address ? ` - ${patient.address}` : ''}`
+                                                            : `${getPatientName(appointment.patientId)}${patient?.facilityName ? ` — ${patient.facilityName}` : ''}${patient?.phoneNumbers[0]?.number ? ` - ${patient.phoneNumbers[0].number}` : ''}${patient?.address ? ` - ${patient.address}` : ''}`
                                                         }
                                                     >
                                                         {/* Main content area - full width, draggable from anywhere */}
@@ -2957,6 +2959,14 @@ export function SchedulePage() {
                                                             }`}>
                                                                 {minutesToTimeString(startMinutes)} ({displayDuration}m)
                                                             </div>
+                                                            {showFacilityRow && patient?.facilityName && (
+                                                                <div className={`inline-flex w-fit max-w-full items-center gap-1 overflow-hidden whitespace-nowrap text-ellipsis opacity-90 ${
+                                                                    isDayView ? 'text-[14px] min-h-[17px]' : 'text-[12px] min-h-[14px]'
+                                                                }`}>
+                                                                    <Building2 className={isDayView ? 'w-3.5 h-3.5 shrink-0' : 'w-2.5 h-2.5 shrink-0'} />
+                                                                    <span className="truncate">{patient.facilityName}</span>
+                                                                </div>
+                                                            )}
                                                             {showMilesRow && legInfo?.miles != null && (
                                                                 <div className={`inline-flex items-center gap-1 opacity-90 truncate max-w-full overflow-hidden ${
                                                                     isDayView ? 'text-[14px] min-h-[17px]' : 'text-[12px] min-h-[14px]'
