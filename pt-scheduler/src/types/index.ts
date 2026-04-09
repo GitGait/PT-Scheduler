@@ -40,6 +40,7 @@ export interface Patient {
   notes: string;
   chipNote?: string;
   chipNotes?: string[];
+  chipNoteColor?: string;
   sheetsRowIndex?: number;
   forOtherPtAt?: Date;
   createdAt: Date;
@@ -69,6 +70,7 @@ export interface Appointment {
   title?: string;             // Free-text title for personal events
   chipNote?: string;           // Short note displayed as banner on the chip
   chipNotes?: string[];        // Multiple stacked chip notes (replaces chipNote)
+  chipNoteColor?: string;      // Color for chip note banners
   createdAt: Date;
   updatedAt: Date;
 }

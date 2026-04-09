@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { Phone, MessageSquare, Navigation, Edit3, Move, Trash2, X, Copy, Check, PauseCircle, StickyNote, Plus, Pencil } from "lucide-react";
 import type { Appointment, Patient } from "../types";
 import { isPersonalEvent, getPersonalCategoryLabel } from "../utils/personalEventColors";
+import { CHIP_NOTE_COLORS, CHIP_NOTE_SWATCH_HEX } from "../utils/chipNoteColors";
 
 const MAX_CHIP_NOTES = 4;
 
@@ -24,8 +25,8 @@ interface AppointmentActionSheetProps {
     onMove: () => void;
     onCopy: () => void;
     onHold: () => void;
-    onChipNote: (notes: string[]) => void;
-    onPatientChipNote: (notes: string[]) => void;
+    onChipNote: (notes: string[], color?: string) => void;
+    onPatientChipNote: (notes: string[], color?: string) => void;
     onDelete: () => void;
 }
 
@@ -90,6 +91,10 @@ export function AppointmentActionSheet({
     const [notes, setNotes] = useState<string[]>(effectiveNotes);
     const [newNoteText, setNewNoteText] = useState("");
     const [applyToAll, setApplyToAll] = useState(false);
+    const effectiveColor = hasAppointmentNotes
+        ? (appointment.chipNoteColor ?? "yellow")
+        : (patient?.chipNoteColor ?? "yellow");
+    const [selectedColor, setSelectedColor] = useState<string>(effectiveColor);
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [editingText, setEditingText] = useState("");
     const editInputRef = useRef<HTMLInputElement>(null);
@@ -100,6 +105,7 @@ export function AppointmentActionSheet({
         setChipNoteMode(false);
         setNewNoteText("");
         setEditingIndex(null);
+        setSelectedColor(effectiveColor);
     }, [appointment?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Clean up copy timer on unmount
@@ -172,9 +178,9 @@ export function AppointmentActionSheet({
             finalNotes = [...finalNotes, trimmed];
         }
         if (applyToAll && !isPersonal) {
-            onPatientChipNote(finalNotes);
+            onPatientChipNote(finalNotes, selectedColor);
         } else {
-            onChipNote(finalNotes);
+            onChipNote(finalNotes, selectedColor);
         }
         onClose();
     };
@@ -506,6 +512,27 @@ export function AppointmentActionSheet({
                                     Max {MAX_CHIP_NOTES} notes reached
                                 </p>
                             )}
+
+                            {/* Color picker */}
+                            <div className="flex items-center gap-2 px-1">
+                                <span className="text-xs text-[var(--color-text-secondary)]">Color</span>
+                                <div className="flex gap-1.5">
+                                    {CHIP_NOTE_COLORS.map((color) => (
+                                        <button
+                                            key={color}
+                                            onClick={() => setSelectedColor(color)}
+                                            className={`w-5 h-5 rounded-full border-2 transition-transform ${
+                                                selectedColor === color
+                                                    ? "scale-110 border-[var(--color-text-primary)]"
+                                                    : "border-transparent hover:scale-105"
+                                            }`}
+                                            style={{ backgroundColor: CHIP_NOTE_SWATCH_HEX[color] }}
+                                            title={color}
+                                            aria-label={`${color} note color`}
+                                        />
+                                    ))}
+                                </div>
+                            </div>
 
                             {/* Apply to all + Save */}
                             <div className="flex items-center justify-between gap-2 pt-1">

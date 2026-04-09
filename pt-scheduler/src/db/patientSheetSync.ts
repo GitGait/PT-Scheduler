@@ -35,6 +35,9 @@ export async function reconcilePatientsFromSheetSnapshot(
             if (existing.chipNotes?.length && !patientToSave.chipNotes?.length) {
                 patientToSave.chipNotes = existing.chipNotes;
             }
+            if (existing.chipNoteColor && !patientToSave.chipNoteColor) {
+                patientToSave.chipNoteColor = existing.chipNoteColor;
+            }
             // Preserve original creation timestamp
             patientToSave.createdAt = existing.createdAt;
         }

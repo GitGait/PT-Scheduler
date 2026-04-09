@@ -49,6 +49,7 @@ const CALENDAR_METADATA_KEYS = {
     personalCategory: "ptSchedulerPersonalCategory",
     personalTitle: "ptSchedulerPersonalTitle",
     chipNote: "ptSchedulerChipNote",
+    chipNoteColor: "ptSchedulerChipNoteColor",
 } as const;
 
 export interface SyncConfig {
@@ -265,6 +266,10 @@ export function useSync(config: SyncConfig | null) {
                     chipNotes = existing?.chipNotes ?? (existing?.chipNote ? [existing.chipNote] : undefined);
                 }
 
+                // Parse chipNoteColor from calendar metadata
+                const rawChipNoteColor = metadata[CALENDAR_METADATA_KEYS.chipNoteColor];
+                const chipNoteColor = rawChipNoteColor || existing?.chipNoteColor || undefined;
+
                 const appointmentRecord: Record<string, unknown> = {
                     id: appointmentId,
                     patientId,
@@ -284,6 +289,9 @@ export function useSync(config: SyncConfig | null) {
                 // undefined to Dexie's .update() deletes the property.
                 if (chipNotes?.length) {
                     appointmentRecord.chipNotes = chipNotes;
+                }
+                if (chipNoteColor) {
+                    appointmentRecord.chipNoteColor = chipNoteColor;
                 }
 
                 if (isPersonalEvent) {

@@ -26,6 +26,7 @@ import { getDistanceMatrix } from "../api/distance";
 import { db } from "../db/schema";
 import type { Appointment, Patient, VisitType } from "../types";
 import { getVisitTypeGradient } from "../utils/visitTypeColors";
+import { getChipNoteClasses } from "../utils/chipNoteColors";
 import {
     PERSONAL_PATIENT_ID,
     PERSONAL_CATEGORIES,
@@ -73,6 +74,7 @@ interface ClearedWeekAppointmentSnapshot {
     notes?: string;
     chipNote?: string;
     chipNotes?: string[];
+    chipNoteColor?: string;
     personalCategory?: string;
     title?: string;
 }
@@ -1208,6 +1210,7 @@ export function SchedulePage() {
             notes: source.notes,
             chipNote: source.chipNote,
             chipNotes: source.chipNotes,
+            chipNoteColor: source.chipNoteColor,
             status: 'scheduled',
         });
         triggerSync();
@@ -1752,6 +1755,7 @@ export function SchedulePage() {
                     notes: appointment.notes,
                     chipNote: appointment.chipNote,
                     chipNotes: appointment.chipNotes,
+                    chipNoteColor: appointment.chipNoteColor,
                     personalCategory: appointment.personalCategory,
                     title: appointment.title,
                 })),
@@ -1829,6 +1833,7 @@ export function SchedulePage() {
                     notes: appointment.notes,
                     chipNote: appointment.chipNote,
                     chipNotes: appointment.chipNotes,
+                    chipNoteColor: appointment.chipNoteColor,
                     personalCategory: appointment.personalCategory,
                     title: appointment.title,
                 });
@@ -3019,6 +3024,8 @@ export function SchedulePage() {
                                                             ] : [];
                                                             const displayNotes = allNotes.length > 0 ? allNotes : patientAllNotes;
                                                             if (displayNotes.length === 0) return null;
+                                                            const noteColor = allNotes.length > 0 ? appointment.chipNoteColor : patient?.chipNoteColor;
+                                                            const cc = getChipNoteClasses(noteColor);
                                                             return (
                                                                 <div
                                                                     className="absolute bottom-0 left-0 right-0 pointer-events-none flex flex-col"
@@ -3028,7 +3035,7 @@ export function SchedulePage() {
                                                                     {displayNotes.map((note, idx) => (
                                                                         <div
                                                                             key={note + idx}
-                                                                            className="bg-yellow-400 text-yellow-950 text-[10px] font-semibold px-1.5 py-0.5 truncate leading-tight border-t border-yellow-500/30 first:border-t-0"
+                                                                            className={`${cc.bg} ${cc.text} text-[10px] font-semibold px-1.5 py-0.5 truncate leading-tight border-t ${cc.border} first:border-t-0`}
                                                                         >
                                                                             {note}
                                                                         </div>
@@ -3695,21 +3702,23 @@ export function SchedulePage() {
                         onHold={() => {
                             void putOnHold(actionSheetAppointmentId);
                         }}
-                        onChipNote={(notes) => {
+                        onChipNote={(notes, color) => {
                             void update(actionSheetAppointmentId, {
                                 chipNotes: notes.length > 0 ? notes : undefined,
                                 chipNote: undefined,
+                                chipNoteColor: notes.length > 0 ? color : undefined,
                             });
                         }}
-                        onPatientChipNote={(notes) => {
+                        onPatientChipNote={(notes, color) => {
                             if (actionAppointment.patientId) {
                                 void updatePatient(actionAppointment.patientId, {
                                     chipNotes: notes.length > 0 ? notes : undefined,
                                     chipNote: undefined,
+                                    chipNoteColor: notes.length > 0 ? color : undefined,
                                 });
                             }
                             // Clear appointment-level notes so patient-level takes over
-                            void update(actionSheetAppointmentId, { chipNotes: undefined, chipNote: undefined });
+                            void update(actionSheetAppointmentId, { chipNotes: undefined, chipNote: undefined, chipNoteColor: undefined });
                         }}
                         onDelete={() => {
                             void handleDeleteAppointment(actionAppointment);

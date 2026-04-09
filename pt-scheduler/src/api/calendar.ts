@@ -59,6 +59,7 @@ const CALENDAR_METADATA_KEYS = {
     personalCategory: "ptSchedulerPersonalCategory",
     personalTitle: "ptSchedulerPersonalTitle",
     chipNote: "ptSchedulerChipNote",
+    chipNoteColor: "ptSchedulerChipNoteColor",
 } as const;
 
 /**
@@ -343,6 +344,9 @@ function buildCalendarEvent(
     ];
     if (allNotes.length > 0) {
         privateMetadata[CALENDAR_METADATA_KEYS.chipNote] = JSON.stringify(allNotes);
+    }
+    if (appointment.chipNoteColor) {
+        privateMetadata[CALENDAR_METADATA_KEYS.chipNoteColor] = appointment.chipNoteColor;
     }
 
     return {
