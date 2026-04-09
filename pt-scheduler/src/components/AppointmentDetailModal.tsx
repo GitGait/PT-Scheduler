@@ -31,6 +31,8 @@ export function AppointmentDetailModal({
 }: AppointmentDetailModalProps) {
     const [phoneNumbers, setPhoneNumbers] = useState<{ number: string; label: string }[]>([{ number: "", label: "" }]);
     const [address, setAddress] = useState("");
+    const [nicknames, setNicknames] = useState("");
+    const [facilityName, setFacilityName] = useState("");
     const [notes, setNotes] = useState("");
     const [visitType, setVisitType] = useState<VisitType>(null);
     const [altContacts, setAltContacts] = useState<AlternateContact[]>([]);
@@ -62,6 +64,8 @@ export function AppointmentDetailModal({
                     : [{ number: "", label: "" }]
             );
             setAddress(patient.address || "");
+            setNicknames(patient.nicknames?.join(", ") || "");
+            setFacilityName(patient.facilityName || "");
             setAltContacts(patient.alternateContacts?.length ? [...patient.alternateContacts] : []);
         }
         setNotes(appointment.notes || "");
@@ -147,7 +151,10 @@ export function AppointmentDetailModal({
                     });
                 const phonesChanged = JSON.stringify(cleanedPhones) !== JSON.stringify(patient!.phoneNumbers ?? []);
                 const altContactsChanged = JSON.stringify(cleanedContacts) !== JSON.stringify(patient!.alternateContacts ?? []);
-                const patientChanged = phonesChanged || address !== patient!.address || altContactsChanged;
+                const nicknamesArray = nicknames.split(",").map(n => n.trim()).filter(Boolean);
+                const nicknamesChanged = JSON.stringify(nicknamesArray) !== JSON.stringify(patient!.nicknames ?? []);
+                const facilityChanged = facilityName.trim() !== (patient!.facilityName || "");
+                const patientChanged = phonesChanged || address !== patient!.address || altContactsChanged || nicknamesChanged || facilityChanged;
                 const visitTypeChanged = visitType !== (appointment.visitType ?? null);
                 const appointmentChanged = notes !== (appointment.notes || "") || visitTypeChanged;
 
@@ -156,6 +163,8 @@ export function AppointmentDetailModal({
                         phoneNumbers: cleanedPhones,
                         address,
                         alternateContacts: cleanedContacts,
+                        nicknames: nicknamesArray,
+                        facilityName: facilityName.trim() || undefined,
                     });
 
                     if (onSyncToSheet) {
@@ -164,6 +173,8 @@ export function AppointmentDetailModal({
                             phoneNumbers: cleanedPhones,
                             address,
                             alternateContacts: cleanedContacts,
+                            nicknames: nicknamesArray,
+                            facilityName: facilityName.trim() || undefined,
                         };
                         await onSyncToSheet(updatedPatient);
                     }
@@ -287,6 +298,21 @@ export function AppointmentDetailModal({
                         </>
                     ) : (
                         <>
+                            {/* Nicknames */}
+                            <div>
+                                <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                                    <Tag className="w-4 h-4" />
+                                    Nicknames
+                                </label>
+                                <input
+                                    type="text"
+                                    value={nicknames}
+                                    onChange={(e) => setNicknames(e.target.value)}
+                                    placeholder="e.g., Bob, Bobby (comma-separated)"
+                                    className="w-full input-google"
+                                />
+                            </div>
+
                             {/* Phone Numbers */}
                             <div>
                                 <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
@@ -343,6 +369,21 @@ export function AppointmentDetailModal({
                                         Add Phone
                                     </button>
                                 </div>
+                            </div>
+
+                            {/* Facility Name */}
+                            <div>
+                                <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                                    <MapPin className="w-4 h-4" />
+                                    Facility Name
+                                </label>
+                                <input
+                                    type="text"
+                                    value={facilityName}
+                                    onChange={(e) => setFacilityName(e.target.value)}
+                                    placeholder="e.g., Sunrise Senior Living (optional)"
+                                    className="w-full input-google"
+                                />
                             </div>
 
                             {/* Address */}
