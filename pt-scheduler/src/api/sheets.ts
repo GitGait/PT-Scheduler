@@ -14,7 +14,9 @@ const ALT_CONTACT_PART_SEPARATOR = "|";
 const PATIENTS_SHEET_TITLE = "Patients";
 const DISCHARGE_SHEET_TITLE = "Discharge";
 const FOR_OTHER_PT_SHEET_TITLE = "For Other PT";
-const DEFAULT_PATIENTS_RANGE = `${PATIENTS_SHEET_TITLE}!A:M`;
+function getDefaultPatientsRange(): string {
+    return `${PATIENTS_SHEET_TITLE}!A:${toColumnLetter(DEFAULT_PATIENT_HEADERS.length)}`;
+}
 
 type AlternateContact = Patient["alternateContacts"][number];
 
@@ -131,7 +133,7 @@ export function parseAdditionalPhonesField(
  */
 export async function fetchPatientsFromSheet(
     spreadsheetId: string,
-    range = DEFAULT_PATIENTS_RANGE
+    range = getDefaultPatientsRange()
 ): Promise<Patient[]> {
     const token = await getAccessToken();
     if (!token) {
@@ -170,7 +172,7 @@ export async function fetchPatientsFromSheet(
         }
     };
 
-    if (range !== DEFAULT_PATIENTS_RANGE) {
+    if (range !== getDefaultPatientsRange()) {
         const rows = await fetchPatientSheetRows(spreadsheetId, token, range, false);
         if (rows.length < 2) {
             return [];
@@ -487,21 +489,13 @@ async function upsertPatientToNamedSheet(
     patient: Patient
 ): Promise<void> {
     await ensurePatientSheetExists(spreadsheetId, token, sheetTitle);
+    await ensurePatientSheetHeaders(spreadsheetId, token, sheetTitle);
     let rows = await fetchPatientSheetRows(spreadsheetId, token, sheetTitle, true);
-    if (rows.length === 0) {
-        await ensurePatientSheetHeaders(spreadsheetId, token, sheetTitle);
-        rows = await fetchPatientSheetRows(spreadsheetId, token, sheetTitle, true);
-    }
 
     const headers = rows[0] ?? DEFAULT_PATIENT_HEADERS;
-    let idIndex = findHeaderIndex(headers, ["id"]);
+    const idIndex = findHeaderIndex(headers, ["id"]);
     if (idIndex < 0) {
-        await ensurePatientSheetHeaders(spreadsheetId, token, sheetTitle);
-        rows = await fetchPatientSheetRows(spreadsheetId, token, sheetTitle, true);
-        idIndex = findHeaderIndex(rows[0] ?? DEFAULT_PATIENT_HEADERS, ["id"]);
-        if (idIndex < 0) {
-            throw new Error(`ID column not found in ${sheetTitle} sheet`);
-        }
+        throw new Error(`ID column not found in ${sheetTitle} sheet`);
     }
 
     const effectiveHeaders = rows[0] ?? DEFAULT_PATIENT_HEADERS;
@@ -709,6 +703,29 @@ async function ensurePatientSheetHeaders(
 ): Promise<void> {
     const rows = await fetchPatientSheetRows(spreadsheetId, token, sheetTitle, false);
     if (rows.length > 0 && rows[0].some((cell) => cell.trim() !== "")) {
+        // Headers exist — check for missing columns and append them
+        const existingHeaders = rows[0].map((h) => h.trim().toLowerCase());
+        const missing = DEFAULT_PATIENT_HEADERS.filter(
+            (h) => !existingHeaders.includes(h.toLowerCase())
+        );
+        if (missing.length > 0) {
+            const startCol = toColumnLetter(existingHeaders.length + 1);
+            const endCol = toColumnLetter(existingHeaders.length + missing.length);
+            const writeUrl = `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(
+                `${sheetTitle}!${startCol}1:${endCol}1`
+            )}?valueInputOption=USER_ENTERED`;
+            const response = await fetchWithTimeout(writeUrl, {
+                method: "PUT",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ values: [missing] }),
+            });
+            if (!response.ok) {
+                console.warn("Failed to append missing sheet headers:", missing);
+            }
+        }
         return;
     }
 
@@ -736,7 +753,9 @@ async function fetchPatientSheetRows(
     sheetOrRange: string,
     throwIfMissing = true
 ): Promise<string[][]> {
-    const range = sheetOrRange.includes("!") ? sheetOrRange : `${sheetOrRange}!A:M`;
+    const range = sheetOrRange.includes("!")
+        ? sheetOrRange
+        : `${sheetOrRange}!A:${toColumnLetter(DEFAULT_PATIENT_HEADERS.length)}`;
     const fetchUrl = `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(range)}`;
     const response = await fetchWithTimeout(fetchUrl, {
         headers: { Authorization: `Bearer ${token}` },
