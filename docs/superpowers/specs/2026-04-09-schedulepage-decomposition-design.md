@@ -4,7 +4,7 @@
 
 `SchedulePage.tsx` is 3803 lines with ~60 state variables, ~30 handler functions, and ~1200 lines of JSX. This is the biggest maintenance risk in the project — every change requires reading a massive file, and React re-renders the entire component tree on any state change.
 
-This spec covers the **low-risk phase**: 4 extractions + 1 utility dedup that reduce SchedulePage from ~3800 to ~1750 lines. A follow-up phase for the medium/high-risk extractions (drag, resize, touch) can be planned after reassessing.
+This spec covers the **low-risk phase**: 4 extractions + 1 utility dedup that reduce SchedulePage from ~3800 to ~2600 lines. A follow-up phase for the medium/high-risk extractions (drag, resize, touch) can be planned after reassessing.
 
 ## Pre-Step: Utility Deduplication (~80 lines saved)
 
@@ -62,6 +62,13 @@ SchedulePage lines 96-228 contain utility functions that duplicate exports from 
 ### Interface
 
 ```typescript
+interface LegInfo {
+  miles: number | null;
+  minutes: number | null;
+  fromHome: boolean;
+  isRealDistance: boolean;
+}
+
 interface LocationDataResult {
   homeCoordinates: { lat: number; lng: number } | null;
   resolvedPatientCoordinates: Record<string, { lat: number; lng: number }>;
@@ -79,6 +86,8 @@ function useLocationData(
   selectedDayAppointments: Appointment[],
 ): LocationDataResult
 ```
+
+**Internal details:** `getPatientCoordinates` is used both internally (by `legInfoByAppointmentId` and `resolvePatientCoordinatesForRouting`) and returned for external use. The hook imports `getHomeBase`, `geocodeAddress`, `getDistanceMatrix`, `calculateMilesBetweenCoordinates`, and `estimateDriveMinutes` directly — these are not params.
 
 ### What stays in SchedulePage
 Nothing from this cluster. Fully self-contained.
@@ -125,15 +134,24 @@ interface AddAppointmentModalProps {
   defaultDate: string;
   defaultTime?: string;
   defaultIsPersonal?: boolean;
-  onCreated: () => void;  // triggers sync + any post-create logic
+  onCreated: (date: string) => void;  // SchedulePage uses this to setSelectedDate + triggerSync
 }
 ```
 
-The component accesses `useAppointmentStore` directly for `create` (follows existing pattern — other modals like AppointmentDetailModal access stores directly).
+**Form state lifecycle:** The modal initializes its own form state from `default*` props when it opens (via `useEffect` on `isOpen`). All form state (`newPatientId`, `newStartTime`, etc.) lives inside the modal. On close/cancel, form state resets.
+
+**The component imports directly:**
+- `useAppointmentStore` for `create` (follows existing modal pattern)
+- `SLOT_MINUTES`, `PERSONAL_PATIENT_ID`, `PERSONAL_CATEGORIES`, `getPersonalCategoryLabel` from utils
+- `toLocalIsoDate`, `isValidQuarterHour` from scheduling.ts
+- `VisitTypeSelect`, `Button` from ui components
+- `X` icon from lucide-react
+
+**`loadAll()` stays in SchedulePage** — called inside `openAddAppointment` before setting `isOpen=true` to ensure patient list is fresh. The modal should not control page-level data loading.
 
 ### What stays in SchedulePage
-- `isAddOpen` state
-- `openAddAppointment` (simplified to just set `isAddOpen` + prefill state)
+- `isAddOpen` state + prefill state (`addPrefillDate`, `addPrefillTime`, `addPrefillIsPersonal`)
+- `openAddAppointment` — calls `loadAll()`, sets prefill state, sets `isAddOpen(true)`, calls `setSelectedDate`
 - FAB button JSX
 - SlotActionMenu `onAddAppointment` callback
 
@@ -248,16 +266,23 @@ function useWeekActions(
   appointmentsByDay: Record<string, Appointment[]>,
   homeCoordinates: { lat: number; lng: number } | null,
   resolvePatientCoordinatesForRouting: (id: string) => Promise<{ lat: number; lng: number } | null>,
-  // Cleanup callbacks for clear-week (resets drag/resize/detail state)
+  // Cleanup callback — must clear: moveAppointmentId, draggingAppointmentId,
+  // resizingAppointmentId, detailAppointmentId, draftRenderById
   resetInteractionState: () => void,
 ): WeekActionsResult
 ```
 
-The hook accesses `useAppointmentStore` directly for `create`, `update`, `delete` (same pattern as other hooks in this codebase).
+**The hook accesses stores directly:**
+- `useAppointmentStore` for `create`, `update`, `delete`, `loadByRange`
+- `useScheduleStore` for `setSelectedDate` (called by `handleAutoArrangeDay` after reordering)
+
+**`triggerSync()`** is a module-level function (dispatches window event). The hook imports it directly or receives it as a param.
+
+**Known issue (not fixing during extraction):** `handleClearWeek` accesses `db.appointments` directly (Dexie) on lines 1713-1720 and 1772-1775 instead of using `src/db/operations.ts` helpers. This violates the project rule but fixing it is scope creep — note it as a follow-up.
 
 ### What stays in SchedulePage
 - Header JSX that renders Clear Week / Undo / Optimize buttons (they call these returned handlers)
-- `resetInteractionState` callback that clears `moveAppointmentId`, `draggingAppointmentId`, `resizingAppointmentId`, `detailAppointmentId`, `draftRenderById`
+- `resetInteractionState` callback that clears: `moveAppointmentId(null)`, `draggingAppointmentId(null)`, `resizingAppointmentId(null)`, `detailAppointmentId(null)`, `draftRenderById({})`
 
 ### Risk: LOW
 Business logic only — no DOM interaction, no touch events.
