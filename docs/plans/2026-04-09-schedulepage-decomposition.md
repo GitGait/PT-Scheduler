@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-04-09-schedulepage-decomposition-design.md`
 
+**Important:** Line numbers in this plan reference the ORIGINAL SchedulePage.tsx (3803 lines). After each task, line numbers shift. Use function/variable names as the primary anchor, not line numbers.
+
 ---
 
 ### Task 0: Deduplicate utility functions (~80 lines)
@@ -100,6 +102,7 @@ import {
     calculateMilesBetweenCoordinates,
     toLocalIsoDate,
     parseLocalDate,
+    todayIso,
     timeStringToMinutes,
     minutesToTimeString,
     formatAxisTime,
@@ -228,7 +231,7 @@ In SchedulePage.tsx:
 2. Delete lines 303-310, 316-319 (state declarations for homeCoordinates, resolvedPatientCoordinates, patientGeocodeInFlightRef, drivingDistances, distanceFetchInFlightRef)
 3. Delete lines 421-458 (loadHomeCoordinates effect)
 4. Delete lines 617-872 (geocode effect, distance matrix effect, getPatientCoordinates, resolvePatientCoordinatesForRouting, legInfoByAppointmentId, selectedDayEstimatedDriveMinutes)
-5. After the `patientById` memo, add the hook call:
+5. After BOTH `patientById` AND `appointmentsByDay` memos are declared, add the hook call (the hook takes `appointmentsByDay` as a parameter, so it must come after):
 
 ```typescript
 const {
@@ -244,10 +247,12 @@ const {
 
 All downstream code that references these variables continues to work unchanged.
 
+6. **Clean up now-unused imports** from SchedulePage: remove `geocodeAddress` (from `../api/geocode`), `getDistanceMatrix` (from `../api/distance`), and any scheduling.ts imports that are no longer used directly (e.g., `calculateMilesBetweenCoordinates`, `estimateDriveMinutes` if only used in the extracted code). TypeScript strict mode will flag these as errors — fix all unused imports until the build passes.
+
 - [ ] **Step 3: Verify build**
 
 Run: `cd pt-scheduler && npm run build`
-Expected: Build succeeds.
+Expected: Build succeeds. If unused import errors occur, remove those imports.
 
 - [ ] **Step 4: Manual test**
 
@@ -429,6 +434,7 @@ const openAddAppointment = (prefillDate = selectedDate, prefillTime?: string) =>
     patients={patients}
     defaultDate={addPrefillDate}
     defaultTime={addPrefillTime}
+    defaultIsPersonal={addPrefillIsPersonal}
     onCreated={(date) => {
         setSelectedDate(date);
         triggerSync();
@@ -436,11 +442,12 @@ const openAddAppointment = (prefillDate = selectedDate, prefillTime?: string) =>
 />
 ```
 9. The FAB button (lines 3601-3607) and SlotActionMenu callbacks stay unchanged — they call `openAddAppointment`.
+10. **Clean up now-unused imports** from SchedulePage: remove `VisitTypeSelect` import, and any other imports only used by the extracted modal code. TypeScript strict mode will flag these.
 
 - [ ] **Step 3: Verify build**
 
 Run: `cd pt-scheduler && npm run build`
-Expected: Build succeeds.
+Expected: Build succeeds. If unused import errors occur, remove those imports.
 
 - [ ] **Step 4: Manual test**
 
@@ -474,11 +481,8 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "./ui/Button";
 import { X } from "lucide-react";
 import type { Appointment, Patient } from "../types";
-import {
-    getHomeBase,
-    buildGoogleMapsDirectionsFromCoordinatesHref,
-    isPersonalEvent,
-} from "../utils/scheduling";
+import { getHomeBase, buildGoogleMapsDirectionsFromCoordinatesHref } from "../utils/scheduling";
+import { isPersonalEvent } from "../utils/personalEventColors";
 import "leaflet/dist/leaflet.css";
 
 interface DayMapPoint {
@@ -590,11 +594,14 @@ In SchedulePage.tsx:
 ```
 
 10. Update "Map Day" button in header to call `setIsDayMapOpen(true)` (it was calling `handleOpenDayMap` before — the open logic now runs as an effect inside the component when `isOpen` becomes true).
+11. **Clean up now-unused imports** from SchedulePage: remove `"leaflet/dist/leaflet.css"` import if no other Leaflet usage remains. TypeScript strict mode will flag unused variable imports.
+
+**Note on DayMapModal effect deps:** The "open map" effect inside DayMapModal references `getPatient` and `resolvePatientCoordinatesForRouting` from props. Include these in the effect's dependency array to satisfy React exhaustive-deps, or wrap the effect body in a function called from a handler.
 
 - [ ] **Step 3: Verify build**
 
 Run: `cd pt-scheduler && npm run build`
-Expected: Build succeeds.
+Expected: Build succeeds. If unused import errors occur, remove those imports.
 
 - [ ] **Step 4: Manual test**
 
@@ -629,12 +636,13 @@ import { useAppointmentStore } from "../stores";
 import { useScheduleStore } from "../stores";
 import { db } from "../db/schema";
 import type { Appointment } from "../types";
-import {
-    getHomeBase,
-    orderByFarthestFromHome,
-    isPersonalEvent,
-} from "../utils/scheduling";
+import { getHomeBase, orderByFarthestFromHome } from "../utils/scheduling";
+import { isPersonalEvent } from "../utils/personalEventColors";
 
+// Import triggerSync from a shared location. If not already exported,
+// extract the constant + function from SchedulePage into a shared file
+// (e.g., src/utils/syncEvents.ts) or import directly from SchedulePage.
+// For simplicity, redefine locally — same pattern as SchedulePage:
 const REQUEST_SYNC_EVENT = "pt-scheduler:request-sync";
 const triggerSync = () => {
     window.dispatchEvent(new Event(REQUEST_SYNC_EVENT));
@@ -766,10 +774,12 @@ const {
 
 All downstream JSX that references these variables continues to work unchanged.
 
+6. **Clean up now-unused imports** from SchedulePage: remove `db` import (from `../db/schema`) if no other direct DB access remains. Remove any other imports that became unused. TypeScript strict mode will flag these.
+
 - [ ] **Step 3: Verify build**
 
 Run: `cd pt-scheduler && npm run build`
-Expected: Build succeeds.
+Expected: Build succeeds. If unused import errors occur, remove those imports.
 
 - [ ] **Step 4: Manual test**
 
