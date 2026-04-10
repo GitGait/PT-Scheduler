@@ -216,7 +216,7 @@ export function toIsoDate(date: Date): string {
  * Get today's date as ISO string (YYYY-MM-DD).
  */
 export function todayIso(): string {
-    return toIsoDate(new Date());
+    return toLocalIsoDate(new Date());
 }
 
 /**
@@ -240,15 +240,18 @@ export function toLocalIsoDate(date: Date): string {
 
 /**
  * Get array of ISO date strings for the week containing the given date.
+ * Week starts on Monday.
  */
 export function getWeekDates(selectedDate: string): string[] {
     const start = parseLocalDate(selectedDate);
-    start.setDate(start.getDate() - start.getDay());
+    const dow = start.getDay();
+    const mondayOffset = dow === 0 ? -6 : 1 - dow;
+    start.setDate(start.getDate() + mondayOffset);
 
     return Array.from({ length: 7 }, (_, index) => {
         const day = new Date(start);
         day.setDate(start.getDate() + index);
-        return toIsoDate(day);
+        return toLocalIsoDate(day);
     });
 }
 
@@ -299,4 +302,50 @@ export function buildAppleMapsHref(rawAddress?: string): string | null {
     }
 
     return `https://maps.apple.com/?q=${encodeURIComponent(trimmed)}`;
+}
+
+/**
+ * Sort items by distance from home, farthest first.
+ */
+export function orderByFarthestFromHome<T extends { lat: number; lng: number }>(
+    items: T[],
+    home: { lat: number; lng: number }
+): T[] {
+    return [...items].sort(
+        (a, b) =>
+            calculateMilesBetweenCoordinates(home, b) - calculateMilesBetweenCoordinates(home, a)
+    );
+}
+
+/**
+ * Build a Google Maps directions URL from home coordinates through a list of stops.
+ */
+export function buildGoogleMapsDirectionsFromCoordinatesHref(
+    home: { lat: number; lng: number },
+    stops: Array<{ lat: number; lng: number }>
+): string | null {
+    if (stops.length === 0) {
+        return `https://www.google.com/maps/search/?api=1&query=${home.lat},${home.lng}`;
+    }
+
+    const destination = stops[stops.length - 1];
+    const waypoints = stops.slice(0, -1).map((stop) => `${stop.lat},${stop.lng}`);
+    const url = new URL("https://www.google.com/maps/dir/");
+    url.searchParams.set("api", "1");
+    url.searchParams.set("origin", `${home.lat},${home.lng}`);
+    url.searchParams.set("destination", `${destination.lat},${destination.lng}`);
+    if (waypoints.length > 0) {
+        url.searchParams.set("waypoints", waypoints.join("|"));
+    }
+    url.searchParams.set("travelmode", "driving");
+    return url.toString();
+}
+
+/**
+ * Detect if the current device is running iOS.
+ */
+export function isIOS(): boolean {
+    if (typeof navigator === "undefined") return false;
+    return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 }

@@ -50,13 +50,31 @@ import {
     Building2,
 } from "lucide-react";
 
-const SLOT_MINUTES = 15;
-const DAY_START_MINUTES = 7 * 60 + 30; // 7:30 AM
-const DAY_END_MINUTES = 20 * 60;
-const SLOT_HEIGHT_PX = 48;
-const MIN_DURATION_MINUTES = 15;
-const AVERAGE_DRIVE_SPEED_MPH = 30;
-import { getHomeBase, calculateMilesBetweenCoordinates, toLocalIsoDate } from "../utils/scheduling";
+import {
+    getHomeBase,
+    calculateMilesBetweenCoordinates,
+    toLocalIsoDate,
+    parseLocalDate,
+    todayIso,
+    timeStringToMinutes,
+    minutesToTimeString,
+    formatAxisTime,
+    isValidQuarterHour,
+    estimateDriveMinutes,
+    buildPhoneHref,
+    buildGoogleMapsHref,
+    buildAppleMapsHref,
+    buildGoogleMapsDirectionsFromCoordinatesHref,
+    orderByFarthestFromHome,
+    isIOS,
+    getWeekDates,
+    SLOT_MINUTES,
+    DAY_START_MINUTES,
+    DAY_END_MINUTES,
+    SLOT_HEIGHT_PX,
+    MIN_DURATION_MINUTES,
+    AVERAGE_DRIVE_SPEED_MPH,
+} from "../utils/scheduling";
 const APPOINTMENTS_SYNCED_EVENT = "pt-scheduler:appointments-synced";
 const DAY_NOTES_SYNCED_EVENT = "pt-scheduler:day-notes-synced";
 const REQUEST_SYNC_EVENT = "pt-scheduler:request-sync";
@@ -93,139 +111,6 @@ interface DayMapPoint {
     isHome: boolean;
 }
 
-const parseIsoDate = (date: string): Date => new Date(`${date}T12:00:00`);
-
-const todayIso = (): string => toLocalIsoDate(new Date());
-
-const getWeekDates = (selectedDate: string): string[] => {
-    const start = parseIsoDate(selectedDate);
-    // Start week on Monday: getDay() returns 0 for Sun, 1 for Mon, etc.
-    // For Mon-Sun we need offset: Sun(0)→-6, Mon(1)→0, Tue(2)→-1, ...
-    const dow = start.getDay();
-    const mondayOffset = dow === 0 ? -6 : 1 - dow;
-    start.setDate(start.getDate() + mondayOffset);
-
-    return Array.from({ length: 7 }, (_, index) => {
-        const day = new Date(start);
-        day.setDate(start.getDate() + index);
-        return toLocalIsoDate(day);
-    });
-};
-
-const minutesToTimeString = (minutes: number): string => {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
-};
-
-const timeStringToMinutes = (time: string): number => {
-    const [hoursPart, minutesPart] = time.split(":");
-    return Number(hoursPart) * 60 + Number(minutesPart);
-};
-
-const formatAxisTime = (minutes: number): string => {
-    const hours24 = Math.floor(minutes / 60);
-    const meridiem = hours24 >= 12 ? "PM" : "AM";
-    const hours12 = ((hours24 + 11) % 12) + 1;
-    return `${hours12} ${meridiem}`;
-};
-
-const isValidQuarterHour = (time: string): boolean => {
-    const [hoursPart, minutesPart] = time.split(":");
-    const hours = Number(hoursPart);
-    const minutes = Number(minutesPart);
-
-    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
-        return false;
-    }
-
-    return minutes % SLOT_MINUTES === 0;
-};
-
-
-function orderByFarthestFromHome<T extends { lat: number; lng: number }>(
-    items: T[],
-    home: { lat: number; lng: number }
-): T[] {
-    return [...items].sort(
-        (a, b) =>
-            calculateMilesBetweenCoordinates(home, b) - calculateMilesBetweenCoordinates(home, a)
-    );
-}
-
-const estimateDriveMinutes = (miles: number): number => {
-    if (miles <= 0) {
-        return 0;
-    }
-    return Math.max(1, Math.round((miles / AVERAGE_DRIVE_SPEED_MPH) * 60));
-};
-
-const buildPhoneHref = (rawPhone?: string): string | null => {
-    if (!rawPhone) {
-        return null;
-    }
-
-    const trimmed = rawPhone.trim();
-    if (!trimmed) {
-        return null;
-    }
-
-    const normalized = trimmed.replace(/[^\d+]/g, "");
-    return normalized ? `tel:${normalized}` : null;
-};
-
-const buildGoogleMapsHref = (rawAddress?: string): string | null => {
-    if (!rawAddress) {
-        return null;
-    }
-
-    const trimmed = rawAddress.trim();
-    if (!trimmed) {
-        return null;
-    }
-
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(trimmed)}`;
-};
-
-const buildAppleMapsHref = (rawAddress?: string): string | null => {
-    if (!rawAddress) {
-        return null;
-    }
-
-    const trimmed = rawAddress.trim();
-    if (!trimmed) {
-        return null;
-    }
-
-    return `https://maps.apple.com/?q=${encodeURIComponent(trimmed)}`;
-};
-
-const buildGoogleMapsDirectionsFromCoordinatesHref = (
-    home: { lat: number; lng: number },
-    stops: Array<{ lat: number; lng: number }>
-): string | null => {
-    if (stops.length === 0) {
-        return `https://www.google.com/maps/search/?api=1&query=${home.lat},${home.lng}`;
-    }
-
-    const destination = stops[stops.length - 1];
-    const waypoints = stops.slice(0, -1).map((stop) => `${stop.lat},${stop.lng}`);
-    const url = new URL("https://www.google.com/maps/dir/");
-    url.searchParams.set("api", "1");
-    url.searchParams.set("origin", `${home.lat},${home.lng}`);
-    url.searchParams.set("destination", `${destination.lat},${destination.lng}`);
-    if (waypoints.length > 0) {
-        url.searchParams.set("waypoints", waypoints.join("|"));
-    }
-    url.searchParams.set("travelmode", "driving");
-    return url.toString();
-};
-
-const isIOS = (): boolean => {
-    if (typeof navigator === "undefined") return false;
-    return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-};
 
 export function SchedulePage() {
     const {
@@ -492,13 +377,13 @@ export function SchedulePage() {
     }, [viewDropdownOpen]);
 
     // Get month/year display
-    const monthYearDisplay = parseIsoDate(selectedDate).toLocaleDateString("en-US", {
+    const monthYearDisplay = parseLocalDate(selectedDate).toLocaleDateString("en-US", {
         month: "long",
         year: "numeric",
     });
 
     const navigateWeek = (direction: number) => {
-        const date = parseIsoDate(selectedDate);
+        const date = parseLocalDate(selectedDate);
         // Navigate by day in day view, by week in week view
         const daysToMove = viewMode === 'day' ? direction : direction * 7;
         date.setDate(date.getDate() + daysToMove);
@@ -2668,7 +2553,7 @@ export function SchedulePage() {
 
                                 {/* Day headers */}
                                 {displayDates.map((date) => {
-                                    const asDate = parseIsoDate(date);
+                                    const asDate = parseLocalDate(date);
                                     const dayLabel = asDate.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
                                     const dayNumber = asDate.getDate();
                                     const isToday = date === todayIso();
