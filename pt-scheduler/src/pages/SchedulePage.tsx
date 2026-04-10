@@ -372,12 +372,9 @@ export function SchedulePage() {
 
     const {
         homeCoordinates,
-        resolvedPatientCoordinates,
-        getPatientCoordinates,
         resolvePatientCoordinatesForRouting,
         legInfoByAppointmentId,
         selectedDayEstimatedDriveMinutes,
-        drivingDistances,
     } = useLocationData(appointments, patientById, appointmentsByDay, selectedDayAppointments);
 
     const resetInteractionState = useCallback(() => {
@@ -406,7 +403,10 @@ export function SchedulePage() {
         resetInteractionState,
     );
 
-    const getPatient = (patientId: string) => patientById.get(patientId);
+    const getPatient = useCallback(
+        (patientId: string) => patientById.get(patientId),
+        [patientById]
+    );
 
     const formatPatientDisplayName = (patient: Patient) => {
         const nickname = patient.nicknames.find((value) => value.trim().length > 0);
