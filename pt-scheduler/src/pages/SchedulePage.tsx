@@ -1955,7 +1955,11 @@ export function SchedulePage() {
                                                                 </div>
                                                             )}
                                                             {showMilesRow && legInfo?.miles != null && (
-                                                                <div className={`inline-flex items-center gap-1 opacity-90 truncate max-w-full overflow-hidden ${
+                                                                <div
+                                                                    title={legInfo.isRealDistance
+                                                                        ? 'Driving distance via Google Maps'
+                                                                        : 'Estimated straight-line distance \u2014 driving distance unavailable'}
+                                                                    className={`inline-flex items-center gap-1 opacity-90 truncate max-w-full overflow-hidden ${
                                                                     isDayView ? 'text-[14px] min-h-[17px]' : 'text-[12px] min-h-[14px]'
                                                                 }`}>
                                                                     <Car className={isDayView ? 'w-3.5 h-3.5 shrink-0' : 'w-2.5 h-2.5 shrink-0'} />

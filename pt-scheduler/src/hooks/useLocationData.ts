@@ -23,6 +23,8 @@ interface LocationDataResult {
     legInfoByAppointmentId: Record<string, LegInfo>;
     selectedDayEstimatedDriveMinutes: number;
     drivingDistances: Record<string, { miles: number; minutes: number }>;
+    distanceError: string | null;
+    retryDistanceFetch: () => void;
 }
 
 export function useLocationData(
@@ -44,7 +46,8 @@ export function useLocationData(
     const [drivingDistances, setDrivingDistances] = useState<
         Record<string, { miles: number; minutes: number }>
     >({});
-    const distanceFetchInFlightRef = useRef<string | null>(null);
+    const [distanceError, setDistanceError] = useState<string | null>(null);
+    const [distanceRetryCount, setDistanceRetryCount] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
@@ -147,11 +150,16 @@ export function useLocationData(
 
     // Fetch real driving distances from Google Distance Matrix API
     useEffect(() => {
-        let cancelled = false;
+        const abortController = new AbortController();
 
         const fetchDrivingDistances = async () => {
-            // Build list of locations for each day
+            setDistanceError(null);
+            const allUpdates: Record<string, { miles: number; minutes: number }> = {};
+            let lastError: string | null = null;
+
             for (const date of Object.keys(appointmentsByDay)) {
+                if (abortController.signal.aborted) return;
+
                 const dayAppointments = appointmentsByDay[date];
                 if (dayAppointments.length === 0) continue;
 
@@ -180,37 +188,36 @@ export function useLocationData(
                 // Need at least 2 locations to calculate distances
                 if (locations.length < 2) continue;
 
-                // Create a cache key to avoid redundant fetches
-                const cacheKey = locations.map(l => `${l.id}:${l.lat},${l.lng}`).join('|');
-                if (distanceFetchInFlightRef.current === cacheKey) continue;
-
-                distanceFetchInFlightRef.current = cacheKey;
-
                 try {
                     const result = await getDistanceMatrix(locations);
 
-                    if (cancelled) return;
+                    if (abortController.signal.aborted) return;
 
-                    // Update driving distances state
-                    const updates: Record<string, { miles: number; minutes: number }> = {};
                     for (const dist of result.distances) {
-                        updates[dist.destinationId] = {
+                        allUpdates[dist.destinationId] = {
                             miles: dist.distanceMiles,
                             minutes: dist.durationMinutes
                         };
                     }
 
-                    if (Object.keys(updates).length > 0) {
-                        setDrivingDistances(prev => ({ ...prev, ...updates }));
-                    } else {
+                    if (result.distances.length === 0) {
                         console.warn('[DistanceMatrix] API returned 0 distances for', locations.length, 'locations on', date);
                     }
                 } catch (err) {
                     const message = err instanceof Error ? err.message : String(err);
                     console.error(`[DistanceMatrix] Failed for ${date} (${locations.length} locations):`, message);
-                } finally {
-                    distanceFetchInFlightRef.current = null;
+                    lastError = message;
                 }
+            }
+
+            if (abortController.signal.aborted) return;
+
+            if (Object.keys(allUpdates).length > 0) {
+                setDrivingDistances(prev => ({ ...prev, ...allUpdates }));
+            }
+
+            if (lastError) {
+                setDistanceError(lastError);
             }
         };
 
@@ -220,10 +227,10 @@ export function useLocationData(
         }, 500);
 
         return () => {
-            cancelled = true;
             clearTimeout(timeoutId);
+            abortController.abort();
         };
-    }, [appointmentsByDay, homeCoordinates, patientById, resolvedPatientCoordinates]);
+    }, [appointmentsByDay, homeCoordinates, patientById, resolvedPatientCoordinates, distanceRetryCount]);
 
     const getPatientCoordinates = (patientId: string): { lat: number; lng: number } | null => {
         const patient = patientById.get(patientId);
@@ -344,6 +351,12 @@ export function useLocationData(
         }, 0);
     }, [selectedDayAppointments, legInfoByAppointmentId]);
 
+    const retryDistanceFetch = useCallback(() => {
+        setDrivingDistances({});
+        setDistanceError(null);
+        setDistanceRetryCount(c => c + 1);
+    }, []);
+
     return {
         homeCoordinates,
         resolvedPatientCoordinates,
@@ -352,5 +365,7 @@ export function useLocationData(
         legInfoByAppointmentId,
         selectedDayEstimatedDriveMinutes,
         drivingDistances,
+        distanceError,
+        retryDistanceFetch,
     };
 }
