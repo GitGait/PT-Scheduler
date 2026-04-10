@@ -22,6 +22,7 @@ import { DayNoteModal } from "../components/DayNoteModal";
 import { SlotActionMenu } from "../components/SlotActionMenu";
 import { DayNoteChip } from "../components/DayNoteChip";
 import { AddAppointmentModal } from "../components/AddAppointmentModal";
+import { DayMapModal } from "../components/DayMapModal";
 import { useLocationData } from "../hooks/useLocationData";
 import { db } from "../db/schema";
 import type { Appointment, Patient, VisitType } from "../types";
@@ -33,7 +34,6 @@ import {
     getPersonalCategoryGradient,
     getPersonalCategoryLabel,
 } from "../utils/personalEventColors";
-import "leaflet/dist/leaflet.css";
 import {
     ChevronLeft,
     ChevronRight,
@@ -59,7 +59,6 @@ import {
     buildPhoneHref,
     buildGoogleMapsHref,
     buildAppleMapsHref,
-    buildGoogleMapsDirectionsFromCoordinatesHref,
     orderByFarthestFromHome,
     isIOS,
     getWeekDates,
@@ -96,15 +95,6 @@ interface ClearedWeekSnapshot {
     weekEnd: string;
     appointments: ClearedWeekAppointmentSnapshot[];
 }
-
-interface DayMapPoint {
-    id: string;
-    label: string;
-    lat: number;
-    lng: number;
-    isHome: boolean;
-}
-
 
 export function SchedulePage() {
     const {
@@ -193,13 +183,6 @@ export function SchedulePage() {
     const [weekActionMessage, setWeekActionMessage] = useState<string | null>(null);
     const [weekActionError, setWeekActionError] = useState<string | null>(null);
     const [isDayMapOpen, setIsDayMapOpen] = useState(false);
-    const [isDayMapLoading, setIsDayMapLoading] = useState(false);
-    const [dayMapError, setDayMapError] = useState<string | null>(null);
-    const [dayMapInfoMessage, setDayMapInfoMessage] = useState<string | null>(null);
-    const [dayMapPoints, setDayMapPoints] = useState<DayMapPoint[]>([]);
-    const dayMapContainerRef = useRef<HTMLDivElement | null>(null);
-    const dayMapInstanceRef = useRef<import("leaflet").Map | null>(null);
-    const dayMapLayerRef = useRef<import("leaflet").LayerGroup | null>(null);
 
     const { patients, loadAll, update: updatePatient } = usePatientStore();
     const { appointments, loading, loadByRange, markComplete, create, update, delete: deleteAppointment, loadOnHold, putOnHold } =
@@ -1308,105 +1291,6 @@ export function SchedulePage() {
         }
     };
 
-    const handleOpenDayMap = async () => {
-        const activeDayAppointments = selectedDayAppointments.filter(
-            (appointment) => appointment.status !== "cancelled"
-        );
-
-        if (activeDayAppointments.length === 0) {
-            setDayMapError("No appointments for this day.");
-            setDayMapInfoMessage(null);
-            setDayMapPoints([]);
-            setIsDayMapOpen(true);
-            return;
-        }
-
-        setDayMapError(null);
-        setDayMapInfoMessage(null);
-        setIsDayMapLoading(true);
-        setIsDayMapOpen(true);
-
-        try {
-            const points: DayMapPoint[] = [];
-            const homeBase = getHomeBase();
-            const home = homeCoordinates ?? { lat: homeBase.lat, lng: homeBase.lng };
-            const hasValidHome = !(home.lat === 0 && home.lng === 0);
-            if (hasValidHome) {
-                points.push({
-                    id: "home",
-                    label: "Home",
-                    lat: home.lat,
-                    lng: home.lng,
-                    isHome: true,
-                });
-            }
-
-            const seenPatientIds = new Set<string>();
-            let unresolvedCount = 0;
-
-            for (const appointment of activeDayAppointments) {
-                // Skip personal events — they don't have addresses to map
-                if (isPersonalEvent(appointment)) {
-                    continue;
-                }
-                if (seenPatientIds.has(appointment.patientId)) {
-                    continue;
-                }
-                seenPatientIds.add(appointment.patientId);
-
-                const patient = getPatient(appointment.patientId);
-                const coords = await resolvePatientCoordinatesForRouting(appointment.patientId);
-                if (!coords) {
-                    unresolvedCount += 1;
-                    continue;
-                }
-
-                points.push({
-                    id: appointment.id,
-                    label: `${appointment.startTime} ${patient?.fullName ?? "Unknown Patient"}`,
-                    lat: coords.lat,
-                    lng: coords.lng,
-                    isHome: false,
-                });
-            }
-
-            const hasPatientPoints = points.some((p) => !p.isHome);
-            if (!hasPatientPoints) {
-                setDayMapError("Could not map any patient addresses for this day.");
-                setDayMapInfoMessage(null);
-                setDayMapPoints(points);
-                return;
-            }
-
-            const warnings: string[] = [];
-            if (!hasValidHome) {
-                warnings.push("Home address not set — home marker omitted.");
-            }
-            if (unresolvedCount > 0) {
-                warnings.push(
-                    `${unresolvedCount} patient${unresolvedCount === 1 ? "" : "s"} could not be mapped (missing/invalid address).`
-                );
-            }
-            setDayMapInfoMessage(warnings.length > 0 ? warnings.join(" ") : null);
-
-            setDayMapPoints(points);
-        } catch (err) {
-            setDayMapError(err instanceof Error ? err.message : "Failed to build day map.");
-            setDayMapPoints([]);
-        } finally {
-            setIsDayMapLoading(false);
-        }
-    };
-
-    const handleCloseDayMap = () => {
-        if (dayMapInstanceRef.current) {
-            dayMapInstanceRef.current.remove();
-            dayMapInstanceRef.current = null;
-        }
-        setIsDayMapOpen(false);
-        setIsDayMapLoading(false);
-    };
-
     const getRenderedStartMinutes = (appointment: Appointment): number => {
         return draftRenderById[appointment.id]?.startMinutes ?? timeStringToMinutes(appointment.startTime);
     };
@@ -1828,119 +1712,6 @@ export function SchedulePage() {
         };
     }, [weekStart, weekEnd, googleCalendars, enabledCalendars, setExternalEvents]);
 
-    const dayMapDirectionsHref = useMemo(() => {
-        const homePoint = dayMapPoints.find((point) => point.isHome);
-        if (!homePoint) {
-            return null;
-        }
-
-        const patientStops = dayMapPoints
-            .filter((point) => !point.isHome)
-            .map((point) => ({ lat: point.lat, lng: point.lng }));
-        return buildGoogleMapsDirectionsFromCoordinatesHref(
-            { lat: homePoint.lat, lng: homePoint.lng },
-            patientStops
-        );
-    }, [dayMapPoints]);
-
-    useEffect(() => {
-        let cancelled = false;
-
-        const renderMap = async () => {
-            if (!isDayMapOpen || !dayMapContainerRef.current || dayMapPoints.length === 0) {
-                return;
-            }
-
-            const L = await import("leaflet");
-            if (cancelled || !dayMapContainerRef.current) {
-                return;
-            }
-
-            if (!dayMapInstanceRef.current) {
-                dayMapInstanceRef.current = L.map(dayMapContainerRef.current, {
-                    zoomControl: true,
-                    attributionControl: true,
-                });
-
-                L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-                    maxZoom: 19,
-                    attribution: "&copy; OpenStreetMap contributors",
-                }).addTo(dayMapInstanceRef.current);
-
-                dayMapLayerRef.current = L.layerGroup().addTo(dayMapInstanceRef.current);
-            }
-
-            const map = dayMapInstanceRef.current;
-            const layer = dayMapLayerRef.current;
-            if (!map || !layer) {
-                return;
-            }
-
-            layer.clearLayers();
-            const bounds = L.latLngBounds([]);
-
-            const computedStyle = getComputedStyle(document.documentElement);
-            const mapRedColor = computedStyle.getPropertyValue("--color-event-red").trim();
-            const mapBlueColor = computedStyle.getPropertyValue("--color-primary").trim();
-
-            for (let index = 0; index < dayMapPoints.length; index += 1) {
-                const point = dayMapPoints[index];
-                const color = point.isHome ? mapRedColor : mapBlueColor;
-                const marker = L.circleMarker([point.lat, point.lng], {
-                    radius: point.isHome ? 9 : 7,
-                    color,
-                    weight: 2,
-                    fillColor: color,
-                    fillOpacity: 0.9,
-                });
-                marker.bindTooltip(
-                    point.isHome ? "Home" : `${index}. ${point.label}`,
-                    {
-                        direction: "top",
-                        offset: [0, -4],
-                    }
-                );
-                marker.addTo(layer);
-                bounds.extend([point.lat, point.lng]);
-            }
-
-            if (dayMapPoints.length > 1) {
-                const routeCoordinates = dayMapPoints.map((point) => [point.lat, point.lng]) as [
-                    number,
-                    number
-                ][];
-                L.polyline(routeCoordinates, {
-                    color: mapBlueColor,
-                    opacity: 0.55,
-                    weight: 3,
-                    dashArray: "6,6",
-                }).addTo(layer);
-            }
-
-            if (bounds.isValid()) {
-                map.fitBounds(bounds.pad(0.2), { maxZoom: 14 });
-            }
-
-            window.setTimeout(() => {
-                map.invalidateSize();
-            }, 0);
-        };
-
-        void renderMap();
-
-        return () => {
-            cancelled = true;
-        };
-    }, [isDayMapOpen, dayMapPoints]);
-
-    useEffect(() => {
-        return () => {
-            dayMapInstanceRef.current?.remove();
-            dayMapInstanceRef.current = null;
-            dayMapLayerRef.current = null;
-        };
-    }, []);
-
     // Current time line position - updates every minute
     const [currentTimePosition, setCurrentTimePosition] = useState<number | null>(() => {
         const now = new Date();
@@ -1998,12 +1769,11 @@ export function SchedulePage() {
 
                 <div className="relative flex items-center gap-1.5">
                     <button
-                        onClick={() => void handleOpenDayMap()}
-                        disabled={isDayMapLoading}
+                        onClick={() => setIsDayMapOpen(true)}
                         className="hidden sm:flex items-center gap-1.5 px-3 h-8 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-full text-xs font-medium text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)] active:bg-[var(--color-primary-light)] transition-all disabled:opacity-50 shadow-sm"
                     >
                         <Navigation className="w-3.5 h-3.5" />
-                        {isDayMapLoading ? "Loading..." : "Map Day"}
+                        Map Day
                     </button>
                     <button
                         onClick={() => void handleClearWeek()}
@@ -2733,71 +2503,15 @@ export function SchedulePage() {
             )}
 
             {/* Day Map Modal */}
-            {isDayMapOpen && (
-                <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/35"
-                    onClick={handleCloseDayMap}
-                >
-                    <div
-                        className="bg-[var(--color-surface)] rounded-lg shadow-2xl w-full max-w-4xl mx-4 max-h-[90vh] overflow-hidden animate-slide-in"
-                        onClick={(event) => event.stopPropagation()}
-                    >
-                        <div className="flex items-center justify-between px-4 py-3 border-b border-[var(--color-border)]">
-                            <div>
-                                <h2 className="text-base font-medium text-[var(--color-text-primary)]">Day Map</h2>
-                                <p className="text-xs text-[var(--color-text-secondary)]">{selectedDate}</p>
-                            </div>
-                            <button
-                                onClick={handleCloseDayMap}
-                                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-hover)]"
-                                aria-label="Close day map"
-                            >
-                                <X className="w-5 h-5 text-[var(--color-text-secondary)]" />
-                            </button>
-                        </div>
-
-                        <div className="p-4 space-y-3">
-                            {isDayMapLoading && (
-                                <p className="text-sm text-[var(--color-text-secondary)]">Building map...</p>
-                            )}
-
-                            {dayMapError && (
-                                <p className="text-sm text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded px-3 py-2">
-                                    {dayMapError}
-                                </p>
-                            )}
-
-                            {dayMapInfoMessage && (
-                                <p className="text-sm text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-950 border border-green-200 dark:border-green-800 rounded px-3 py-2">
-                                    {dayMapInfoMessage}
-                                </p>
-                            )}
-
-                            <div
-                                ref={dayMapContainerRef}
-                                className="w-full h-[52vh] min-h-[320px] rounded border border-[var(--color-border)]"
-                            />
-                        </div>
-
-                        <div className="flex items-center justify-end gap-2 px-4 py-3 border-t border-[var(--color-border)]">
-                            <Button
-                                variant="secondary"
-                                onClick={() => {
-                                    if (dayMapDirectionsHref) {
-                                        window.open(dayMapDirectionsHref, "_blank");
-                                    }
-                                }}
-                                disabled={!dayMapDirectionsHref || isDayMapLoading}
-                            >
-                                Open in Google Maps
-                            </Button>
-                            <Button variant="ghost" onClick={handleCloseDayMap}>
-                                Close
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <DayMapModal
+                isOpen={isDayMapOpen}
+                onClose={() => setIsDayMapOpen(false)}
+                selectedDate={selectedDate}
+                selectedDayAppointments={selectedDayAppointments}
+                homeCoordinates={homeCoordinates}
+                getPatient={getPatient}
+                resolvePatientCoordinatesForRouting={resolvePatientCoordinatesForRouting}
+            />
 
             {/* Add Appointment Modal */}
             <AddAppointmentModal
