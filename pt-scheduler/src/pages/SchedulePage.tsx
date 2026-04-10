@@ -21,6 +21,7 @@ import { AppointmentActionSheet } from "../components/AppointmentActionSheet";
 import { DayNoteModal } from "../components/DayNoteModal";
 import { SlotActionMenu } from "../components/SlotActionMenu";
 import { DayNoteChip } from "../components/DayNoteChip";
+import { AddAppointmentModal } from "../components/AddAppointmentModal";
 import { useLocationData } from "../hooks/useLocationData";
 import { db } from "../db/schema";
 import type { Appointment, Patient, VisitType } from "../types";
@@ -28,12 +29,10 @@ import { getVisitTypeGradient } from "../utils/visitTypeColors";
 import { getChipNoteClasses } from "../utils/chipNoteColors";
 import {
     PERSONAL_PATIENT_ID,
-    PERSONAL_CATEGORIES,
     isPersonalEvent,
     getPersonalCategoryGradient,
     getPersonalCategoryLabel,
 } from "../utils/personalEventColors";
-import { VisitTypeSelect } from "../components/ui/VisitTypeSelect";
 import "leaflet/dist/leaflet.css";
 import {
     ChevronLeft,
@@ -57,7 +56,6 @@ import {
     timeStringToMinutes,
     minutesToTimeString,
     formatAxisTime,
-    isValidQuarterHour,
     buildPhoneHref,
     buildGoogleMapsHref,
     buildAppleMapsHref,
@@ -120,19 +118,10 @@ export function SchedulePage() {
         setPendingRestoreFromHoldId,
     } = useScheduleStore();
     const [isAddOpen, setIsAddOpen] = useState(false);
-    const [newPatientId, setNewPatientId] = useState("");
-    const [newAppointmentDate, setNewAppointmentDate] = useState(todayIso);
-    const [newStartTime, setNewStartTime] = useState("09:00");
-    const [newDuration, setNewDuration] = useState(60);
-    const [newVisitType, setNewVisitType] = useState<VisitType>(null);
-    const [newIsPersonalEvent, setNewIsPersonalEvent] = useState(false);
-    const [newPersonalCategory, setNewPersonalCategory] = useState("lunch");
-    const [newPersonalTitle, setNewPersonalTitle] = useState("");
-    const [newRepeatInterval, setNewRepeatInterval] = useState<"none" | "weekly" | "biweekly">("none");
-    const [newRepeatUntil, setNewRepeatUntil] = useState("");
-    const [addError, setAddError] = useState<string | null>(null);
+    const [addPrefillDate, setAddPrefillDate] = useState(selectedDate);
+    const [addPrefillTime, setAddPrefillTime] = useState<string | undefined>();
+    const [addPrefillIsPersonal, setAddPrefillIsPersonal] = useState(false);
     const [autoArrangeError, setAutoArrangeError] = useState<string | null>(null);
-    const [isSaving, setIsSaving] = useState(false);
     const [autoArrangeInProgressByDay, setAutoArrangeInProgressByDay] = useState<
         Record<string, boolean>
     >({});
@@ -284,21 +273,6 @@ export function SchedulePage() {
             window.removeEventListener(DAY_NOTES_SYNCED_EVENT, handleDayNotesSynced);
         };
     }, [loadByRange, loadOnHold, loadDayNotes, weekStart, weekEnd]);
-
-    useEffect(() => {
-        if (patients.length === 0) {
-            setNewPatientId("");
-            return;
-        }
-
-        const exists = patients.some((patient) => patient.id === newPatientId);
-        if (!exists) {
-            const firstActive = patients.find(
-                (p) => p.status === "active" || p.status === "evaluation"
-            );
-            setNewPatientId((firstActive || patients[0]).id);
-        }
-    }, [patients, newPatientId]);
 
     // Close view dropdown when clicking outside
     useEffect(() => {
@@ -474,19 +448,11 @@ export function SchedulePage() {
     };
 
     const openAddAppointment = (prefillDate = selectedDate, prefillTime?: string) => {
-        // Reload all patients to ensure the dropdown has the full list
         void loadAll();
         setSelectedDate(prefillDate);
-        setNewAppointmentDate(prefillDate);
-        if (prefillTime) {
-            setNewStartTime(prefillTime);
-        }
-        setNewIsPersonalEvent(false);
-        setNewPersonalCategory("lunch");
-        setNewPersonalTitle("");
-        setNewRepeatInterval("none");
-        setNewRepeatUntil("");
-        setAddError(null);
+        setAddPrefillDate(prefillDate);
+        setAddPrefillTime(prefillTime);
+        setAddPrefillIsPersonal(false);
         setIsAddOpen(true);
     };
 
@@ -537,99 +503,6 @@ export function SchedulePage() {
                 touchDragNoteGhostRef.current = { x: touch.clientX, y: touch.clientY, text: noteText };
             }
         }, TOUCH_DRAG_HOLD_MS);
-    };
-
-    const cancelAddAppointment = () => {
-        setAddError(null);
-        setIsAddOpen(false);
-    };
-
-    const handleCreateAppointment = async () => {
-        if (!newIsPersonalEvent && !newPatientId) {
-            setAddError("Please select a patient.");
-            return;
-        }
-
-        if (!newAppointmentDate) {
-            setAddError("Please choose an appointment date.");
-            return;
-        }
-
-        if (!isValidQuarterHour(newStartTime)) {
-            setAddError("Start time must be in 15-minute increments.");
-            return;
-        }
-
-        if (newDuration < 15 || newDuration > 240 || newDuration % 15 !== 0) {
-            setAddError("Duration must be in 15-minute increments between 15 and 240.");
-            return;
-        }
-
-        if (newIsPersonalEvent && newRepeatInterval !== "none" && !newRepeatUntil) {
-            setAddError("Please set a 'Repeat until' date for recurring events.");
-            return;
-        }
-
-        setIsSaving(true);
-        setAddError(null);
-
-        try {
-            if (newIsPersonalEvent) {
-                // Build list of dates (single or recurring)
-                const dates: string[] = [newAppointmentDate];
-                if (newRepeatInterval !== "none" && newRepeatUntil) {
-                    const stepDays = newRepeatInterval === "weekly" ? 7 : 14;
-                    const startDate = new Date(newAppointmentDate + "T00:00:00");
-                    const endDate = new Date(newRepeatUntil + "T00:00:00");
-                    const cur = new Date(startDate);
-                    cur.setDate(cur.getDate() + stepDays);
-                    while (cur <= endDate) {
-                        dates.push(toLocalIsoDate(cur));
-                        cur.setDate(cur.getDate() + stepDays);
-                    }
-                }
-                for (const date of dates) {
-                    await create({
-                        patientId: PERSONAL_PATIENT_ID,
-                        date,
-                        startTime: newStartTime,
-                        duration: newDuration,
-                        visitType: null,
-                        personalCategory: newPersonalCategory,
-                        title: newPersonalTitle.trim() || undefined,
-                        status: "scheduled",
-                        syncStatus: "local",
-                        notes: undefined,
-                    });
-                }
-            } else {
-                await create({
-                    patientId: newPatientId,
-                    date: newAppointmentDate,
-                    startTime: newStartTime,
-                    duration: newDuration,
-                    visitType: newVisitType,
-                    status: "scheduled",
-                    syncStatus: "local",
-                    notes: undefined,
-                });
-            }
-            setSelectedDate(newAppointmentDate);
-            setIsAddOpen(false);
-            setNewStartTime("09:00");
-            setNewDuration(60);
-            setNewVisitType(null);
-            setNewIsPersonalEvent(false);
-            setNewPersonalCategory("lunch");
-            setNewPersonalTitle("");
-            setNewRepeatInterval("none");
-            setNewRepeatUntil("");
-            triggerSync();
-        } catch (err) {
-            setAddError(err instanceof Error ? err.message : "Failed to add appointment.");
-        } finally {
-            setIsSaving(false);
-        }
     };
 
     const handleAppointmentDragStart = (
@@ -2927,256 +2800,18 @@ export function SchedulePage() {
             )}
 
             {/* Add Appointment Modal */}
-            {isAddOpen && (
-                <div
-                    className="fixed inset-0 z-50 flex items-center justify-center bg-black/30"
-                    onClick={cancelAddAppointment}
-                >
-                    <div
-                        className="bg-[var(--color-surface)] rounded-lg shadow-2xl w-full max-w-md mx-4 animate-slide-in"
-                        onClick={(event) => event.stopPropagation()}
-                    >
-                        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)]">
-                            <h2 className="text-lg font-medium text-[var(--color-text-primary)]">New Appointment</h2>
-                            <button
-                                onClick={cancelAddAppointment}
-                                className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-hover)]"
-                            >
-                                <X className="w-5 h-5 text-[var(--color-text-secondary)]" />
-                            </button>
-                        </div>
-
-                        <div className="p-6 space-y-4">
-                            {/* Patient / Personal toggle */}
-                            <div className="flex rounded-lg overflow-hidden border border-[var(--color-border)]">
-                                <button
-                                    type="button"
-                                    onClick={() => setNewIsPersonalEvent(false)}
-                                    className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                                        !newIsPersonalEvent
-                                            ? 'bg-[var(--color-primary)] text-white'
-                                            : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]'
-                                    }`}
-                                >
-                                    Patient
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => setNewIsPersonalEvent(true)}
-                                    className={`flex-1 py-2 text-sm font-medium transition-colors ${
-                                        newIsPersonalEvent
-                                            ? 'bg-[var(--color-primary)] text-white'
-                                            : 'bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-hover)]'
-                                    }`}
-                                >
-                                    Personal
-                                </button>
-                            </div>
-
-                            {!newIsPersonalEvent && patients.length === 0 ? (
-                                <p className="text-sm text-red-600 dark:text-red-400">
-                                    Add a patient first before creating appointments.
-                                </p>
-                            ) : (
-                                <>
-                                    {newIsPersonalEvent ? (
-                                        <>
-                                            <div>
-                                                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                                                    Category
-                                                </label>
-                                                <select
-                                                    value={newPersonalCategory}
-                                                    onChange={(e) => setNewPersonalCategory(e.target.value)}
-                                                    className="w-full input-google"
-                                                >
-                                                    {PERSONAL_CATEGORIES.map((cat) => (
-                                                        <option key={cat} value={cat}>
-                                                            {getPersonalCategoryLabel(cat)}
-                                                        </option>
-                                                    ))}
-                                                </select>
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                                                    Title (optional)
-                                                </label>
-                                                <input
-                                                    type="text"
-                                                    value={newPersonalTitle}
-                                                    onChange={(e) => setNewPersonalTitle(e.target.value)}
-                                                    placeholder="e.g., Lunch with Sarah"
-                                                    className="w-full input-google"
-                                                />
-                                            </div>
-
-                                            <div>
-                                                <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                                                    Repeat
-                                                </label>
-                                                <select
-                                                    value={newRepeatInterval}
-                                                    onChange={(e) => {
-                                                        const val = e.target.value as "none" | "weekly" | "biweekly";
-                                                        setNewRepeatInterval(val);
-                                                        if (val !== "none" && !newRepeatUntil) {
-                                                            const d = new Date(newAppointmentDate + "T00:00:00");
-                                                            d.setMonth(d.getMonth() + 3);
-                                                            setNewRepeatUntil(toLocalIsoDate(d));
-                                                        }
-                                                        if (val === "none") {
-                                                            setNewRepeatUntil("");
-                                                        }
-                                                    }}
-                                                    className="w-full input-google"
-                                                >
-                                                    <option value="none">None</option>
-                                                    <option value="weekly">Weekly</option>
-                                                    <option value="biweekly">Every 2 weeks</option>
-                                                </select>
-                                            </div>
-
-                                            {newRepeatInterval !== "none" && (
-                                                <div>
-                                                    <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                                                        Repeat until
-                                                    </label>
-                                                    <input
-                                                        type="date"
-                                                        value={newRepeatUntil}
-                                                        onChange={(e) => setNewRepeatUntil(e.target.value)}
-                                                        min={newAppointmentDate}
-                                                        className="w-full input-google"
-                                                    />
-                                                    {newRepeatUntil && (() => {
-                                                        const stepDays = newRepeatInterval === "weekly" ? 7 : 14;
-                                                        const start = new Date(newAppointmentDate + "T00:00:00");
-                                                        const end = new Date(newRepeatUntil + "T00:00:00");
-                                                        let count = 1;
-                                                        const cur = new Date(start);
-                                                        cur.setDate(cur.getDate() + stepDays);
-                                                        while (cur <= end) { count++; cur.setDate(cur.getDate() + stepDays); }
-                                                        return (
-                                                            <p className="text-xs text-[var(--color-text-secondary)] mt-1">
-                                                                {count} occurrence{count !== 1 ? "s" : ""} will be created
-                                                            </p>
-                                                        );
-                                                    })()}
-                                                </div>
-                                            )}
-                                        </>
-                                    ) : (
-                                        <div>
-                                            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                                                Patient
-                                            </label>
-                                            <select
-                                                value={newPatientId}
-                                                onChange={(e) => setNewPatientId(e.target.value)}
-                                                className="w-full input-google"
-                                            >
-                                                {(() => {
-                                                    const schedulable = [...patients]
-                                                        .filter((p) => p.id !== PERSONAL_PATIENT_ID && p.status !== "discharged")
-                                                        .sort((a, b) => a.fullName.localeCompare(b.fullName));
-                                                    const active = schedulable.filter((p) => p.status !== "for-other-pt");
-                                                    const otherPt = schedulable.filter((p) => p.status === "for-other-pt");
-                                                    return (
-                                                        <>
-                                                            <optgroup label="Active Patients">
-                                                                {active.map((p) => (
-                                                                    <option key={p.id} value={p.id}>{p.fullName}</option>
-                                                                ))}
-                                                            </optgroup>
-                                                            {otherPt.length > 0 && (
-                                                                <optgroup label="Other PT">
-                                                                    {otherPt.map((p) => (
-                                                                        <option key={p.id} value={p.id}>{p.fullName}</option>
-                                                                    ))}
-                                                                </optgroup>
-                                                            )}
-                                                        </>
-                                                    );
-                                                })()}
-                                            </select>
-                                        </div>
-                                    )}
-
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div>
-                                            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                                                Date
-                                            </label>
-                                            <input
-                                                type="date"
-                                                value={newAppointmentDate}
-                                                onChange={(e) => setNewAppointmentDate(e.target.value)}
-                                                className="w-full input-google"
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                                                Start Time
-                                            </label>
-                                            <input
-                                                type="time"
-                                                step={SLOT_MINUTES * 60}
-                                                value={newStartTime}
-                                                onChange={(e) => setNewStartTime(e.target.value)}
-                                                className="w-full input-google"
-                                            />
-                                        </div>
-                                    </div>
-
-                                    <div>
-                                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                                            Duration (minutes)
-                                        </label>
-                                        <select
-                                            value={newDuration}
-                                            onChange={(e) => setNewDuration(Number(e.target.value))}
-                                            className="w-full input-google"
-                                        >
-                                            {[15, 30, 45, 60, 90, 120].map((d) => (
-                                                <option key={d} value={d}>
-                                                    {d} minutes
-                                                </option>
-                                            ))}
-                                        </select>
-                                    </div>
-
-                                    {!newIsPersonalEvent && (
-                                        <div>
-                                            <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
-                                                Visit Type
-                                            </label>
-                                            <VisitTypeSelect value={newVisitType} onChange={setNewVisitType} />
-                                        </div>
-                                    )}
-
-                                    {addError && (
-                                        <p className="text-sm text-red-600 dark:text-red-400">{addError}</p>
-                                    )}
-                                </>
-                            )}
-                        </div>
-
-                        <div className="flex justify-end gap-2 px-6 py-4 border-t border-[var(--color-border)]">
-                            <Button variant="ghost" onClick={cancelAddAppointment} disabled={isSaving}>
-                                Cancel
-                            </Button>
-                            <Button
-                                variant="primary"
-                                onClick={() => void handleCreateAppointment()}
-                                disabled={isSaving || (!newIsPersonalEvent && patients.length === 0)}
-                            >
-                                {isSaving ? "Saving..." : "Save"}
-                            </Button>
-                        </div>
-                    </div>
-                </div>
-            )}
+            <AddAppointmentModal
+                isOpen={isAddOpen}
+                onClose={() => setIsAddOpen(false)}
+                patients={patients}
+                defaultDate={addPrefillDate}
+                defaultTime={addPrefillTime}
+                defaultIsPersonal={addPrefillIsPersonal}
+                onCreated={(date) => {
+                    setSelectedDate(date);
+                    triggerSync();
+                }}
+            />
 
             {/* Floating Action Button */}
             <button
