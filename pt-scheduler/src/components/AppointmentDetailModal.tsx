@@ -149,10 +149,14 @@ export function AppointmentDetailModal({
                                 `Apply this address to ${siblings.length} other recurring occurrence${siblings.length !== 1 ? "s" : ""}?`
                             );
                             if (applyToAll) {
-                                for (const sibling of siblings) {
-                                    await onSaveAppointment(sibling.id, {
-                                        address: personalAddress.trim() || undefined,
-                                    });
+                                try {
+                                    for (const sibling of siblings) {
+                                        await onSaveAppointment(sibling.id, {
+                                            address: personalAddress.trim() || undefined,
+                                        });
+                                    }
+                                } catch (err) {
+                                    setError(err instanceof Error ? err.message : "Failed to update some occurrences");
                                 }
                             }
                         }
@@ -558,26 +562,29 @@ export function AppointmentDetailModal({
                             onClick={async () => {
                                 const siblings = await appointmentDB.findRecurringSiblings(appointment);
                                 if (siblings.length === 0) {
-                                    if (window.confirm("Delete this event?")) {
-                                        await onDeleteAppointment(appointment.id);
-                                        onClose();
-                                    }
-                                    return;
+                                    if (!window.confirm("Delete this event?")) return;
+                                } else {
+                                    if (!window.confirm(
+                                        `Delete this event and ${siblings.length} other occurrence${siblings.length !== 1 ? "s" : ""}? (${siblings.length + 1} total)`
+                                    )) return;
                                 }
-                                const deleteAll = window.confirm(
-                                    `Delete this event and ${siblings.length} other occurrence${siblings.length !== 1 ? "s" : ""}? (${siblings.length + 1} total)`
-                                );
-                                if (deleteAll) {
+                                setIsSaving(true);
+                                setError(null);
+                                try {
                                     for (const sibling of siblings) {
                                         await onDeleteAppointment(sibling.id);
                                     }
                                     await onDeleteAppointment(appointment.id);
                                     onClose();
+                                } catch (err) {
+                                    setError(err instanceof Error ? err.message : "Failed to delete events");
+                                } finally {
+                                    setIsSaving(false);
                                 }
                             }}
                         >
                             <Trash2 className="w-4 h-4" />
-                            Delete All
+                            Delete
                         </Button>
                     ) : <div />}
                     <div className="flex gap-2">

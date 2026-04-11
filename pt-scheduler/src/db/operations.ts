@@ -285,8 +285,8 @@ export const appointmentDB = {
         return all.filter((a) => {
             if (a.id === appointment.id) return false;
             // Prefer recurringGroupId if both have one
-            if (appointment.recurringGroupId && a.recurringGroupId) {
-                return a.recurringGroupId === appointment.recurringGroupId;
+            if (appointment.recurringGroupId || a.recurringGroupId) {
+                return appointment.recurringGroupId === a.recurringGroupId;
             }
             // Heuristic fallback for pre-existing appointments without groupId
             return (
