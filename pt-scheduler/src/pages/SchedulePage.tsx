@@ -1858,7 +1858,7 @@ export function SchedulePage() {
                                                     resizingAppointmentId === appointment.id;
                                                 const isPersonal = isPersonalEvent(appointment);
                                                 const patient = isPersonal ? undefined : getPatient(appointment.patientId);
-                                                const legInfo = isPersonal ? undefined : legInfoByAppointmentId[appointment.id];
+                                                const legInfo = legInfoByAppointmentId[appointment.id];
                                                 const visitType = appointment.visitType;
                                                 const chipGradient = isPersonal
                                                     ? getPersonalCategoryGradient(appointment.personalCategory)

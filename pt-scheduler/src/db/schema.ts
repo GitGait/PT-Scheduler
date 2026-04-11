@@ -147,6 +147,17 @@ export class PTSchedulerDB extends Dexie {
             routeCache: "id, date, expiresAt",
             dayNotes: "id, date",
         });
+
+        // Version 8: Add optional address field to appointments (for personal events)
+        this.version(8).stores({
+            patients: "id, fullName, status",
+            appointments: "id, patientId, date, status, syncStatus, visitType",
+            recurringBlocks: "id, patientId, dayOfWeek",
+            calendarEvents: "id, appointmentId, googleEventId",
+            syncQueue: "++id, timestamp, status, nextRetryAt",
+            routeCache: "id, date, expiresAt",
+            dayNotes: "id, date",
+        });
     }
 }
 

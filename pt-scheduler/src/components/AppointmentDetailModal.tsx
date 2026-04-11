@@ -37,6 +37,7 @@ export function AppointmentDetailModal({
     const [visitType, setVisitType] = useState<VisitType>(null);
     const [altContacts, setAltContacts] = useState<AlternateContact[]>([]);
     const [personalTitle, setPersonalTitle] = useState("");
+    const [personalAddress, setPersonalAddress] = useState("");
     const [personalCategory, setPersonalCategory] = useState("other");
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -71,6 +72,7 @@ export function AppointmentDetailModal({
         setNotes(appointment.notes || "");
         setVisitType(appointment.visitType ?? null);
         setPersonalTitle(appointment.title || "");
+        setPersonalAddress(appointment.address || "");
         setPersonalCategory(appointment.personalCategory || "other");
         setError(null);
         setSuccessMessage(null);
@@ -124,12 +126,14 @@ export function AppointmentDetailModal({
         try {
             if (isPersonal) {
                 const titleChanged = personalTitle !== (appointment.title || "");
+                const addressChanged = personalAddress.trim() !== (appointment.address || "");
                 const categoryChanged = personalCategory !== (appointment.personalCategory || "other");
                 const notesChanged = notes !== (appointment.notes || "");
 
-                if (titleChanged || categoryChanged || notesChanged) {
+                if (titleChanged || addressChanged || categoryChanged || notesChanged) {
                     await onSaveAppointment(appointment.id, {
                         title: personalTitle.trim(),
+                        address: personalAddress.trim() || undefined,
                         personalCategory,
                         notes: notes || undefined,
                     });
@@ -294,6 +298,21 @@ export function AppointmentDetailModal({
                                         </option>
                                     ))}
                                 </select>
+                            </div>
+
+                            {/* Address */}
+                            <div>
+                                <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                                    <MapPin className="w-4 h-4" />
+                                    Address
+                                </label>
+                                <input
+                                    type="text"
+                                    value={personalAddress}
+                                    onChange={(e) => setPersonalAddress(e.target.value)}
+                                    placeholder="e.g., 123 Main St, City, ST"
+                                    className="w-full input-google"
+                                />
                             </div>
                         </>
                     ) : (

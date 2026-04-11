@@ -7,6 +7,7 @@ import {
     calculateMilesBetweenCoordinates,
     estimateDriveMinutes,
 } from "../utils/scheduling";
+import { isPersonalEvent } from "../utils/personalEventColors";
 
 export interface LegInfo {
     miles: number | null;
@@ -91,8 +92,17 @@ export function useLocationData(
     useEffect(() => {
         let cancelled = false;
         const patientsNeedingCoordinates: Patient[] = [];
+        const personalEventsNeedingCoordinates: Appointment[] = [];
 
         for (const appointment of appointments) {
+            // Personal events with addresses: geocode using appointment.id as key
+            if (isPersonalEvent(appointment)) {
+                if (appointment.address?.trim() && !resolvedPatientCoordinates[appointment.id] && !patientGeocodeInFlightRef.current.has(appointment.id)) {
+                    personalEventsNeedingCoordinates.push(appointment);
+                }
+                continue;
+            }
+
             const patient = patientById.get(appointment.patientId);
             if (!patient?.address?.trim()) {
                 continue;
@@ -109,31 +119,45 @@ export function useLocationData(
             patientsNeedingCoordinates.push(patient);
         }
 
-        if (patientsNeedingCoordinates.length === 0) {
+        if (patientsNeedingCoordinates.length === 0 && personalEventsNeedingCoordinates.length === 0) {
             return;
         }
 
-        const geocodePatients = async () => {
+        const geocodeAll = async () => {
             const updates: Record<string, { lat: number; lng: number }> = {};
 
             for (const patient of patientsNeedingCoordinates) {
                 patientGeocodeInFlightRef.current.add(patient.id);
             }
+            for (const apt of personalEventsNeedingCoordinates) {
+                patientGeocodeInFlightRef.current.add(apt.id);
+            }
 
             try {
-                await Promise.all(
-                    patientsNeedingCoordinates.map(async (patient) => {
+                await Promise.all([
+                    ...patientsNeedingCoordinates.map(async (patient) => {
                         try {
                             const geocoded = await geocodeAddress(patient.address);
                             updates[patient.id] = { lat: geocoded.lat, lng: geocoded.lng };
                         } catch {
                             // Skip unresolved addresses
                         }
-                    })
-                );
+                    }),
+                    ...personalEventsNeedingCoordinates.map(async (apt) => {
+                        try {
+                            const geocoded = await geocodeAddress(apt.address!);
+                            updates[apt.id] = { lat: geocoded.lat, lng: geocoded.lng };
+                        } catch {
+                            // Skip unresolved addresses
+                        }
+                    }),
+                ]);
             } finally {
                 for (const patient of patientsNeedingCoordinates) {
                     patientGeocodeInFlightRef.current.delete(patient.id);
+                }
+                for (const apt of personalEventsNeedingCoordinates) {
+                    patientGeocodeInFlightRef.current.delete(apt.id);
                 }
             }
 
@@ -142,7 +166,7 @@ export function useLocationData(
             }
         };
 
-        void geocodePatients();
+        void geocodeAll();
         return () => {
             cancelled = true;
         };
@@ -171,13 +195,18 @@ export function useLocationData(
                 }
 
                 for (const apt of dayAppointments) {
-                    const patient = patientById.get(apt.patientId);
                     let coords: { lat: number; lng: number } | null = null;
 
-                    if (patient?.lat !== undefined && patient?.lng !== undefined) {
-                        coords = { lat: patient.lat, lng: patient.lng };
-                    } else if (resolvedPatientCoordinates[apt.patientId]) {
-                        coords = resolvedPatientCoordinates[apt.patientId];
+                    if (isPersonalEvent(apt)) {
+                        // Personal events: coordinates stored under appointment.id
+                        coords = resolvedPatientCoordinates[apt.id] ?? null;
+                    } else {
+                        const patient = patientById.get(apt.patientId);
+                        if (patient?.lat !== undefined && patient?.lng !== undefined) {
+                            coords = { lat: patient.lat, lng: patient.lng };
+                        } else if (resolvedPatientCoordinates[apt.patientId]) {
+                            coords = resolvedPatientCoordinates[apt.patientId];
+                        }
                     }
 
                     if (coords) {
@@ -289,7 +318,9 @@ export function useLocationData(
             for (let index = 0; index < dayAppointments.length; index += 1) {
                 const appointment = dayAppointments[index];
                 const isFirstOfDay = index === 0;
-                const currentCoords = getPatientCoordinates(appointment.patientId);
+                const currentCoords = isPersonalEvent(appointment)
+                    ? (resolvedPatientCoordinates[appointment.id] ?? null)
+                    : getPatientCoordinates(appointment.patientId);
 
                 // Check if we have real driving distance from the API
                 const realDistance = drivingDistances[appointment.id];

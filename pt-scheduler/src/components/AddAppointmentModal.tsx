@@ -45,6 +45,7 @@ export function AddAppointmentModal({
     const [isPersonalEvent, setIsPersonalEvent] = useState(defaultIsPersonal ?? false);
     const [personalCategory, setPersonalCategory] = useState("lunch");
     const [personalTitle, setPersonalTitle] = useState("");
+    const [personalAddress, setPersonalAddress] = useState("");
     const [repeatInterval, setRepeatInterval] = useState<"none" | "weekly" | "biweekly">("none");
     const [repeatUntil, setRepeatUntil] = useState("");
     const [error, setError] = useState<string | null>(null);
@@ -60,6 +61,7 @@ export function AddAppointmentModal({
             setIsPersonalEvent(defaultIsPersonal ?? false);
             setPersonalCategory("lunch");
             setPersonalTitle("");
+            setPersonalAddress("");
             setRepeatInterval("none");
             setRepeatUntil("");
             setError(null);
@@ -139,6 +141,7 @@ export function AddAppointmentModal({
                         visitType: null,
                         personalCategory,
                         title: personalTitle.trim() || undefined,
+                        address: personalAddress.trim() || undefined,
                         status: "scheduled",
                         syncStatus: "local",
                         notes: undefined,
@@ -245,6 +248,19 @@ export function AddAppointmentModal({
                                             value={personalTitle}
                                             onChange={(e) => setPersonalTitle(e.target.value)}
                                             placeholder="e.g., Lunch with Sarah"
+                                            className="w-full input-google"
+                                        />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
+                                            Address (optional)
+                                        </label>
+                                        <input
+                                            type="text"
+                                            value={personalAddress}
+                                            onChange={(e) => setPersonalAddress(e.target.value)}
+                                            placeholder="e.g., 123 Main St, City, ST"
                                             className="w-full input-google"
                                         />
                                     </div>
