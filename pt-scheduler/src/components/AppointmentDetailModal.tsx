@@ -87,9 +87,14 @@ export function AppointmentDetailModal({
         setConfirmingDelete(null);
 
         if (isPersonalEvent(appointment)) {
-            void appointmentDB.findRecurringSiblings(appointment).then((siblings) => {
+            const appointmentId = appointment.id;
+            appointmentDB.findRecurringSiblings(appointment).then((siblings) => {
+                // Guard against stale results if modal was reopened with a different appointment
+                if (appointmentId !== appointment.id) return;
                 setSiblingCount(siblings.length);
                 setApplyAddressToAll(siblings.length > 0);
+            }).catch(() => {
+                // Silently ignore — siblings just won't be available
             });
         }
     }, [patient, appointment, isOpen]);
@@ -138,6 +143,7 @@ export function AppointmentDetailModal({
         setIsSaving(true);
         setError(null);
         setSuccessMessage(null);
+        setConfirmingDelete(null);
 
         try {
             if (isPersonal) {
@@ -165,6 +171,7 @@ export function AppointmentDetailModal({
                             }
                         } catch (err) {
                             setError(err instanceof Error ? err.message : "Failed to update some occurrences");
+                            return; // Keep modal open so user sees the error
                         }
                     }
 
@@ -638,7 +645,7 @@ export function AppointmentDetailModal({
                         </div>
                     ) : <div />}
                     <div className="flex gap-2">
-                    <Button variant="ghost" onClick={onClose} disabled={isSaving}>
+                    <Button variant="ghost" onClick={() => { setConfirmingDelete(null); onClose(); }} disabled={isSaving}>
                         Cancel
                     </Button>
                     <Button
