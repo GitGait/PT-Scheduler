@@ -2441,6 +2441,10 @@ export function SchedulePage() {
                             await update(appointmentId, changes);
                             triggerSync();
                         }}
+                        onDeleteAppointment={async (appointmentId) => {
+                            await deleteAppointment(appointmentId);
+                            triggerSync();
+                        }}
                         onSyncToSheet={async (updatedPatient) => {
                             // Get spreadsheet ID from sync store
                             const { spreadsheetId } = useSyncStore.getState();

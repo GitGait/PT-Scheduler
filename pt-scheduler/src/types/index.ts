@@ -69,6 +69,7 @@ export interface Appointment {
   personalCategory?: string;  // For personal events (patientId === "__personal__")
   title?: string;             // Free-text title for personal events
   address?: string;           // Optional address for personal events (distance calculation)
+  recurringGroupId?: string;  // Links recurring personal event occurrences together
   chipNote?: string;           // Short note displayed as banner on the chip
   chipNotes?: string[];        // Multiple stacked chip notes (replaces chipNote)
   chipNoteColor?: string;      // Color for chip note banners

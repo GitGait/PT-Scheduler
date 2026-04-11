@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { v4 as uuidv4 } from "uuid";
 import { useAppointmentStore } from "../stores";
 import { Button } from "./ui/Button";
 import { VisitTypeSelect } from "./ui/VisitTypeSelect";
@@ -132,6 +133,7 @@ export function AddAppointmentModal({
                         cur.setDate(cur.getDate() + stepDays);
                     }
                 }
+                const groupId = dates.length > 1 ? uuidv4() : undefined;
                 for (const date of dates) {
                     await create({
                         patientId: PERSONAL_PATIENT_ID,
@@ -142,6 +144,7 @@ export function AddAppointmentModal({
                         personalCategory,
                         title: personalTitle.trim() || undefined,
                         address: personalAddress.trim() || undefined,
+                        recurringGroupId: groupId,
                         status: "scheduled",
                         syncStatus: "local",
                         notes: undefined,

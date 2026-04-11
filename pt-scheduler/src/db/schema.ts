@@ -158,6 +158,17 @@ export class PTSchedulerDB extends Dexie {
             routeCache: "id, date, expiresAt",
             dayNotes: "id, date",
         });
+
+        // Version 9: Add optional recurringGroupId to link recurring personal events
+        this.version(9).stores({
+            patients: "id, fullName, status",
+            appointments: "id, patientId, date, status, syncStatus, visitType",
+            recurringBlocks: "id, patientId, dayOfWeek",
+            calendarEvents: "id, appointmentId, googleEventId",
+            syncQueue: "++id, timestamp, status, nextRetryAt",
+            routeCache: "id, date, expiresAt",
+            dayNotes: "id, date",
+        });
     }
 }
 

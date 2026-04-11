@@ -4,6 +4,7 @@ import { Button } from "./ui/Button";
 import type { Appointment, Patient, VisitType } from "../types";
 import type { AlternateContact } from "../utils/validation";
 import { VisitTypeSelect } from "./ui/VisitTypeSelect";
+import { appointmentDB } from "../db/operations";
 import {
     isPersonalEvent,
     PERSONAL_CATEGORIES,
@@ -17,6 +18,7 @@ interface AppointmentDetailModalProps {
     onClose: () => void;
     onSavePatient: (patientId: string, changes: Partial<Patient>) => Promise<void>;
     onSaveAppointment: (appointmentId: string, changes: Partial<Appointment>) => Promise<void>;
+    onDeleteAppointment?: (appointmentId: string) => Promise<void>;
     onSyncToSheet?: (patient: Patient) => Promise<void>;
 }
 
@@ -27,6 +29,7 @@ export function AppointmentDetailModal({
     onClose,
     onSavePatient,
     onSaveAppointment,
+    onDeleteAppointment,
     onSyncToSheet,
 }: AppointmentDetailModalProps) {
     const [phoneNumbers, setPhoneNumbers] = useState<{ number: string; label: string }[]>([{ number: "", label: "" }]);
@@ -137,6 +140,24 @@ export function AppointmentDetailModal({
                         personalCategory,
                         notes: notes || undefined,
                     });
+
+                    // If address changed, offer to update all recurring siblings
+                    if (addressChanged) {
+                        const siblings = await appointmentDB.findRecurringSiblings(appointment);
+                        if (siblings.length > 0) {
+                            const applyToAll = window.confirm(
+                                `Apply this address to ${siblings.length} other recurring occurrence${siblings.length !== 1 ? "s" : ""}?`
+                            );
+                            if (applyToAll) {
+                                for (const sibling of siblings) {
+                                    await onSaveAppointment(sibling.id, {
+                                        address: personalAddress.trim() || undefined,
+                                    });
+                                }
+                            }
+                        }
+                    }
+
                     setSuccessMessage("Changes saved successfully!");
                     scheduleAutoClose();
                 } else {
@@ -528,7 +549,38 @@ export function AppointmentDetailModal({
                 </div>
 
                 {/* Footer */}
-                <div className="flex justify-end gap-2 px-6 py-4 border-t border-[var(--color-border)] sticky bottom-0 bg-[var(--color-surface)]">
+                <div className="flex justify-between px-6 py-4 border-t border-[var(--color-border)] sticky bottom-0 bg-[var(--color-surface)]">
+                    {isPersonal && onDeleteAppointment ? (
+                        <Button
+                            variant="ghost"
+                            disabled={isSaving}
+                            className="text-red-600 hover:bg-red-50 dark:hover:bg-red-950 flex items-center gap-1"
+                            onClick={async () => {
+                                const siblings = await appointmentDB.findRecurringSiblings(appointment);
+                                if (siblings.length === 0) {
+                                    if (window.confirm("Delete this event?")) {
+                                        await onDeleteAppointment(appointment.id);
+                                        onClose();
+                                    }
+                                    return;
+                                }
+                                const deleteAll = window.confirm(
+                                    `Delete this event and ${siblings.length} other occurrence${siblings.length !== 1 ? "s" : ""}? (${siblings.length + 1} total)`
+                                );
+                                if (deleteAll) {
+                                    for (const sibling of siblings) {
+                                        await onDeleteAppointment(sibling.id);
+                                    }
+                                    await onDeleteAppointment(appointment.id);
+                                    onClose();
+                                }
+                            }}
+                        >
+                            <Trash2 className="w-4 h-4" />
+                            Delete All
+                        </Button>
+                    ) : <div />}
+                    <div className="flex gap-2">
                     <Button variant="ghost" onClick={onClose} disabled={isSaving}>
                         Cancel
                     </Button>
@@ -550,6 +602,7 @@ export function AppointmentDetailModal({
                             </>
                         )}
                     </Button>
+                    </div>
                 </div>
             </div>
         </div>

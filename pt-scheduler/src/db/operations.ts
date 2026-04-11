@@ -274,6 +274,29 @@ export const appointmentDB = {
             updatedAt: new Date(),
         });
     },
+
+    /** Find recurring siblings of a personal event (by recurringGroupId or heuristic) */
+    async findRecurringSiblings(appointment: Appointment): Promise<Appointment[]> {
+        const all = await db.appointments
+            .where("patientId")
+            .equals("__personal__")
+            .toArray();
+
+        return all.filter((a) => {
+            if (a.id === appointment.id) return false;
+            // Prefer recurringGroupId if both have one
+            if (appointment.recurringGroupId && a.recurringGroupId) {
+                return a.recurringGroupId === appointment.recurringGroupId;
+            }
+            // Heuristic fallback for pre-existing appointments without groupId
+            return (
+                a.personalCategory === appointment.personalCategory &&
+                (a.title || "") === (appointment.title || "") &&
+                a.startTime === appointment.startTime &&
+                a.duration === appointment.duration
+            );
+        });
+    },
 };
 
 // =============================================================================
