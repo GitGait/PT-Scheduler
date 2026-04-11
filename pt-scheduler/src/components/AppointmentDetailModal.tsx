@@ -580,10 +580,10 @@ export function AppointmentDetailModal({
                 <div className="flex justify-between px-6 py-4 border-t border-[var(--color-border)] sticky bottom-0 bg-[var(--color-surface)]">
                     {isPersonal && onDeleteAppointment ? (
                         <div className="flex gap-1">
-                            <Button
-                                variant="ghost"
+                            <button
+                                type="button"
                                 disabled={isSaving}
-                                className={`flex items-center gap-1 text-sm ${
+                                className={`inline-flex items-center justify-center gap-1 px-3 py-1.5 text-sm font-medium rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                                     confirmingDelete === "this"
                                         ? "text-white bg-red-600 hover:bg-red-700"
                                         : "text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
@@ -607,12 +607,12 @@ export function AppointmentDetailModal({
                             >
                                 <Trash2 className="w-3.5 h-3.5" />
                                 {confirmingDelete === "this" ? "Confirm?" : "Delete"}
-                            </Button>
+                            </button>
                             {siblingCount > 0 && (
-                                <Button
-                                    variant="ghost"
+                                <button
+                                    type="button"
                                     disabled={isSaving}
-                                    className={`flex items-center gap-1 text-sm ${
+                                    className={`inline-flex items-center justify-center gap-1 px-3 py-1.5 text-sm font-medium rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
                                         confirmingDelete === "all"
                                             ? "text-white bg-red-600 hover:bg-red-700"
                                             : "text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
@@ -640,7 +640,7 @@ export function AppointmentDetailModal({
                                 >
                                     <Trash2 className="w-3.5 h-3.5" />
                                     {confirmingDelete === "all" ? "Confirm?" : `Delete All (${siblingCount + 1})`}
-                                </Button>
+                                </button>
                             )}
                         </div>
                     ) : <div />}
