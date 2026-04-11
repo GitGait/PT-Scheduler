@@ -45,6 +45,9 @@ export function AppointmentDetailModal({
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [successMessage, setSuccessMessage] = useState<string | null>(null);
+    const [siblingCount, setSiblingCount] = useState(0);
+    const [applyAddressToAll, setApplyAddressToAll] = useState(false);
+    const [confirmingDelete, setConfirmingDelete] = useState<"this" | "all" | null>(null);
 
     const isPersonal = isPersonalEvent(appointment);
     const initializedRef = useRef(false);
@@ -79,6 +82,16 @@ export function AppointmentDetailModal({
         setPersonalCategory(appointment.personalCategory || "other");
         setError(null);
         setSuccessMessage(null);
+        setSiblingCount(0);
+        setApplyAddressToAll(false);
+        setConfirmingDelete(null);
+
+        if (isPersonalEvent(appointment)) {
+            void appointmentDB.findRecurringSiblings(appointment).then((siblings) => {
+                setSiblingCount(siblings.length);
+                setApplyAddressToAll(siblings.length > 0);
+            });
+        }
     }, [patient, appointment, isOpen]);
 
     // Close on Escape key
@@ -141,24 +154,17 @@ export function AppointmentDetailModal({
                         notes: notes || undefined,
                     });
 
-                    // If address changed, offer to update all recurring siblings
-                    if (addressChanged) {
+                    // Update all recurring siblings if checkbox is checked
+                    if (addressChanged && applyAddressToAll) {
                         const siblings = await appointmentDB.findRecurringSiblings(appointment);
-                        if (siblings.length > 0) {
-                            const applyToAll = window.confirm(
-                                `Apply this address to ${siblings.length} other recurring occurrence${siblings.length !== 1 ? "s" : ""}?`
-                            );
-                            if (applyToAll) {
-                                try {
-                                    for (const sibling of siblings) {
-                                        await onSaveAppointment(sibling.id, {
-                                            address: personalAddress.trim() || undefined,
-                                        });
-                                    }
-                                } catch (err) {
-                                    setError(err instanceof Error ? err.message : "Failed to update some occurrences");
-                                }
+                        try {
+                            for (const sibling of siblings) {
+                                await onSaveAppointment(sibling.id, {
+                                    address: personalAddress.trim() || undefined,
+                                });
                             }
+                        } catch (err) {
+                            setError(err instanceof Error ? err.message : "Failed to update some occurrences");
                         }
                     }
 
@@ -338,6 +344,17 @@ export function AppointmentDetailModal({
                                     placeholder="e.g., 123 Main St, City, ST"
                                     className="w-full input-google"
                                 />
+                                {siblingCount > 0 && (
+                                    <label className="flex items-center gap-2 mt-1.5 text-sm text-[var(--color-text-secondary)] cursor-pointer select-none">
+                                        <input
+                                            type="checkbox"
+                                            checked={applyAddressToAll}
+                                            onChange={(e) => setApplyAddressToAll(e.target.checked)}
+                                            className="rounded"
+                                        />
+                                        Apply to all {siblingCount + 1} occurrences
+                                    </label>
+                                )}
                             </div>
                         </>
                     ) : (
@@ -555,37 +572,70 @@ export function AppointmentDetailModal({
                 {/* Footer */}
                 <div className="flex justify-between px-6 py-4 border-t border-[var(--color-border)] sticky bottom-0 bg-[var(--color-surface)]">
                     {isPersonal && onDeleteAppointment ? (
-                        <Button
-                            variant="ghost"
-                            disabled={isSaving}
-                            className="text-red-600 hover:bg-red-50 dark:hover:bg-red-950 flex items-center gap-1"
-                            onClick={async () => {
-                                const siblings = await appointmentDB.findRecurringSiblings(appointment);
-                                if (siblings.length === 0) {
-                                    if (!window.confirm("Delete this event?")) return;
-                                } else {
-                                    if (!window.confirm(
-                                        `Delete this event and ${siblings.length} other occurrence${siblings.length !== 1 ? "s" : ""}? (${siblings.length + 1} total)`
-                                    )) return;
-                                }
-                                setIsSaving(true);
-                                setError(null);
-                                try {
-                                    for (const sibling of siblings) {
-                                        await onDeleteAppointment(sibling.id);
+                        <div className="flex gap-1">
+                            <Button
+                                variant="ghost"
+                                disabled={isSaving}
+                                className={`flex items-center gap-1 text-sm ${
+                                    confirmingDelete === "this"
+                                        ? "text-white bg-red-600 hover:bg-red-700"
+                                        : "text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                                }`}
+                                onClick={async () => {
+                                    if (confirmingDelete !== "this") {
+                                        setConfirmingDelete("this");
+                                        return;
                                     }
-                                    await onDeleteAppointment(appointment.id);
-                                    onClose();
-                                } catch (err) {
-                                    setError(err instanceof Error ? err.message : "Failed to delete events");
-                                } finally {
-                                    setIsSaving(false);
-                                }
-                            }}
-                        >
-                            <Trash2 className="w-4 h-4" />
-                            Delete
-                        </Button>
+                                    setIsSaving(true);
+                                    setError(null);
+                                    try {
+                                        await onDeleteAppointment(appointment.id);
+                                        onClose();
+                                    } catch (err) {
+                                        setError(err instanceof Error ? err.message : "Failed to delete");
+                                    } finally {
+                                        setIsSaving(false);
+                                    }
+                                }}
+                            >
+                                <Trash2 className="w-3.5 h-3.5" />
+                                {confirmingDelete === "this" ? "Confirm?" : "Delete"}
+                            </Button>
+                            {siblingCount > 0 && (
+                                <Button
+                                    variant="ghost"
+                                    disabled={isSaving}
+                                    className={`flex items-center gap-1 text-sm ${
+                                        confirmingDelete === "all"
+                                            ? "text-white bg-red-600 hover:bg-red-700"
+                                            : "text-red-600 hover:bg-red-50 dark:hover:bg-red-950"
+                                    }`}
+                                    onClick={async () => {
+                                        if (confirmingDelete !== "all") {
+                                            setConfirmingDelete("all");
+                                            return;
+                                        }
+                                        setIsSaving(true);
+                                        setError(null);
+                                        try {
+                                            const siblings = await appointmentDB.findRecurringSiblings(appointment);
+                                            for (const sibling of siblings) {
+                                                await onDeleteAppointment(sibling.id);
+                                            }
+                                            await onDeleteAppointment(appointment.id);
+                                            onClose();
+                                        } catch (err) {
+                                            setError(err instanceof Error ? err.message : "Failed to delete events");
+                                        } finally {
+                                            setIsSaving(false);
+                                        }
+                                    }}
+                                >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                    {confirmingDelete === "all" ? "Confirm?" : `Delete All (${siblingCount + 1})`}
+                                </Button>
+                            )}
+                        </div>
                     ) : <div />}
                     <div className="flex gap-2">
                     <Button variant="ghost" onClick={onClose} disabled={isSaving}>
