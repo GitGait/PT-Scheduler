@@ -97,6 +97,7 @@ export function AppointmentActionSheet({
     const [selectedColor, setSelectedColor] = useState<string>(effectiveColor);
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [editingText, setEditingText] = useState("");
+    const [confirmingRemoveAll, setConfirmingRemoveAll] = useState(false);
     const editInputRef = useRef<HTMLInputElement>(null);
 
     // Reset local state when the appointment changes so stale data doesn't persist
@@ -106,6 +107,7 @@ export function AppointmentActionSheet({
         setNewNoteText("");
         setEditingIndex(null);
         setSelectedColor(effectiveColor);
+        setConfirmingRemoveAll(false);
     }, [appointment?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
     // Clean up copy timer on unmount
@@ -135,6 +137,7 @@ export function AppointmentActionSheet({
         if (!trimmed || notes.length >= MAX_CHIP_NOTES) return;
         setNotes([...notes, trimmed]);
         setNewNoteText("");
+        setConfirmingRemoveAll(false);
     };
 
     const removeNote = (index: number) => {
@@ -144,11 +147,13 @@ export function AppointmentActionSheet({
         } else if (editingIndex !== null && editingIndex > index) {
             setEditingIndex(editingIndex - 1);
         }
+        setConfirmingRemoveAll(false);
     };
 
     const startEditing = (index: number) => {
         setEditingIndex(index);
         setEditingText(notes[index]);
+        setConfirmingRemoveAll(false);
     };
 
     const commitEdit = () => {
@@ -171,6 +176,14 @@ export function AppointmentActionSheet({
         }
     }, [editingIndex]);
 
+    // Auto-disarm the "Remove from all" confirmation after 3s so a stale armed
+    // state can't fire on a later tap.
+    useEffect(() => {
+        if (!confirmingRemoveAll) return;
+        const timer = setTimeout(() => setConfirmingRemoveAll(false), 3000);
+        return () => clearTimeout(timer);
+    }, [confirmingRemoveAll]);
+
     const saveNotes = () => {
         let finalNotes = notes;
         const trimmed = newNoteText.trim();
@@ -182,6 +195,15 @@ export function AppointmentActionSheet({
         } else {
             onChipNote(finalNotes, selectedColor);
         }
+        onClose();
+    };
+
+    const handleRemoveFromAll = () => {
+        if (!confirmingRemoveAll) {
+            setConfirmingRemoveAll(true);
+            return;
+        }
+        onPatientChipNote([], undefined);
         onClose();
     };
 
@@ -534,6 +556,22 @@ export function AppointmentActionSheet({
                                 </div>
                             </div>
 
+                            {/* Remove from all — lives on its own row so it's spatially separate from Save */}
+                            {!isPersonal && hasPatientNotes && (
+                                <div className="flex pt-1">
+                                    <button
+                                        onClick={handleRemoveFromAll}
+                                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+                                            confirmingRemoveAll
+                                                ? "bg-red-500 text-white hover:bg-red-600"
+                                                : "text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50"
+                                        }`}
+                                    >
+                                        {confirmingRemoveAll ? "Confirm?" : "Remove from all"}
+                                    </button>
+                                </div>
+                            )}
+
                             {/* Apply to all + Save */}
                             <div className="flex items-center justify-between gap-2 pt-1">
                                 {!isPersonal && (
@@ -541,7 +579,10 @@ export function AppointmentActionSheet({
                                         <input
                                             type="checkbox"
                                             checked={applyToAll}
-                                            onChange={(e) => setApplyToAll(e.target.checked)}
+                                            onChange={(e) => {
+                                                setApplyToAll(e.target.checked);
+                                                setConfirmingRemoveAll(false);
+                                            }}
                                             className="w-4 h-4 rounded border-[var(--color-border)] text-amber-500 focus:ring-amber-400 accent-amber-500"
                                         />
                                         <span className="text-sm text-[var(--color-text-secondary)]">Apply to all</span>
