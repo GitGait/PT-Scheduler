@@ -98,17 +98,19 @@ export function AppointmentActionSheet({
     const [editingIndex, setEditingIndex] = useState<number | null>(null);
     const [editingText, setEditingText] = useState("");
     const [confirmingRemoveAll, setConfirmingRemoveAll] = useState(false);
+    const [lastAppointmentId, setLastAppointmentId] = useState(appointment?.id);
     const editInputRef = useRef<HTMLInputElement>(null);
 
     // Reset local state when the appointment changes so stale data doesn't persist
-    useEffect(() => {
+    if (appointment?.id !== lastAppointmentId) {
+        setLastAppointmentId(appointment?.id);
         setNotes(effectiveNotes);
         setChipNoteMode(false);
         setNewNoteText("");
         setEditingIndex(null);
         setSelectedColor(effectiveColor);
         setConfirmingRemoveAll(false);
-    }, [appointment?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    }
 
     // Clean up copy timer on unmount
     useEffect(() => {

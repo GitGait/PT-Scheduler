@@ -173,10 +173,10 @@ export function normalizeVisitType(value?: string): string | undefined {
     }
 
     const cleaned = raw
-        .replace(/^[\[\(\{<]+|[\]\)\}>]+$/g, "")
-        .replace(/^visit\s*type\s*[:\-]?\s*/i, "")
+        .replace(/^[[({<]+|[\])}>]+$/g, "")
+        .replace(/^visit\s*type\s*[:-]?\s*/i, "")
         .replace(/[–—]/g, "-")
-        .replace(/^[\s:;\-]+|[\s:;\-]+$/g, "")
+        .replace(/^[\s:;-]+|[\s:;-]+$/g, "")
         .replace(/\s+/g, " ")
         .trim();
 

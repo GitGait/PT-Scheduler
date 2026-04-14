@@ -490,7 +490,7 @@ async function upsertPatientToNamedSheet(
 ): Promise<void> {
     await ensurePatientSheetExists(spreadsheetId, token, sheetTitle);
     await ensurePatientSheetHeaders(spreadsheetId, token, sheetTitle);
-    let rows = await fetchPatientSheetRows(spreadsheetId, token, sheetTitle, true);
+    const rows = await fetchPatientSheetRows(spreadsheetId, token, sheetTitle, true);
 
     const headers = rows[0] ?? DEFAULT_PATIENT_HEADERS;
     const idIndex = findHeaderIndex(headers, ["id"]);

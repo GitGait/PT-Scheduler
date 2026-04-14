@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { validateImageSize, MAX_IMAGE_SIZE_BYTES } from "./image";
 
 describe("validateImageSize", () => {

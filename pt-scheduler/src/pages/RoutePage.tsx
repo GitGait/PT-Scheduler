@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAppointmentStore, usePatientStore } from "../stores";
-import { Card, CardHeader } from "../components/ui/Card";
+import { Card } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
 import { RouteEmptyState } from "../components/ui/EmptyState";
 import { geocodeAddress } from "../api/geocode";
@@ -228,7 +228,7 @@ export function RoutePage() {
 
             let miles = 0;
             let driveMinutes = 0;
-            let fromLabel = i === 0 ? "From Home" : `From Stop ${i}`;
+            const fromLabel = i === 0 ? "From Home" : `From Stop ${i}`;
 
             // Use real driving distance if available
             const realDistance = drivingDistances[apt.id];

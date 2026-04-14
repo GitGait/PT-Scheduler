@@ -1,6 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { fetchJsonWithTimeout } from "./request";
-import { ApiError } from "../utils/apiError";
 
 describe("fetchJsonWithTimeout", () => {
   beforeEach(() => {

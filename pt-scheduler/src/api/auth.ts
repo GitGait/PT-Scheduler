@@ -364,16 +364,10 @@ declare global {
                         ux_mode: string;
                         callback: (response: CodeResponse) => void;
                         error_callback?: (error: { type: string }) => void;
-                    }) => google.accounts.oauth2.CodeClient;
+                    }) => { requestCode: () => void };
                     revoke: (token: string, callback: () => void) => void;
                 };
             };
         };
-    }
-
-    namespace google.accounts.oauth2 {
-        interface CodeClient {
-            requestCode: () => void;
-        }
     }
 }

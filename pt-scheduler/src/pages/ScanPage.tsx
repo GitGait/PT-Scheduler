@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/Button";
-import { Card, CardHeader } from "../components/ui/Card";
+import { Card } from "../components/ui/Card";
 import { processScreenshotFile } from "../api/ocr";
 import { geocodeAddress } from "../api/geocode";
 import { matchPatient, type MatchCandidate, type MatchTier } from "../utils/matching";
@@ -32,14 +32,6 @@ interface OCRResult extends ExtractedAppointment {
 import { getHomeBase, calculateMilesBetweenCoordinates } from "../utils/scheduling";
 const SLOT_MINUTES = 15;
 
-function timeStringToMinutes(time: string): number {
-    const [hours, minutes] = time.split(":").map((value) => Number(value));
-    if (!Number.isFinite(hours) || !Number.isFinite(minutes)) {
-        return 0;
-    }
-    return hours * 60 + minutes;
-}
-
 function minutesToTimeString(totalMinutes: number): string {
     const bounded = Math.max(0, Math.min(23 * 60 + 59, totalMinutes));
     const hours = Math.floor(bounded / 60);
@@ -54,10 +46,10 @@ function normalizeVisitType(value?: string): string | undefined {
     }
 
     const cleaned = raw
-        .replace(/^[\[\(\{<]+|[\]\)\}>]+$/g, "")
-        .replace(/^visit\s*type\s*[:\-]?\s*/i, "")
+        .replace(/^[[({<]+|[\])}>]+$/g, "")
+        .replace(/^visit\s*type\s*[:-]?\s*/i, "")
         .replace(/[–—]/g, "-")
-        .replace(/^[\s:;\-]+|[\s:;\-]+$/g, "")
+        .replace(/^[\s:;-]+|[\s:;-]+$/g, "")
         .replace(/\s+/g, " ")
         .trim();
 

@@ -186,7 +186,7 @@ function extractVisitTypeFromNotes(notes?: string): VisitType {
 
     // Check for labeled format: "Visit Type: PT11"
     const labeledMatch = notes.match(
-        /(?:^|\n)\s*visit\s*type\s*[:\-]?\s*([^\n]+)\s*(?:\n|$)/i
+        /(?:^|\n)\s*visit\s*type\s*[:-]?\s*([^\n]+)\s*(?:\n|$)/i
     );
     if (labeledMatch) {
         const normalized = normalizeVisitTypeCode(labeledMatch[1]);
@@ -224,9 +224,9 @@ function extractVisitTypeFromNotes(notes?: string): VisitType {
  */
 function normalizeVisitTypeCode(value: string): string | null {
     const cleaned = value
-        .replace(/^[\[\(\{<]+|[\]\)\}>]+$/g, "")
+        .replace(/^[[({<]+|[\])}>]+$/g, "")
         .replace(/[–—]/g, "-")
-        .replace(/^[\s:;\-]+|[\s:;\-]+$/g, "")
+        .replace(/^[\s:;-]+|[\s:;-]+$/g, "")
         .replace(/\s+/g, "")
         .trim()
         .toUpperCase();

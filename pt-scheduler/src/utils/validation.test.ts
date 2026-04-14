@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import {
   ocrResponseSchema,
   extractedAppointmentSchema,
-  optimizeResponseSchema,
   geocodeResponseSchema,
   aiMatchResponseSchema,
   parseWithSchema

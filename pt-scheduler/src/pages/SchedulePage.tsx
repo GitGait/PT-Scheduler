@@ -13,8 +13,6 @@ import { useAppointmentStore, usePatientStore, useScheduleStore, useSyncStore, u
 import { fetchCalendarEvents } from "../api/calendar";
 import { isSignedIn } from "../api/auth";
 import { syncPatientToSheetByStatus } from "../api/sheets";
-import { Card, CardHeader } from "../components/ui/Card";
-import { Button } from "../components/ui/Button";
 import { ScheduleGridSkeleton } from "../components/ui/Skeleton";
 import { AppointmentDetailModal } from "../components/AppointmentDetailModal";
 import { AppointmentActionSheet } from "../components/AppointmentActionSheet";
@@ -25,7 +23,7 @@ import { AddAppointmentModal } from "../components/AddAppointmentModal";
 import { DayMapModal } from "../components/DayMapModal";
 import { useLocationData } from "../hooks/useLocationData";
 import { useWeekActions } from "../hooks/useWeekActions";
-import type { Appointment, Patient, VisitType } from "../types";
+import type { Appointment, Patient } from "../types";
 import { getVisitTypeGradient } from "../utils/visitTypeColors";
 import { getChipNoteClasses } from "../utils/chipNoteColors";
 import {
@@ -56,7 +54,6 @@ import {
     timeStringToMinutes,
     minutesToTimeString,
     formatAxisTime,
-    buildPhoneHref,
     buildGoogleMapsHref,
     buildAppleMapsHref,
     isIOS,
@@ -157,7 +154,7 @@ export function SchedulePage() {
     const [isDayMapOpen, setIsDayMapOpen] = useState(false);
 
     const { patients, loadAll, update: updatePatient } = usePatientStore();
-    const { appointments, loading, loadByRange, markComplete, create, update, delete: deleteAppointment, loadOnHold, putOnHold } =
+    const { appointments, loading, loadByRange, create, update, delete: deleteAppointment, loadOnHold, putOnHold } =
         useAppointmentStore();
     const { notes: dayNotes, loadByRange: loadDayNotes, create: createDayNote, update: updateDayNote, delete: deleteDayNote, moveNote } =
         useDayNoteStore();
@@ -261,15 +258,6 @@ export function SchedulePage() {
         date.setDate(date.getDate() + daysToMove);
         setSelectedDate(toLocalIsoDate(date));
     };
-
-    const appointmentCountsByDay = useMemo(() => {
-        const counts: Record<string, number> = {};
-        for (const apt of appointments) {
-            if (apt.status === "on-hold") continue;
-            counts[apt.date] = (counts[apt.date] ?? 0) + 1;
-        }
-        return counts;
-    }, [appointments]);
 
     const selectedDayAppointments = useMemo(() => {
         return appointments
@@ -375,7 +363,6 @@ export function SchedulePage() {
         homeCoordinates,
         resolvePatientCoordinatesForRouting,
         legInfoByAppointmentId,
-        selectedDayEstimatedDriveMinutes,
     } = useLocationData(appointments, patientById, appointmentsByDay, selectedDayAppointments);
 
     const resetInteractionState = useCallback(() => {
@@ -594,14 +581,6 @@ export function SchedulePage() {
         container.addEventListener('scroll', handleUserScroll, { passive: true });
         return () => container.removeEventListener('scroll', handleUserScroll);
     }, []);
-
-    const preserveScrollPosition = (callback: () => void) => {
-        const scrollTop = zoomContainerRef.current?.scrollTop ?? 0;
-        const scrollLeft = zoomContainerRef.current?.scrollLeft ?? 0;
-        // Persist restoration across multiple re-renders to catch async DB updates
-        pendingScrollRestoreRef.current = { top: scrollTop, left: scrollLeft, rendersLeft: 10 };
-        callback();
-    };
 
     const moveAppointmentToSlot = async (appointmentId: string, date: string, startTime: string) => {
         const existingAppointment = appointments.find((apt) => apt.id === appointmentId);
@@ -939,15 +918,6 @@ export function SchedulePage() {
         }
         // Open action sheet for mobile-friendly actions
         setActionSheetAppointmentId(appointmentId);
-    };
-
-    const handleAppointmentLongPress = (
-        event: MouseEvent<HTMLDivElement>,
-        appointmentId: string
-    ) => {
-        event.stopPropagation();
-        // Toggle move mode on long press / right click
-        setMoveAppointmentId((current) => (current === appointmentId ? null : appointmentId));
     };
 
     const handleSlotClick = (date: string, startTime: string) => {
@@ -1698,7 +1668,7 @@ export function SchedulePage() {
                         <div className={`grid ${viewMode === 'day' ? 'grid-cols-[60px_1fr]' : 'grid-cols-[60px_repeat(7,1fr)]'}`}>
                             {/* Time axis */}
                             <div className="border-r border-[var(--color-border)]">
-                                {timeSlots.map((slotMinutes, slotIndex) => (
+                                {timeSlots.map((slotMinutes) => (
                                     <div
                                         key={`axis-${slotMinutes}`}
                                         className="relative pr-2 text-right"

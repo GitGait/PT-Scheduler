@@ -15,6 +15,16 @@ export function VisitTypeSelect({ value, onChange }: VisitTypeSelectProps) {
     const selected = VISIT_TYPE_CONFIGS.find((c) => c.code === value) ?? VISIT_TYPE_CONFIGS[VISIT_TYPE_CONFIGS.length - 1];
 
     const [focusedIndex, setFocusedIndex] = useState(-1);
+    const [prevOpen, setPrevOpen] = useState(open);
+
+    // Reset focused index when dropdown opens (render-phase state adjust)
+    if (open !== prevOpen) {
+        setPrevOpen(open);
+        if (open) {
+            const currentIndex = VISIT_TYPE_CONFIGS.findIndex((c) => c.code === value);
+            setFocusedIndex(currentIndex >= 0 ? currentIndex : 0);
+        }
+    }
 
     // Close on outside click
     useEffect(() => {
@@ -56,14 +66,6 @@ export function VisitTypeSelect({ value, onChange }: VisitTypeSelectProps) {
         document.addEventListener("keydown", handleKeyDown);
         return () => document.removeEventListener("keydown", handleKeyDown);
     }, [open, focusedIndex, onChange]);
-
-    // Reset focused index when dropdown opens
-    useEffect(() => {
-        if (open) {
-            const currentIndex = VISIT_TYPE_CONFIGS.findIndex((c) => c.code === value);
-            setFocusedIndex(currentIndex >= 0 ? currentIndex : 0);
-        }
-    }, [open, value]);
 
     return (
         <div ref={containerRef} className="relative">
