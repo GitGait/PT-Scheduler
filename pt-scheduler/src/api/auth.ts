@@ -13,9 +13,13 @@ const TOKEN_STORAGE_KEY = "ptScheduler.googleAuthToken";
 
 export const AUTH_STATE_CHANGED_EVENT = "pt-scheduler:auth-state-changed";
 
+interface GoogleCodeClient {
+    requestCode: () => void;
+}
+
 // Access token stored in memory and mirrored in localStorage (persists across tabs/restarts)
 let accessToken: string | null = null;
-let codeClient: google.accounts.oauth2.CodeClient | null = null;
+let codeClient: GoogleCodeClient | null = null;
 let tokenExpiresAt: number = 0;
 let refreshTimerId: ReturnType<typeof setTimeout> | null = null;
 
