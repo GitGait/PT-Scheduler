@@ -314,13 +314,18 @@ export function useLocationData(
         for (const date of Object.keys(appointmentsByDay)) {
             const dayAppointments = appointmentsByDay[date];
             let previousCoords: { lat: number; lng: number } | null = homeCoordinates;
+            let homeLegAssigned = false;
 
             for (let index = 0; index < dayAppointments.length; index += 1) {
                 const appointment = dayAppointments[index];
-                const isFirstOfDay = index === 0;
                 const currentCoords = isPersonalEvent(appointment)
                     ? (resolvedPatientCoordinates[appointment.id] ?? null)
                     : getPatientCoordinates(appointment.patientId);
+
+                // The home leg is the first appointment in this day's chain that actually
+                // has resolved coordinates — only meaningful when a home base is configured.
+                const legIsFromHome =
+                    !homeLegAssigned && homeCoordinates !== null && currentCoords !== null;
 
                 // Check if we have real driving distance from the API
                 const realDistance = drivingDistances[appointment.id];
@@ -328,9 +333,10 @@ export function useLocationData(
                     infoById[appointment.id] = {
                         miles: realDistance.miles,
                         minutes: realDistance.minutes,
-                        fromHome: isFirstOfDay,
+                        fromHome: legIsFromHome,
                         isRealDistance: true,
                     };
+                    if (legIsFromHome) homeLegAssigned = true;
                     if (currentCoords) {
                         previousCoords = currentCoords;
                     }
@@ -342,7 +348,7 @@ export function useLocationData(
                     infoById[appointment.id] = {
                         miles: null,
                         minutes: null,
-                        fromHome: isFirstOfDay,
+                        fromHome: false,
                         isRealDistance: false,
                     };
                     continue;
@@ -352,7 +358,7 @@ export function useLocationData(
                     infoById[appointment.id] = {
                         miles: null,
                         minutes: null,
-                        fromHome: isFirstOfDay,
+                        fromHome: false,
                         isRealDistance: false,
                     };
                     previousCoords = currentCoords;
@@ -364,9 +370,10 @@ export function useLocationData(
                 infoById[appointment.id] = {
                     miles: roundedMiles,
                     minutes: estimateDriveMinutes(roundedMiles),
-                    fromHome: isFirstOfDay,
+                    fromHome: legIsFromHome,
                     isRealDistance: false,
                 };
+                if (legIsFromHome) homeLegAssigned = true;
                 previousCoords = currentCoords;
             }
         }

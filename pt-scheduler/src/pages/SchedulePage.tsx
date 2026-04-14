@@ -1964,6 +1964,7 @@ export function SchedulePage() {
                                                                         : (legInfo.isRealDistance
                                                                             ? 'Driving distance via Google Maps'
                                                                             : 'Estimated straight-line distance \u2014 driving distance unavailable')}
+                                                                    aria-label={`${legInfo.fromHome ? 'From home: ' : 'Drive: '}${legInfo.isRealDistance ? '' : 'about '}${legInfo.miles.toFixed(1)} miles${legInfo.minutes != null ? `, ${legInfo.isRealDistance ? '' : 'about '}${legInfo.minutes} minutes` : ''}`}
                                                                     className={`inline-flex items-center gap-1 opacity-90 truncate max-w-full overflow-hidden ${
                                                                     isDayView ? 'text-[14px] min-h-[17px]' : 'text-[12px] min-h-[14px]'
                                                                 }`}>
