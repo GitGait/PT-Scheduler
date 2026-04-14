@@ -45,6 +45,7 @@ import {
     Navigation,
     Clock,
     Car,
+    Home,
     Building2,
 } from "lucide-react";
 
@@ -1956,13 +1957,21 @@ export function SchedulePage() {
                                                             )}
                                                             {showMilesRow && legInfo?.miles != null && (
                                                                 <div
-                                                                    title={legInfo.isRealDistance
-                                                                        ? 'Driving distance via Google Maps'
-                                                                        : 'Estimated straight-line distance \u2014 driving distance unavailable'}
+                                                                    title={legInfo.fromHome
+                                                                        ? (legInfo.isRealDistance
+                                                                            ? 'From home \u2014 driving distance via Google Maps'
+                                                                            : 'From home \u2014 straight-line estimate, driving distance unavailable')
+                                                                        : (legInfo.isRealDistance
+                                                                            ? 'Driving distance via Google Maps'
+                                                                            : 'Estimated straight-line distance \u2014 driving distance unavailable')}
                                                                     className={`inline-flex items-center gap-1 opacity-90 truncate max-w-full overflow-hidden ${
                                                                     isDayView ? 'text-[14px] min-h-[17px]' : 'text-[12px] min-h-[14px]'
                                                                 }`}>
-                                                                    <Car className={isDayView ? 'w-3.5 h-3.5 shrink-0' : 'w-2.5 h-2.5 shrink-0'} />
+                                                                    {legInfo.fromHome ? (
+                                                                        <Home className={isDayView ? 'w-3.5 h-3.5 shrink-0' : 'w-2.5 h-2.5 shrink-0'} />
+                                                                    ) : (
+                                                                        <Car className={isDayView ? 'w-3.5 h-3.5 shrink-0' : 'w-2.5 h-2.5 shrink-0'} />
+                                                                    )}
                                                                     <span className="truncate">
                                                                         {legInfo.isRealDistance ? '' : '~'}{legInfo.miles.toFixed(1)} mi
                                                                         {legInfo.minutes != null && ` (${legInfo.isRealDistance ? '' : '~'}${legInfo.minutes} min)`}
