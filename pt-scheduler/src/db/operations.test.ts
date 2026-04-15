@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { db } from "./schema";
-import { patientDB, appointmentDB, syncQueueDB } from "./operations";
+import {
+    patientDB,
+    appointmentDB,
+    syncQueueDB,
+    distanceCacheDB,
+    makeCoordKey,
+} from "./operations";
 
 describe("patientDB", () => {
     beforeEach(async () => {
@@ -388,5 +394,90 @@ describe("syncQueueDB", () => {
         await syncQueueDB.markSynced(id);
         const item = await db.syncQueue.get(id);
         expect(item?.status).toBe("synced");
+    });
+});
+
+describe("distanceCacheDB", () => {
+    beforeEach(async () => {
+        await db.distanceCache.clear();
+    });
+
+    it("should put and get an entry by coordKey", async () => {
+        const entry = {
+            coordKey: "40.0000,-74.0000->40.1000,-74.1000",
+            distanceMiles: 8.5,
+            durationMinutes: 17,
+            createdAt: new Date("2026-04-15T12:00:00Z"),
+        };
+
+        await distanceCacheDB.put(entry);
+        const retrieved = await distanceCacheDB.get(entry.coordKey);
+
+        expect(retrieved).toBeDefined();
+        expect(retrieved?.coordKey).toBe(entry.coordKey);
+        expect(retrieved?.distanceMiles).toBe(8.5);
+        expect(retrieved?.durationMinutes).toBe(17);
+        expect(retrieved?.createdAt).toEqual(entry.createdAt);
+    });
+
+    it("should return undefined for an unknown key", async () => {
+        const result = await distanceCacheDB.get("nonexistent->key");
+        expect(result).toBeUndefined();
+    });
+
+    it("getMany should return a Map containing only the hits", async () => {
+        const hit1 = {
+            coordKey: "40.0000,-74.0000->40.1000,-74.1000",
+            distanceMiles: 8.5,
+            durationMinutes: 17,
+            createdAt: new Date(),
+        };
+        const hit2 = {
+            coordKey: "40.2000,-74.2000->40.3000,-74.3000",
+            distanceMiles: 5.2,
+            durationMinutes: 11,
+            createdAt: new Date(),
+        };
+
+        await distanceCacheDB.put(hit1);
+        await distanceCacheDB.put(hit2);
+
+        const missKey = "99.9999,-99.9999->88.8888,-88.8888";
+        const result = await distanceCacheDB.getMany([
+            hit1.coordKey,
+            missKey,
+            hit2.coordKey,
+        ]);
+
+        expect(result.size).toBe(2);
+        expect(result.get(hit1.coordKey)?.distanceMiles).toBe(8.5);
+        expect(result.get(hit2.coordKey)?.distanceMiles).toBe(5.2);
+        expect(result.has(missKey)).toBe(false);
+    });
+});
+
+describe("makeCoordKey", () => {
+    it("should produce different keys for opposite directions", () => {
+        const a = { lat: 40.0, lng: -74.0 };
+        const b = { lat: 40.1, lng: -74.1 };
+
+        const ab = makeCoordKey(a, b);
+        const ba = makeCoordKey(b, a);
+
+        expect(ab).not.toBe(ba);
+        expect(ab).toBe("40.0000,-74.0000->40.1000,-74.1000");
+        expect(ba).toBe("40.1000,-74.1000->40.0000,-74.0000");
+    });
+
+    it("should round coordinates to 4 decimals (sub-5th-decimal inputs collapse)", () => {
+        const from1 = { lat: 40.00001, lng: -74.00001 };
+        const from2 = { lat: 40.00002, lng: -74.00002 };
+        const to = { lat: 40.5, lng: -74.5 };
+
+        const key1 = makeCoordKey(from1, to);
+        const key2 = makeCoordKey(from2, to);
+
+        expect(key1).toBe(key2);
+        expect(key1).toBe("40.0000,-74.0000->40.5000,-74.5000");
     });
 });

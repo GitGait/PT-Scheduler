@@ -22,6 +22,16 @@ export interface RouteCache {
     expiresAt: Date;
 }
 
+// Cached Distance Matrix result for a directional origin->destination pair.
+// The coordKey is directional (A->B != B->A) because real driving distance
+// can differ based on one-way streets, left turns, and divided highways.
+export interface CachedDistance {
+    coordKey: string;
+    distanceMiles: number;
+    durationMinutes: number;
+    createdAt: Date;
+}
+
 // Database class extending Dexie
 export class PTSchedulerDB extends Dexie {
     patients!: EntityTable<Patient, "id">;
@@ -31,6 +41,7 @@ export class PTSchedulerDB extends Dexie {
     syncQueue!: EntityTable<SyncQueueItem, "id">;
     routeCache!: EntityTable<RouteCache, "id">;
     dayNotes!: EntityTable<DayNote, "id">;
+    distanceCache!: EntityTable<CachedDistance, "coordKey">;
 
     constructor() {
         super("PTSchedulerDB");
@@ -168,6 +179,19 @@ export class PTSchedulerDB extends Dexie {
             syncQueue: "++id, timestamp, status, nextRetryAt",
             routeCache: "id, date, expiresAt",
             dayNotes: "id, date",
+        });
+
+        // Version 10: Add distanceCache table for Google Distance Matrix results.
+        // Keyed on directional coord pairs (A->B). No secondary indexes; get-by-key only.
+        this.version(10).stores({
+            patients: "id, fullName, status",
+            appointments: "id, patientId, date, status, syncStatus, visitType",
+            recurringBlocks: "id, patientId, dayOfWeek",
+            calendarEvents: "id, appointmentId, googleEventId",
+            syncQueue: "++id, timestamp, status, nextRetryAt",
+            routeCache: "id, date, expiresAt",
+            dayNotes: "id, date",
+            distanceCache: "&coordKey",
         });
     }
 }

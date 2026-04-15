@@ -1,5 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { db } from "./schema";
+import type { CachedDistance } from "./schema";
 import type {
     Patient,
     Appointment,
@@ -433,3 +434,44 @@ export const syncQueueDB = {
         return db.syncQueue.where("status").equals("failed").toArray();
     },
 };
+
+// =============================================================================
+// Distance Cache Operations
+// =============================================================================
+
+export const distanceCacheDB = {
+    /** Get cached distance by directional coord key */
+    async get(coordKey: string): Promise<CachedDistance | undefined> {
+        return db.distanceCache.get(coordKey);
+    },
+
+    /** Upsert a cached distance entry */
+    async put(entry: CachedDistance): Promise<void> {
+        await db.distanceCache.put(entry);
+    },
+
+    /** Bulk fetch: returns a Map containing only the coord keys that hit */
+    async getMany(
+        coordKeys: string[]
+    ): Promise<Map<string, CachedDistance>> {
+        const rows = await db.distanceCache.bulkGet(coordKeys);
+        const map = new Map<string, CachedDistance>();
+        rows.forEach((row, i) => {
+            if (row) map.set(coordKeys[i], row);
+        });
+        return map;
+    },
+};
+
+/**
+ * Build a directional coord key for the distance cache.
+ * Direction-sensitive: makeCoordKey(A, B) !== makeCoordKey(B, A) because
+ * real driving distance can differ by direction (one-way streets, left turns,
+ * divided highways). Coordinates are rounded to 4 decimals (~11m precision).
+ */
+export function makeCoordKey(
+    from: { lat: number; lng: number },
+    to: { lat: number; lng: number }
+): string {
+    return `${from.lat.toFixed(4)},${from.lng.toFixed(4)}->${to.lat.toFixed(4)},${to.lng.toFixed(4)}`;
+}
