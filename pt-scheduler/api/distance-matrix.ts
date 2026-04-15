@@ -41,49 +41,57 @@ export default async function handler(
             return;
         }
 
-        // Build origins and destinations for sequential pairs
-        // We want: home->1, 1->2, 2->3, etc.
-        // Origins: all locations except the last
-        // Destinations: all locations except the first
-        const origins = locations.slice(0, -1).map(l => `${l.lat},${l.lng}`).join("|");
-        const destinations = locations.slice(1).map(l => `${l.lat},${l.lng}`).join("|");
+        // Build sequential leg pairs: home->1, 1->2, 2->3, etc.
+        // Each leg becomes a 1x1 Distance Matrix request so Google bills
+        // us per leg (N-1 elements) instead of per full matrix (N^2 elements).
+        type Location = typeof locations[number];
+        const legs: Array<{ from: Location; to: Location }> = [];
+        for (let i = 0; i < locations.length - 1; i++) {
+            legs.push({ from: locations[i], to: locations[i + 1] });
+        }
 
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), GOOGLE_TIMEOUT_MS);
 
-        try {
+        type LegElement = {
+            status: string;
+            distance?: { value: number };
+            duration?: { value: number };
+        };
+        type LegResult = { from: Location; to: Location; element: LegElement };
+
+        const fetchLeg = async ({ from, to }: { from: Location; to: Location }): Promise<LegResult> => {
             const url = new URL("https://maps.googleapis.com/maps/api/distancematrix/json");
-            url.searchParams.set("origins", origins);
-            url.searchParams.set("destinations", destinations);
+            url.searchParams.set("origins", `${from.lat},${from.lng}`);
+            url.searchParams.set("destinations", `${to.lat},${to.lng}`);
             url.searchParams.set("mode", "driving");
             url.searchParams.set("units", "imperial");
             url.searchParams.set("key", apiKey);
 
             const response = await fetch(url.toString(), { signal: controller.signal });
+            if (!response.ok) throw new Error(`upstream ${response.status}`);
+            const data = await response.json();
+            if (data.status !== "OK") {
+                throw new Error(`maps ${data.status}: ${data.error_message ?? ""}`);
+            }
+            const element = data.rows?.[0]?.elements?.[0] as LegElement | undefined;
+            if (!element) throw new Error("maps: missing element");
+            if (element.status !== "OK") throw new Error(`element ${element.status}`);
+            return { from, to, element };
+        };
+
+        try {
+            // Cap concurrency at 20 parallel fetches to avoid hammering upstream.
+            // Realistic day (<20 stops) fits in a single chunk.
+            const CONCURRENCY = 20;
+            const settled: PromiseSettledResult<LegResult>[] = [];
+            for (let i = 0; i < legs.length; i += CONCURRENCY) {
+                const chunk = legs.slice(i, i + CONCURRENCY);
+                const chunkResults = await Promise.allSettled(chunk.map(fetchLeg));
+                settled.push(...chunkResults);
+            }
             clearTimeout(timeout);
 
-            if (!response.ok) {
-                res.status(502).json({
-                    error: "Distance Matrix service unavailable",
-                    code: "UPSTREAM_ERROR"
-                });
-                return;
-            }
-
-            const data = await response.json();
-
-            if (data.status !== "OK") {
-                console.error("[DistanceMatrix] Google API status:", data.status, "error_message:", data.error_message);
-                res.status(502).json({
-                    error: `Google Maps error: ${data.status} - ${data.error_message || "unknown"}`,
-                    code: "UPSTREAM_ERROR"
-                });
-                return;
-            }
-
-            // Parse the response - we only need the diagonal (sequential pairs)
-            // Row 0 is home->dest0, Row 1 is loc1->dest1, etc.
-            // But Distance Matrix returns a full matrix, so we need row i, column i
             const distances: Array<{
                 originId: string;
                 destinationId: string;
@@ -91,31 +99,27 @@ export default async function handler(
                 durationMinutes: number;
             }> = [];
 
-            const rows = data.rows as Array<{
-                elements: Array<{
-                    status: string;
-                    distance?: { value: number };
-                    duration?: { value: number };
-                }>;
-            }>;
-
-            for (let i = 0; i < rows.length; i++) {
-                const element = rows[i].elements[i];
-
-                if (element.status !== "OK") {
-                    console.warn(`[DistanceMatrix] Element ${i} status: ${element.status} (${locations[i].id} -> ${locations[i + 1].id})`);
-                    continue;
+            for (let i = 0; i < settled.length; i++) {
+                const result = settled[i];
+                const leg = legs[i];
+                if (result.status === "fulfilled") {
+                    const { from, to, element } = result.value;
+                    const distanceMeters = element.distance?.value ?? 0;
+                    const durationSeconds = element.duration?.value ?? 0;
+                    distances.push({
+                        originId: from.id,
+                        destinationId: to.id,
+                        distanceMiles: Math.round(distanceMeters / 1609.34 * 10) / 10,
+                        durationMinutes: Math.round(durationSeconds / 60)
+                    });
+                } else {
+                    const reason = result.reason instanceof Error
+                        ? result.reason.message
+                        : String(result.reason);
+                    console.warn(
+                        `[DistanceMatrix] leg ${leg.from.id} -> ${leg.to.id} failed: ${reason}`
+                    );
                 }
-
-                const distanceMeters = element.distance?.value ?? 0;
-                const durationSeconds = element.duration?.value ?? 0;
-
-                distances.push({
-                    originId: locations[i].id,
-                    destinationId: locations[i + 1].id,
-                    distanceMiles: Math.round(distanceMeters / 1609.34 * 10) / 10,
-                    durationMinutes: Math.round(durationSeconds / 60)
-                });
             }
 
             const result = { distances };
