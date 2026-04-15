@@ -14,6 +14,7 @@ import { fetchCalendarEvents } from "../api/calendar";
 import { isSignedIn } from "../api/auth";
 import { syncPatientToSheetByStatus } from "../api/sheets";
 import { ScheduleGridSkeleton } from "../components/ui/Skeleton";
+import { UndoDeleteToast } from "../components/ui/UndoDeleteToast";
 import { AppointmentDetailModal } from "../components/AppointmentDetailModal";
 import { AppointmentActionSheet } from "../components/AppointmentActionSheet";
 import { DayNoteModal } from "../components/DayNoteModal";
@@ -23,6 +24,7 @@ import { AddAppointmentModal } from "../components/AddAppointmentModal";
 import { DayMapModal } from "../components/DayMapModal";
 import { useLocationData } from "../hooks/useLocationData";
 import { useWeekActions } from "../hooks/useWeekActions";
+import { usePendingDelete } from "../hooks/usePendingDelete";
 import type { Appointment, Patient } from "../types";
 import { getVisitTypeGradient } from "../utils/visitTypeColors";
 import { getChipNoteClasses } from "../utils/chipNoteColors";
@@ -158,6 +160,7 @@ export function SchedulePage() {
         useAppointmentStore();
     const { notes: dayNotes, loadByRange: loadDayNotes, create: createDayNote, update: updateDayNote, delete: deleteDayNote, moveNote } =
         useDayNoteStore();
+    const { pendingId: pendingDeleteId, queueDelete: queuePendingDelete, undo: undoPendingDelete } = usePendingDelete();
 
     const weekDates = useMemo(() => getWeekDates(selectedDate), [selectedDate]);
     const weekStart = weekDates[0];
@@ -261,9 +264,9 @@ export function SchedulePage() {
 
     const selectedDayAppointments = useMemo(() => {
         return appointments
-            .filter((apt) => apt.date === selectedDate && apt.status !== "on-hold")
+            .filter((apt) => apt.date === selectedDate && apt.status !== "on-hold" && apt.id !== pendingDeleteId)
             .sort((a, b) => a.startTime.localeCompare(b.startTime));
-    }, [appointments, selectedDate]);
+    }, [appointments, selectedDate, pendingDeleteId]);
 
     const selectedMoveAppointment = useMemo(
         () => appointments.find((apt) => apt.id === moveAppointmentId),
@@ -293,6 +296,7 @@ export function SchedulePage() {
 
         for (const appointment of appointments) {
             if (appointment.status === "on-hold") continue;
+            if (appointment.id === pendingDeleteId) continue;
             if (grouped[appointment.date]) {
                 grouped[appointment.date].push(appointment);
             }
@@ -303,7 +307,7 @@ export function SchedulePage() {
         }
 
         return grouped;
-    }, [appointments, weekDates]);
+    }, [appointments, weekDates, pendingDeleteId]);
 
     // Group day notes by date
     const notesByDay = useMemo(() => {
@@ -1018,8 +1022,7 @@ export function SchedulePage() {
         });
 
         mutationCooldownRef.current = Date.now();
-        await deleteAppointment(appointment.id);
-        triggerSync();
+        queuePendingDelete(appointment);
     };
 
     // Watch for restore-from-hold requests from the Sidebar (via schedule store)
@@ -2297,6 +2300,9 @@ export function SchedulePage() {
                 </div>
             )}
 
+            <UndoDeleteToast visible={!!pendingDeleteId} onUndo={undoPendingDelete} />
+
+
             {/* Maps Choice Menu */}
             {mapsMenuAddress && (
                 <div
@@ -2433,9 +2439,19 @@ export function SchedulePage() {
                             await update(appointmentId, changes);
                             triggerSync();
                         }}
-                        onDeleteAppointment={async (appointmentId) => {
-                            await deleteAppointment(appointmentId);
-                            triggerSync();
+                        onDeleteAppointment={async (appointmentId, options) => {
+                            if (options?.immediate) {
+                                await deleteAppointment(appointmentId);
+                                triggerSync();
+                                return;
+                            }
+                            const target = appointments.find((a) => a.id === appointmentId);
+                            if (target) {
+                                queuePendingDelete(target);
+                            } else {
+                                await deleteAppointment(appointmentId);
+                                triggerSync();
+                            }
                         }}
                         onSyncToSheet={async (updatedPatient) => {
                             // Get spreadsheet ID from sync store

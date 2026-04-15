@@ -18,7 +18,7 @@ interface AppointmentDetailModalProps {
     onClose: () => void;
     onSavePatient: (patientId: string, changes: Partial<Patient>) => Promise<void>;
     onSaveAppointment: (appointmentId: string, changes: Partial<Appointment>) => Promise<void>;
-    onDeleteAppointment?: (appointmentId: string) => Promise<void>;
+    onDeleteAppointment?: (appointmentId: string, options?: { immediate?: boolean }) => Promise<void>;
     onSyncToSheet?: (patient: Patient) => Promise<void>;
 }
 
@@ -627,9 +627,9 @@ export function AppointmentDetailModal({
                                         try {
                                             const siblings = await appointmentDB.findRecurringSiblings(appointment);
                                             for (const sibling of siblings) {
-                                                await onDeleteAppointment(sibling.id);
+                                                await onDeleteAppointment(sibling.id, { immediate: true });
                                             }
-                                            await onDeleteAppointment(appointment.id);
+                                            await onDeleteAppointment(appointment.id, { immediate: true });
                                             onClose();
                                         } catch (err) {
                                             setError(err instanceof Error ? err.message : "Failed to delete events");
