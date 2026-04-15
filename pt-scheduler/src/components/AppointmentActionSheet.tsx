@@ -365,36 +365,32 @@ export function AppointmentActionSheet({
                         );
                     })}
 
-                    {/* Navigate to Address */}
+                    {/* Address */}
                     {hasAddress && (
-                        <div className="flex items-center">
-                            <button
-                                onClick={() => {
-                                    onNavigate();
-                                    onClose();
-                                }}
-                                className="flex-1 flex items-center gap-4 py-3 px-4 text-left text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] rounded-lg transition-colors"
-                            >
-                                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-green-100 dark:bg-green-950">
-                                    <Navigation className="w-5 h-5 text-green-600 dark:text-green-400" />
-                                </div>
-                                <div className="flex flex-col">
-                                    <span className="font-medium">Navigate to Address</span>
-                                    <span className="text-sm text-[var(--color-text-secondary)] truncate max-w-[250px]">{patient?.address}</span>
-                                </div>
-                            </button>
-                            <button
-                                onClick={() => copyToClipboard(patient?.address ?? '', 'address')}
-                                className="p-2.5 mr-2 rounded-full hover:bg-[var(--color-surface-hover)] transition-colors"
-                                aria-label="Copy address"
-                            >
-                                {copiedKey === 'address' ? (
-                                    <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
-                                ) : (
-                                    <Copy className="w-4 h-4 text-[var(--color-text-secondary)]" />
-                                )}
-                            </button>
-                        </div>
+                        <ContactRow
+                            role="address"
+                            leadIcon={<Navigation className="w-4 h-4" />}
+                            primaryText={patient?.address ?? ""}
+                            copiedKey={copiedKey}
+                            actions={[
+                                {
+                                    key: "navigate",
+                                    icon: <Navigation className="w-5 h-5" />,
+                                    ariaLabel: "Navigate to address",
+                                    onClick: () => {
+                                        onNavigate();
+                                        onClose();
+                                    },
+                                },
+                                {
+                                    key: "address",
+                                    icon: <Copy className="w-4 h-4" />,
+                                    ariaLabel: "Copy address",
+                                    copyable: true,
+                                    onClick: () => copyToClipboard(patient?.address ?? "", "address"),
+                                },
+                            ]}
+                        />
                     )}
 
                     {/* Divider */}
