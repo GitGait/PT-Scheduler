@@ -6,6 +6,8 @@ import {
     syncQueueDB,
     distanceCacheDB,
     makeCoordKey,
+    geocodeCacheDB,
+    normalizeAddressKey,
 } from "./operations";
 
 describe("patientDB", () => {
@@ -514,5 +516,50 @@ describe("makeCoordKey", () => {
 
         expect(key1).toBe(key2);
         expect(key1).toBe("40.0000,-74.0000->40.5000,-74.5000");
+    });
+});
+
+describe("geocodeCacheDB", () => {
+    beforeEach(async () => {
+        await db.geocodeCache.clear();
+    });
+
+    it("should put and get an entry by addressKey (round-trip)", async () => {
+        const entry = {
+            addressKey: "123 main st, springfield, il 62701",
+            lat: 39.7994,
+            lng: -89.6442,
+            formattedAddress: "123 Main St, Springfield, IL 62701, USA",
+            createdAt: new Date("2026-04-15T12:00:00Z"),
+        };
+
+        await geocodeCacheDB.put(entry);
+        const retrieved = await geocodeCacheDB.get(entry.addressKey);
+
+        expect(retrieved).toBeDefined();
+        expect(retrieved?.addressKey).toBe(entry.addressKey);
+        expect(retrieved?.lat).toBe(39.7994);
+        expect(retrieved?.lng).toBe(-89.6442);
+        expect(retrieved?.formattedAddress).toBe(entry.formattedAddress);
+        expect(retrieved?.createdAt).toEqual(entry.createdAt);
+    });
+
+    it("should return undefined for an unknown address key", async () => {
+        const result = await geocodeCacheDB.get("nonexistent address");
+        expect(result).toBeUndefined();
+    });
+});
+
+describe("normalizeAddressKey", () => {
+    it("normalizes leading/trailing whitespace and lowercases", () => {
+        expect(normalizeAddressKey("  123 Main St ")).toBe(
+            normalizeAddressKey("123 main st")
+        );
+    });
+
+    it("collapses internal whitespace", () => {
+        expect(normalizeAddressKey("123  Main   St")).toBe(
+            normalizeAddressKey("123 Main St")
+        );
     });
 });

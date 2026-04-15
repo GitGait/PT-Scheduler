@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { db } from "./schema";
-import type { CachedDistance } from "./schema";
+import type { CachedDistance, CachedGeocode } from "./schema";
 import type {
     Patient,
     Appointment,
@@ -480,4 +480,28 @@ export function makeCoordKey(
     to: { lat: number; lng: number }
 ): string {
     return `${from.lat.toFixed(4)},${from.lng.toFixed(4)}->${to.lat.toFixed(4)},${to.lng.toFixed(4)}`;
+}
+
+// =============================================================================
+// Geocode Cache Operations
+// =============================================================================
+
+export const geocodeCacheDB = {
+    /** Get cached geocode by normalized address key */
+    async get(addressKey: string): Promise<CachedGeocode | undefined> {
+        return db.geocodeCache.get(addressKey);
+    },
+
+    /** Upsert a cached geocode entry */
+    async put(entry: CachedGeocode): Promise<void> {
+        await db.geocodeCache.put(entry);
+    },
+};
+
+/**
+ * Normalize an address string to a stable cache key.
+ * Lowercases, collapses internal whitespace, and trims.
+ */
+export function normalizeAddressKey(address: string): string {
+    return address.toLowerCase().replace(/\s+/g, " ").trim();
 }

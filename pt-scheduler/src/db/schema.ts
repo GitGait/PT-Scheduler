@@ -32,6 +32,16 @@ export interface CachedDistance {
     createdAt: Date;
 }
 
+// Cached Geocode result for a normalized address string.
+// Buildings don't move, so no TTL — entries are permanent.
+export interface CachedGeocode {
+    addressKey: string;   // PRIMARY KEY — normalized address (lowercase, collapsed whitespace, trimmed)
+    lat: number;
+    lng: number;
+    formattedAddress?: string;
+    createdAt: Date;
+}
+
 // Database class extending Dexie
 export class PTSchedulerDB extends Dexie {
     patients!: EntityTable<Patient, "id">;
@@ -42,6 +52,7 @@ export class PTSchedulerDB extends Dexie {
     routeCache!: EntityTable<RouteCache, "id">;
     dayNotes!: EntityTable<DayNote, "id">;
     distanceCache!: EntityTable<CachedDistance, "coordKey">;
+    geocodeCache!: EntityTable<CachedGeocode, "addressKey">;
 
     constructor() {
         super("PTSchedulerDB");
@@ -192,6 +203,20 @@ export class PTSchedulerDB extends Dexie {
             routeCache: "id, date, expiresAt",
             dayNotes: "id, date",
             distanceCache: "&coordKey",
+        });
+
+        // Version 11: Add geocodeCache table for Google Geocoding results.
+        // Keyed on normalized address string. No TTL — buildings don't move.
+        this.version(11).stores({
+            patients: "id, fullName, status",
+            appointments: "id, patientId, date, status, syncStatus, visitType",
+            recurringBlocks: "id, patientId, dayOfWeek",
+            calendarEvents: "id, appointmentId, googleEventId",
+            syncQueue: "++id, timestamp, status, nextRetryAt",
+            routeCache: "id, date, expiresAt",
+            dayNotes: "id, date",
+            distanceCache: "&coordKey",
+            geocodeCache: "&addressKey",
         });
     }
 }
