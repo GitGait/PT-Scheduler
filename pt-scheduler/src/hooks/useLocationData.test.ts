@@ -8,13 +8,17 @@ vi.mock("../api/distance", () => ({
     getDistanceMatrix: (...args: unknown[]) => getDistanceMatrixMock(...args),
 }));
 
-// Mock geocoding so it never fires in tests (patients all pre-have lat/lng)
+// Mock geocoding so it never fires in tests (patients all pre-have lat/lng).
+// Individual tests may override via vi.mocked(geocodeAddress).mockResolvedValueOnce.
 vi.mock("../api/geocode", () => ({
     geocodeAddress: vi.fn(async () => ({ lat: 0, lng: 0 })),
 }));
 
 import { useLocationData } from "./useLocationData";
 import { db } from "../db/schema";
+import { patientDB } from "../db/operations";
+import { geocodeAddress } from "../api/geocode";
+import { usePatientStore } from "../stores/patientStore";
 
 const SELECTED_DATE = "2026-04-15";
 
@@ -57,7 +61,12 @@ function setHomeBase(lat: number, lng: number): void {
 describe("useLocationData", () => {
     beforeEach(async () => {
         getDistanceMatrixMock.mockReset();
+        vi.mocked(geocodeAddress).mockClear();
         await db.distanceCache.clear();
+        await db.patients.clear();
+        // Reset Zustand store to an empty state so seeded patients from one test
+        // don't bleed into the next test's geocode-effect checks.
+        usePatientStore.setState({ patients: [], loading: false, error: null, searchQuery: "" });
         window.localStorage.clear();
         setHomeBase(40.5, -74.5);
     });
@@ -167,6 +176,63 @@ describe("useLocationData", () => {
         await new Promise((resolve) => setTimeout(resolve, 700));
 
         expect(getDistanceMatrixMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("persists geocoded patient coords to IndexedDB via the store on successful geocode", async () => {
+        // Seed a patient with an address but no lat/lng in the real DB.
+        const patientId = await patientDB.add({
+            fullName: "Geocode Test Patient",
+            nicknames: [],
+            phoneNumbers: [],
+            alternateContacts: [],
+            address: "456 Elm St",
+            status: "active",
+            notes: "",
+        });
+
+        // Make geocodeAddress return specific known coords for this test.
+        vi.mocked(geocodeAddress).mockResolvedValueOnce({ lat: 40, lng: -74 });
+
+        // Load the patient into the Zustand store so the store's update action
+        // can refresh the in-memory patient after the DB write.
+        await usePatientStore.getState().loadAll();
+
+        const patient = makePatient({ id: patientId, address: "456 Elm St" });
+        // No lat/lng on the patient — the hook must geocode and persist them.
+        delete (patient as Partial<Patient>).lat;
+        delete (patient as Partial<Patient>).lng;
+
+        const appointments = [makeAppointment({ id: "apt-persist", patientId })];
+        const inputs = buildInputs([patient], appointments);
+
+        // Distance Matrix not needed for this test.
+        getDistanceMatrixMock.mockResolvedValue({ distances: [] });
+
+        renderHook(() =>
+            useLocationData(
+                inputs.appointments,
+                inputs.patientById,
+                inputs.appointmentsByDay,
+                inputs.selectedDayAppointments,
+                inputs.selectedDate,
+            ),
+        );
+
+        // Wait until geocodeAddress has been called (meaning geocoding ran).
+        await waitFor(() => {
+            expect(vi.mocked(geocodeAddress)).toHaveBeenCalledWith("456 Elm St");
+        }, { timeout: 2000 });
+
+        // Give the store's async update action time to finish writing to IndexedDB.
+        await waitFor(async () => {
+            const saved = await patientDB.get(patientId);
+            expect(saved?.lat).toBe(40);
+            expect(saved?.lng).toBe(-74);
+        }, { timeout: 2000 });
+
+        // Flush the distance-matrix debounce (500 ms) so it fires and resolves
+        // inside this test rather than potentially interfering with the next one.
+        await new Promise((resolve) => setTimeout(resolve, 600));
     });
 
     it("does NOT refetch on coordinate jitter below 4-decimal rounding", async () => {

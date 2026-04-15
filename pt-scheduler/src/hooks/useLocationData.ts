@@ -10,6 +10,7 @@ import {
     estimateDriveMinutes,
 } from "../utils/scheduling";
 import { isPersonalEvent } from "../utils/personalEventColors";
+import { usePatientStore } from "../stores/patientStore";
 
 export interface LegInfo {
     miles: number | null;
@@ -142,6 +143,22 @@ export function useLocationData(
                         try {
                             const geocoded = await geocodeAddress(patient.address);
                             updates[patient.id] = { lat: geocoded.lat, lng: geocoded.lng };
+                            // Persist via the Zustand store so both IndexedDB AND the in-memory
+                            // `patients` array get the new coords. Subsequent reloads short-circuit
+                            // via the `patient.lat !== undefined` guard; within the current session
+                            // the refreshed store prevents re-entry on state churn. Wrap so a DB
+                            // failure doesn't mask a successful geocode.
+                            try {
+                                await usePatientStore.getState().update(patient.id, {
+                                    lat: geocoded.lat,
+                                    lng: geocoded.lng,
+                                });
+                            } catch (err) {
+                                console.warn(
+                                    "[Geocode] Failed to persist patient coords:",
+                                    err instanceof Error ? err.message : err,
+                                );
+                            }
                         } catch {
                             // Skip unresolved addresses
                         }
