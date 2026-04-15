@@ -74,6 +74,7 @@ describe("geocodeAddress — read-through cache", () => {
         const result = await geocodeAddress("  123 MAIN st  ");
 
         expect(mockFetch).not.toHaveBeenCalled();
+        expect(geocodeCacheGetSpy).toHaveBeenCalledWith("123 main st");
         expect(result.lat).toBe(API_RESPONSE.lat);
         expect(result.lng).toBe(API_RESPONSE.lng);
     });
