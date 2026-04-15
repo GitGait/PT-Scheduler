@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect, type ReactNode } from "react";
-import { Phone, MessageSquare, Navigation, Edit3, Move, Trash2, X, Copy, Check, PauseCircle, StickyNote, Plus, Pencil } from "lucide-react";
+import { Phone, MessageSquare, Navigation, Edit3, Move, Trash2, X, Copy, Check, PauseCircle, StickyNote, Plus, Pencil, User } from "lucide-react";
 import type { Appointment, Patient } from "../types";
 import { isPersonalEvent, getPersonalCategoryLabel } from "../utils/personalEventColors";
 import { CHIP_NOTE_COLORS, CHIP_NOTE_SWATCH_HEX } from "../utils/chipNoteColors";
@@ -316,58 +316,52 @@ export function AppointmentActionSheet({
                     {alternateContacts.map((contact, index) => {
                         const altPhoneHref = buildPhoneHref(contact.phone);
                         const altSmsHref = buildSmsHref(contact.phone);
-                        const contactLabel = contact.firstName + (contact.relationship ? ` (${contact.relationship})` : "");
+                        if (!altPhoneHref && !altSmsHref) return null;
+
+                        const label = contact.firstName + (contact.relationship ? ` · ${contact.relationship}` : "");
                         const altCopyKey = `alt-phone-${index}`;
 
-                        return (
-                            <div key={index}>
-                                {/* Call Alternate */}
-                                {altPhoneHref && (
-                                    <div className="flex items-center">
-                                        <a
-                                            href={altPhoneHref}
-                                            onClick={onClose}
-                                            className="flex-1 flex items-center gap-4 py-3 px-4 text-left text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] rounded-lg transition-colors"
-                                        >
-                                            <div className="w-10 h-10 flex items-center justify-center rounded-full bg-amber-100 dark:bg-amber-950">
-                                                <Phone className="w-5 h-5 text-amber-500 dark:text-amber-400" />
-                                            </div>
-                                            <div className="flex flex-col">
-                                                <span className="font-medium">Call {contactLabel}</span>
-                                                <span className="text-sm text-[var(--color-text-secondary)]">{formatPhoneDisplay(contact.phone)}</span>
-                                            </div>
-                                        </a>
-                                        <button
-                                            onClick={() => copyToClipboard(contact.phone, altCopyKey)}
-                                            className="p-2.5 mr-2 rounded-full hover:bg-[var(--color-surface-hover)] transition-colors"
-                                            aria-label={`Copy ${contactLabel} phone number`}
-                                        >
-                                            {copiedKey === altCopyKey ? (
-                                                <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
-                                            ) : (
-                                                <Copy className="w-4 h-4 text-[var(--color-text-secondary)]" />
-                                            )}
-                                        </button>
-                                    </div>
-                                )}
+                        const actions: ContactRowAction[] = [];
+                        if (altPhoneHref) {
+                            actions.push({
+                                key: `alt-call-${index}`,
+                                icon: <Phone className="w-5 h-5" />,
+                                ariaLabel: `Call ${label}`,
+                                onClick: () => {
+                                    window.location.href = altPhoneHref;
+                                    onClose();
+                                },
+                            });
+                        }
+                        if (altSmsHref) {
+                            actions.push({
+                                key: `alt-text-${index}`,
+                                icon: <MessageSquare className="w-5 h-5" />,
+                                ariaLabel: `Text ${label}`,
+                                onClick: () => {
+                                    window.location.href = altSmsHref;
+                                    onClose();
+                                },
+                            });
+                        }
+                        actions.push({
+                            key: altCopyKey,
+                            icon: <Copy className="w-4 h-4" />,
+                            ariaLabel: `Copy ${label} phone number`,
+                            copyable: true,
+                            onClick: () => copyToClipboard(contact.phone, altCopyKey),
+                        });
 
-                                {/* Text Alternate */}
-                                {altSmsHref && (
-                                    <a
-                                        href={altSmsHref}
-                                        onClick={onClose}
-                                        className="w-full flex items-center gap-4 py-3 px-4 text-left text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] rounded-lg transition-colors"
-                                    >
-                                        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-amber-100 dark:bg-amber-950">
-                                            <MessageSquare className="w-5 h-5 text-amber-500 dark:text-amber-400" />
-                                        </div>
-                                        <div className="flex flex-col">
-                                            <span className="font-medium">Text {contactLabel}</span>
-                                            <span className="text-sm text-[var(--color-text-secondary)]">{formatPhoneDisplay(contact.phone)}</span>
-                                        </div>
-                                    </a>
-                                )}
-                            </div>
+                        return (
+                            <ContactRow
+                                key={`alt-${index}`}
+                                role="alt"
+                                leadIcon={<User className="w-4 h-4" />}
+                                primaryText={label}
+                                secondaryText={formatPhoneDisplay(contact.phone)}
+                                copiedKey={copiedKey}
+                                actions={actions}
+                            />
                         );
                     })}
 
