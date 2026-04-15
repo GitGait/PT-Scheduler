@@ -234,46 +234,48 @@ Replace with:
 
 ```tsx
                     {/* Primary patient contact */}
-                    {hasPhone && (
-                        <ContactRow
-                            role="primary"
-                            leadIcon={<Phone className="w-4 h-4" />}
-                            primaryText={!isPersonal ? (patient?.fullName ?? "Patient") : headerName}
-                            secondaryText={formatPhoneDisplay(primaryPhone)}
-                            copiedKey={copiedKey}
-                            actions={[
-                                {
-                                    key: "call-primary",
-                                    icon: <Phone className="w-5 h-5" />,
-                                    ariaLabel: "Call patient",
-                                    onClick: () => {
-                                        if (phoneHref) {
-                                            window.location.href = phoneHref;
-                                        }
-                                        onClose();
-                                    },
+                    {hasPhone && (() => {
+                        const primaryActions: ContactRowAction[] = [];
+                        if (phoneHref) {
+                            primaryActions.push({
+                                key: "call-primary",
+                                icon: <Phone className="w-5 h-5" />,
+                                ariaLabel: "Call patient",
+                                onClick: () => {
+                                    window.location.href = phoneHref;
+                                    onClose();
                                 },
-                                {
-                                    key: "text-primary",
-                                    icon: <MessageSquare className="w-5 h-5" />,
-                                    ariaLabel: "Text patient",
-                                    onClick: () => {
-                                        if (smsHref) {
-                                            window.location.href = smsHref;
-                                        }
-                                        onClose();
-                                    },
+                            });
+                        }
+                        if (smsHref) {
+                            primaryActions.push({
+                                key: "text-primary",
+                                icon: <MessageSquare className="w-5 h-5" />,
+                                ariaLabel: "Text patient",
+                                onClick: () => {
+                                    window.location.href = smsHref;
+                                    onClose();
                                 },
-                                {
-                                    key: "phone",
-                                    icon: <Copy className="w-4 h-4" />,
-                                    ariaLabel: "Copy phone number",
-                                    copyable: true,
-                                    onClick: () => copyToClipboard(primaryPhone ?? "", "phone"),
-                                },
-                            ]}
-                        />
-                    )}
+                            });
+                        }
+                        primaryActions.push({
+                            key: "phone",
+                            icon: <Copy className="w-4 h-4" />,
+                            ariaLabel: "Copy phone number",
+                            copyable: true,
+                            onClick: () => copyToClipboard(primaryPhone ?? "", "phone"),
+                        });
+                        return (
+                            <ContactRow
+                                role="primary"
+                                leadIcon={<Phone className="w-4 h-4" />}
+                                primaryText={!isPersonal ? (patient?.fullName ?? "Patient") : headerName}
+                                secondaryText={formatPhoneDisplay(primaryPhone)}
+                                copiedKey={copiedKey}
+                                actions={primaryActions}
+                            />
+                        );
+                    })()}
 ```
 
 **Note:** `key: "phone"` for the Copy action is intentional — it reuses the existing `copiedKey === 'phone'` state value so feedback keeps working without touching the copy state logic.
@@ -505,8 +507,7 @@ Replace with:
                         <ContactRow
                             role="address"
                             leadIcon={<Navigation className="w-4 h-4" />}
-                            primaryText="Address"
-                            secondaryText={patient?.address}
+                            primaryText={patient?.address ?? ""}
                             copiedKey={copiedKey}
                             actions={[
                                 {
@@ -606,7 +607,7 @@ function IconBarButton({
             title={ariaLabel}
             className="flex flex-col items-center gap-1 py-2 px-1 rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors"
         >
-            <div className={`w-10 h-10 rounded-full flex items-center justify-center ${circleClass}`}>
+            <div className={`w-[38px] h-[38px] rounded-full flex items-center justify-center ${circleClass}`}>
                 {icon}
             </div>
             <span className={`text-[11px] font-medium leading-tight ${labelClass}`}>
@@ -901,16 +902,9 @@ Replace **everything from the Divider comment through the closing of the Delete 
 
 **Key difference from the old code:** the note editor is no longer nested inside a `chipNoteMode ? A : B` ternary that swaps the Quick Note button in and out. The icon bar is always rendered; the note editor is a separate sibling block that conditionally renders below the bar when `chipNoteMode` is true.
 
-- [ ] **Step 6.3: Run the build**
+- [ ] **Step 6.3: Remove the now-dead `notePreview` derived value**
 
-```bash
-cd pt-scheduler && npm run build
-```
-Expected: build succeeds. If TypeScript complains that `notePreview` is now unused, delete its declaration from the function body (it was only used by the old Quick Note button preview).
-
-- [ ] **Step 6.4: Handle `notePreview` if flagged**
-
-If the build errors with `'notePreview' is declared but its value is never read`, find and delete these lines inside `AppointmentActionSheet`:
+`notePreview` was only consumed by the old Quick Note button's preview text, which was deleted in Step 6.2. It will trip the strict "no unused variables" rule. Find these lines inside `AppointmentActionSheet` (near the header/render-prep section):
 
 ```tsx
     const noteCount = effectiveNotes.length;
@@ -925,9 +919,14 @@ Replace with:
     const noteCount = effectiveNotes.length;
 ```
 
-(`noteCount` is still used by the IconBarButton label ternary.)
+(`noteCount` is still used by the `IconBarButton` label ternary.)
 
-Re-run the build.
+- [ ] **Step 6.4: Run the build**
+
+```bash
+cd pt-scheduler && npm run build
+```
+Expected: build succeeds, no TypeScript errors, no unused-variable warnings.
 
 - [ ] **Step 6.5: Visual check**
 
