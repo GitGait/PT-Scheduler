@@ -3,6 +3,7 @@ import type { Appointment, Patient } from "../types";
 import { geocodeAddress } from "../api/geocode";
 import { getDistanceMatrix } from "../api/distance";
 import { distanceCacheDB, makeCoordKey } from "../db/operations";
+import type { CachedDistance } from "../db/schema";
 import {
     getHomeBase,
     calculateMilesBetweenCoordinates,
@@ -254,7 +255,15 @@ export function useLocationData(
                 legKeys.push(makeCoordKey(locations[i], locations[i + 1]));
             }
 
-            const cached = await distanceCacheDB.getMany(legKeys);
+            let cached = new Map<string, CachedDistance>();
+            try {
+                cached = await distanceCacheDB.getMany(legKeys);
+            } catch (err) {
+                console.warn(
+                    '[DistanceMatrix] Cache read failed, falling through to API:',
+                    err instanceof Error ? err.message : err,
+                );
+            }
             if (abortController.signal.aborted) return;
 
             let allHit = true;
@@ -310,8 +319,17 @@ export function useLocationData(
                         }
                     }
 
-                    // Single bulkPut instead of N sequential IndexedDB writes
-                    await distanceCacheDB.putMany(entriesToCache);
+                    // Single bulkPut instead of N sequential IndexedDB writes.
+                    // Wrap so a cache-write failure (quota, private mode, ITP
+                    // eviction) does not mask the API's successful distances.
+                    try {
+                        await distanceCacheDB.putMany(entriesToCache);
+                    } catch (err) {
+                        console.warn(
+                            '[DistanceMatrix] Cache write failed:',
+                            err instanceof Error ? err.message : err,
+                        );
+                    }
 
                     if (result.distances.length === 0) {
                         console.warn(

@@ -200,7 +200,15 @@ export function RoutePage() {
 
             setIsLoadingDistances(true);
             try {
-                const cached = await distanceCacheDB.getMany(legKeys);
+                let cached = new Map<string, CachedDistance>();
+                try {
+                    cached = await distanceCacheDB.getMany(legKeys);
+                } catch (err) {
+                    console.warn(
+                        '[DistanceMatrix] Cache read failed, falling through to API:',
+                        err instanceof Error ? err.message : err,
+                    );
+                }
                 if (cancelled) return;
 
                 const updates: Record<string, { miles: number; minutes: number }> = {};
@@ -252,7 +260,14 @@ export function RoutePage() {
                     }
                 }
 
-                await distanceCacheDB.putMany(entriesToCache);
+                try {
+                    await distanceCacheDB.putMany(entriesToCache);
+                } catch (err) {
+                    console.warn(
+                        '[DistanceMatrix] Cache write failed:',
+                        err instanceof Error ? err.message : err,
+                    );
+                }
                 if (cancelled) return;
 
                 setDrivingDistances(updates);
