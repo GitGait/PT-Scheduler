@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Appointment, Patient } from "../types";
 import { geocodeAddress } from "../api/geocode";
 import { getDistanceMatrix } from "../api/distance";
+import { distanceCacheDB, makeCoordKey } from "../db/operations";
 import {
     getHomeBase,
     calculateMilesBetweenCoordinates,
@@ -33,6 +34,7 @@ export function useLocationData(
     patientById: Map<string, Patient>,
     appointmentsByDay: Record<string, Appointment[]>,
     selectedDayAppointments: Appointment[],
+    selectedDate: string,
 ): LocationDataResult {
     const [homeCoordinates, setHomeCoordinates] = useState<{ lat: number; lng: number } | null>(() => {
         const homeBase = getHomeBase();
@@ -172,7 +174,36 @@ export function useLocationData(
         };
     }, [appointments, patientById, resolvedPatientCoordinates]);
 
-    // Fetch real driving distances from Google Distance Matrix API
+    // Memoized signature of just the selected day's appointments + their resolved
+    // coordinates, rounded to 4 decimals to match makeCoordKey. Gates the fetch
+    // effect so unrelated re-renders (other days' geocodes, map identity churn)
+    // don't retrigger Distance Matrix calls.
+    const selectedDaySignature = useMemo(() => {
+        const dayAppts = appointmentsByDay[selectedDate] ?? [];
+        return dayAppts
+            .map((apt) => {
+                let coords: { lat: number; lng: number } | null = null;
+                if (isPersonalEvent(apt)) {
+                    coords = resolvedPatientCoordinates[apt.id] ?? null;
+                } else {
+                    const patient = patientById.get(apt.patientId);
+                    if (patient?.lat !== undefined && patient?.lng !== undefined) {
+                        coords = { lat: patient.lat, lng: patient.lng };
+                    } else {
+                        coords = resolvedPatientCoordinates[apt.patientId] ?? null;
+                    }
+                }
+                return coords
+                    ? `${apt.id}:${coords.lat.toFixed(4)},${coords.lng.toFixed(4)}`
+                    : `${apt.id}:none`;
+            })
+            .join("|");
+    }, [appointmentsByDay, selectedDate, patientById, resolvedPatientCoordinates]);
+
+    // Fetch real driving distances from Google Distance Matrix API.
+    // Scoped to selectedDate only. Reads from distanceCacheDB first; on any
+    // cache miss, calls the API with the full day's locations and re-caches
+    // every leg in the response.
     useEffect(() => {
         const abortController = new AbortController();
 
@@ -181,42 +212,65 @@ export function useLocationData(
             const allUpdates: Record<string, { miles: number; minutes: number }> = {};
             let lastError: string | null = null;
 
-            for (const date of Object.keys(appointmentsByDay)) {
-                if (abortController.signal.aborted) return;
+            const dayAppointments = appointmentsByDay[selectedDate] ?? [];
+            if (dayAppointments.length === 0) return;
 
-                const dayAppointments = appointmentsByDay[date];
-                if (dayAppointments.length === 0) continue;
+            // Build locations array: optionally home + all appointments with coordinates
+            const locations: Array<{ id: string; lat: number; lng: number }> = [];
 
-                // Build locations array: optionally home + all appointments with coordinates
-                const locations: Array<{ id: string; lat: number; lng: number }> = [];
+            if (homeCoordinates) {
+                locations.push({
+                    id: `home-${selectedDate}`,
+                    lat: homeCoordinates.lat,
+                    lng: homeCoordinates.lng,
+                });
+            }
 
-                if (homeCoordinates) {
-                    locations.push({ id: `home-${date}`, lat: homeCoordinates.lat, lng: homeCoordinates.lng });
-                }
+            for (const apt of dayAppointments) {
+                let coords: { lat: number; lng: number } | null = null;
 
-                for (const apt of dayAppointments) {
-                    let coords: { lat: number; lng: number } | null = null;
-
-                    if (isPersonalEvent(apt)) {
-                        // Personal events: coordinates stored under appointment.id
-                        coords = resolvedPatientCoordinates[apt.id] ?? null;
-                    } else {
-                        const patient = patientById.get(apt.patientId);
-                        if (patient?.lat !== undefined && patient?.lng !== undefined) {
-                            coords = { lat: patient.lat, lng: patient.lng };
-                        } else if (resolvedPatientCoordinates[apt.patientId]) {
-                            coords = resolvedPatientCoordinates[apt.patientId];
-                        }
-                    }
-
-                    if (coords) {
-                        locations.push({ id: apt.id, lat: coords.lat, lng: coords.lng });
+                if (isPersonalEvent(apt)) {
+                    coords = resolvedPatientCoordinates[apt.id] ?? null;
+                } else {
+                    const patient = patientById.get(apt.patientId);
+                    if (patient?.lat !== undefined && patient?.lng !== undefined) {
+                        coords = { lat: patient.lat, lng: patient.lng };
+                    } else if (resolvedPatientCoordinates[apt.patientId]) {
+                        coords = resolvedPatientCoordinates[apt.patientId];
                     }
                 }
 
-                // Need at least 2 locations to calculate distances
-                if (locations.length < 2) continue;
+                if (coords) {
+                    locations.push({ id: apt.id, lat: coords.lat, lng: coords.lng });
+                }
+            }
 
+            // Need at least 2 locations to calculate distances
+            if (locations.length < 2) return;
+
+            // Build sequential leg keys and read-through the cache
+            const legKeys: string[] = [];
+            for (let i = 0; i < locations.length - 1; i++) {
+                legKeys.push(makeCoordKey(locations[i], locations[i + 1]));
+            }
+
+            const cached = await distanceCacheDB.getMany(legKeys);
+            if (abortController.signal.aborted) return;
+
+            let allHit = true;
+            for (let i = 0; i < locations.length - 1; i++) {
+                const hit = cached.get(legKeys[i]);
+                if (hit) {
+                    allUpdates[locations[i + 1].id] = {
+                        miles: hit.distanceMiles,
+                        minutes: hit.durationMinutes,
+                    };
+                } else {
+                    allHit = false;
+                }
+            }
+
+            if (!allHit) {
                 try {
                     const result = await getDistanceMatrix(locations);
 
@@ -225,16 +279,43 @@ export function useLocationData(
                     for (const dist of result.distances) {
                         allUpdates[dist.destinationId] = {
                             miles: dist.distanceMiles,
-                            minutes: dist.durationMinutes
+                            minutes: dist.durationMinutes,
                         };
+
+                        // Find this leg's position in the sequential chain and
+                        // write the matching cache entry. Legs are sequential
+                        // so destinationId uniquely identifies the leg index.
+                        const legIndex = locations.findIndex(
+                            (loc, idx) => idx > 0 && loc.id === dist.destinationId,
+                        );
+                        if (legIndex > 0) {
+                            const legKey = makeCoordKey(
+                                locations[legIndex - 1],
+                                locations[legIndex],
+                            );
+                            await distanceCacheDB.put({
+                                coordKey: legKey,
+                                distanceMiles: dist.distanceMiles,
+                                durationMinutes: dist.durationMinutes,
+                                createdAt: new Date(),
+                            });
+                        }
                     }
 
                     if (result.distances.length === 0) {
-                        console.warn('[DistanceMatrix] API returned 0 distances for', locations.length, 'locations on', date);
+                        console.warn(
+                            '[DistanceMatrix] API returned 0 distances for',
+                            locations.length,
+                            'locations on',
+                            selectedDate,
+                        );
                     }
                 } catch (err) {
                     const message = err instanceof Error ? err.message : String(err);
-                    console.error(`[DistanceMatrix] Failed for ${date} (${locations.length} locations):`, message);
+                    console.error(
+                        `[DistanceMatrix] Failed for ${selectedDate} (${locations.length} locations):`,
+                        message,
+                    );
                     lastError = message;
                 }
             }
@@ -242,7 +323,7 @@ export function useLocationData(
             if (abortController.signal.aborted) return;
 
             if (Object.keys(allUpdates).length > 0) {
-                setDrivingDistances(prev => ({ ...prev, ...allUpdates }));
+                setDrivingDistances((prev) => ({ ...prev, ...allUpdates }));
             }
 
             if (lastError) {
@@ -259,7 +340,11 @@ export function useLocationData(
             clearTimeout(timeoutId);
             abortController.abort();
         };
-    }, [appointmentsByDay, homeCoordinates, patientById, resolvedPatientCoordinates, distanceRetryCount]);
+        // Deps intentionally exclude appointmentsByDay, patientById, and
+        // resolvedPatientCoordinates: their contribution is captured by
+        // selectedDaySignature. Direct deps would retrigger on unrelated churn.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedDaySignature, homeCoordinates, distanceRetryCount]);
 
     const getPatientCoordinates = (patientId: string): { lat: number; lng: number } | null => {
         const patient = patientById.get(patientId);
