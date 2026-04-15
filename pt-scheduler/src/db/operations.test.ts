@@ -454,6 +454,41 @@ describe("distanceCacheDB", () => {
         expect(result.get(hit2.coordKey)?.distanceMiles).toBe(5.2);
         expect(result.has(missKey)).toBe(false);
     });
+
+    it("putMany should bulk insert entries retrievable via getMany", async () => {
+        const entries = [
+            {
+                coordKey: "40.0000,-74.0000->40.1000,-74.1000",
+                distanceMiles: 8.5,
+                durationMinutes: 17,
+                createdAt: new Date(),
+            },
+            {
+                coordKey: "40.1000,-74.1000->40.2000,-74.2000",
+                distanceMiles: 6.3,
+                durationMinutes: 14,
+                createdAt: new Date(),
+            },
+            {
+                coordKey: "40.2000,-74.2000->40.3000,-74.3000",
+                distanceMiles: 5.2,
+                durationMinutes: 11,
+                createdAt: new Date(),
+            },
+        ];
+
+        await distanceCacheDB.putMany(entries);
+
+        const result = await distanceCacheDB.getMany(entries.map((e) => e.coordKey));
+        expect(result.size).toBe(3);
+        expect(result.get(entries[0].coordKey)?.distanceMiles).toBe(8.5);
+        expect(result.get(entries[1].coordKey)?.distanceMiles).toBe(6.3);
+        expect(result.get(entries[2].coordKey)?.distanceMiles).toBe(5.2);
+    });
+
+    it("putMany with an empty array is a no-op and does not throw", async () => {
+        await expect(distanceCacheDB.putMany([])).resolves.toBeUndefined();
+    });
 });
 
 describe("makeCoordKey", () => {

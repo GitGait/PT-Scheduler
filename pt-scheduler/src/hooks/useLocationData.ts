@@ -276,6 +276,14 @@ export function useLocationData(
 
                     if (abortController.signal.aborted) return;
 
+                    const entriesToCache: Array<{
+                        coordKey: string;
+                        distanceMiles: number;
+                        durationMinutes: number;
+                        createdAt: Date;
+                    }> = [];
+                    const now = new Date();
+
                     for (const dist of result.distances) {
                         allUpdates[dist.destinationId] = {
                             miles: dist.distanceMiles,
@@ -283,7 +291,7 @@ export function useLocationData(
                         };
 
                         // Find this leg's position in the sequential chain and
-                        // write the matching cache entry. Legs are sequential
+                        // collect the matching cache entry. Legs are sequential
                         // so destinationId uniquely identifies the leg index.
                         const legIndex = locations.findIndex(
                             (loc, idx) => idx > 0 && loc.id === dist.destinationId,
@@ -293,14 +301,17 @@ export function useLocationData(
                                 locations[legIndex - 1],
                                 locations[legIndex],
                             );
-                            await distanceCacheDB.put({
+                            entriesToCache.push({
                                 coordKey: legKey,
                                 distanceMiles: dist.distanceMiles,
                                 durationMinutes: dist.durationMinutes,
-                                createdAt: new Date(),
+                                createdAt: now,
                             });
                         }
                     }
+
+                    // Single bulkPut instead of N sequential IndexedDB writes
+                    await distanceCacheDB.putMany(entriesToCache);
 
                     if (result.distances.length === 0) {
                         console.warn(
@@ -412,7 +423,12 @@ export function useLocationData(
                 const legIsFromHome =
                     !homeLegAssigned && homeCoordinates !== null && currentCoords !== null;
 
-                // Check if we have real driving distance from the API
+                // Check if we have real driving distance from the API.
+                // NOTE: drivingDistances is scoped to selectedDate only — the
+                // fetch effect only populates legs for the currently-visible
+                // day. Week-view rows for other days intentionally fall through
+                // to straight-line estimates below; clicking a day warms the
+                // cache for that day on its next visit.
                 const realDistance = drivingDistances[appointment.id];
                 if (realDistance) {
                     infoById[appointment.id] = {

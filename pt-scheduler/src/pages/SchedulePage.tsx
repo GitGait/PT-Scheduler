@@ -367,7 +367,7 @@ export function SchedulePage() {
         homeCoordinates,
         resolvePatientCoordinatesForRouting,
         legInfoByAppointmentId,
-    } = useLocationData(appointments, patientById, appointmentsByDay, selectedDayAppointments);
+    } = useLocationData(appointments, patientById, appointmentsByDay, selectedDayAppointments, selectedDate);
 
     const resetInteractionState = useCallback(() => {
         setMoveAppointmentId(null);

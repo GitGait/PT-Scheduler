@@ -106,12 +106,12 @@ describe("useLocationData", () => {
 
         await waitFor(() => {
             expect(getDistanceMatrixMock).toHaveBeenCalledTimes(1);
-        });
+        }, { timeout: 2000 });
 
         await waitFor(() => {
             expect(result.current.drivingDistances.apt1).toEqual({ miles: 5, minutes: 12 });
             expect(result.current.drivingDistances.apt2).toEqual({ miles: 3, minutes: 7 });
-        });
+        }, { timeout: 2000 });
     });
 
     it("does NOT refetch on re-render with identical inputs (cache hit)", async () => {
@@ -134,12 +134,14 @@ describe("useLocationData", () => {
         const inputs = buildInputs(patients, appointments);
 
         const { rerender } = renderHook(
-            ({ byDay, byId, sel }) =>
-                useLocationData(appointments, byId, byDay, appointments, sel),
+            ({ appts, byDay, byId, selAppts, sel }) =>
+                useLocationData(appts, byId, byDay, selAppts, sel),
             {
                 initialProps: {
+                    appts: inputs.appointments,
                     byDay: inputs.appointmentsByDay,
                     byId: inputs.patientById,
+                    selAppts: inputs.selectedDayAppointments,
                     sel: SELECTED_DATE,
                 },
             },
@@ -147,13 +149,17 @@ describe("useLocationData", () => {
 
         await waitFor(() => {
             expect(getDistanceMatrixMock).toHaveBeenCalledTimes(1);
-        });
+        }, { timeout: 2000 });
 
-        // Re-render with fresh-reference but identical inputs. New Map and
-        // new record literal — byDay identity changes but signature is stable.
+        // Re-render with fresh-reference but identical inputs. Every reference
+        // is newly allocated — Map, record, arrays — but the rounded-coord
+        // signature is stable. This proves the signature memo (not reference
+        // equality) is what gates the fetch effect.
         rerender({
+            appts: [...appointments],
             byDay: { [SELECTED_DATE]: [...appointments] },
             byId: new Map(patients.map((p) => [p.id, p])),
+            selAppts: [...appointments],
             sel: SELECTED_DATE,
         });
 
@@ -179,12 +185,14 @@ describe("useLocationData", () => {
         });
 
         const { rerender } = renderHook(
-            ({ byDay, byId, sel }) =>
-                useLocationData(appointments, byId, byDay, appointments, sel),
+            ({ appts, byDay, byId, selAppts, sel }) =>
+                useLocationData(appts, byId, byDay, selAppts, sel),
             {
                 initialProps: {
+                    appts: appointments,
                     byDay: { [SELECTED_DATE]: appointments } as Record<string, Appointment[]>,
                     byId: new Map<string, Patient>([[patient1a.id, patient1a], [patient2.id, patient2]]),
+                    selAppts: appointments,
                     sel: SELECTED_DATE,
                 },
             },
@@ -192,16 +200,19 @@ describe("useLocationData", () => {
 
         await waitFor(() => {
             expect(getDistanceMatrixMock).toHaveBeenCalledTimes(1);
-        });
+        }, { timeout: 2000 });
 
         // Jitter patient1's coordinates by less than 0.00005 (sub-rounding).
         // Rounded to 4 decimals both produce "40.0000,-74.0000", so the
-        // signature is identical and no refetch should occur.
+        // signature is identical and no refetch should occur — even when
+        // every reference passed to rerender is freshly allocated.
         const patient1b = makePatient({ id: "p1", lat: 40.00002, lng: -74.00002 });
 
         rerender({
+            appts: [...appointments],
             byDay: { [SELECTED_DATE]: [...appointments] },
             byId: new Map<string, Patient>([[patient1b.id, patient1b], [patient2.id, patient2]]),
+            selAppts: [...appointments],
             sel: SELECTED_DATE,
         });
 

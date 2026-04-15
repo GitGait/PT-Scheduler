@@ -450,6 +450,12 @@ export const distanceCacheDB = {
         await db.distanceCache.put(entry);
     },
 
+    /** Bulk upsert cached distance entries in a single IndexedDB round-trip */
+    async putMany(entries: CachedDistance[]): Promise<void> {
+        if (entries.length === 0) return;
+        await db.distanceCache.bulkPut(entries);
+    },
+
     /** Bulk fetch: returns a Map containing only the coord keys that hit */
     async getMany(
         coordKeys: string[]
