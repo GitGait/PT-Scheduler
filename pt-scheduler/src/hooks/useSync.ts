@@ -579,6 +579,7 @@ export function useSync(config: SyncConfig | null) {
         void runFullSync();
 
         const intervalId = window.setInterval(() => {
+            if (document.hidden) return; // skip polling while tab is backgrounded
             void runFastSync();
         }, CALENDAR_POLL_INTERVAL_MS);
 
@@ -586,16 +587,24 @@ export function useSync(config: SyncConfig | null) {
             void runFastSync();
         };
 
+        const handleVisibilityChange = () => {
+            if (!document.hidden) {
+                void runFastSync(); // resume with an immediate sync on return
+            }
+        };
+
         const handleRequestSync = () => {
             void runFastSync({ force: true });
         };
 
         window.addEventListener("focus", handleWindowFocus);
+        document.addEventListener("visibilitychange", handleVisibilityChange);
         window.addEventListener(REQUEST_SYNC_EVENT, handleRequestSync);
 
         return () => {
             window.clearInterval(intervalId);
             window.removeEventListener("focus", handleWindowFocus);
+            document.removeEventListener("visibilitychange", handleVisibilityChange);
             window.removeEventListener(REQUEST_SYNC_EVENT, handleRequestSync);
         };
     }, [
