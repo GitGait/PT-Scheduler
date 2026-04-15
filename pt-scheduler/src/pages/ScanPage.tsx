@@ -6,7 +6,8 @@ import { processScreenshotFile } from "../api/ocr";
 import { geocodeAddress } from "../api/geocode";
 import { matchPatient, type MatchCandidate, type MatchTier } from "../utils/matching";
 import { usePatientStore, useAppointmentStore, useScheduleStore } from "../stores";
-import type { ExtractedAppointment, Patient } from "../types";
+import type { ExtractedAppointment, Patient, VisitType, VisitTypeCode } from "../types";
+import { VISIT_TYPE_CODES } from "../types";
 import {
     Upload,
     Check,
@@ -524,6 +525,10 @@ export function ScanPage() {
                     visitType: result.visitType,
                 });
                 const visitType = normalizedImport.visitType;
+                const validVisitType: VisitType =
+                    visitType && (VISIT_TYPE_CODES as readonly string[]).includes(visitType)
+                        ? (visitType as VisitTypeCode)
+                        : null;
                 const notesWithVisitType = [
                     visitType ? `Visit Type: ${visitType}` : "",
                     result.notes ?? "",
@@ -539,7 +544,7 @@ export function ScanPage() {
                     duration: result.duration,
                     status: "scheduled",
                     syncStatus: "local",
-                    visitType: visitType,
+                    visitType: validVisitType,
                     notes: notesWithVisitType || undefined,
                 });
 

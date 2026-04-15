@@ -458,7 +458,7 @@ export function RoutePage() {
                     routeStops.map((stop) => {
                         const isCompleted = stop.appointment.status === "completed";
                         const navUrl = buildNavigateUrl(stop.patient?.address);
-                        const phoneHref = buildPhoneHref(stop.patient?.phone);
+                        const phoneHref = buildPhoneHref(stop.patient?.phoneNumbers?.[0]?.number);
 
                         return (
                             <Card

@@ -626,6 +626,7 @@ export function SchedulePage() {
             chipNotes: source.chipNotes,
             chipNoteColor: source.chipNoteColor,
             status: 'scheduled',
+            syncStatus: 'local',
         });
         triggerSync();
     };
@@ -867,7 +868,10 @@ export function SchedulePage() {
     };
 
     // Pinch-to-zoom handlers for mobile
-    const getDistance = (touch1: Touch, touch2: Touch): number => {
+    const getDistance = (
+        touch1: { clientX: number; clientY: number },
+        touch2: { clientX: number; clientY: number }
+    ): number => {
         const dx = touch1.clientX - touch2.clientX;
         const dy = touch1.clientY - touch2.clientY;
         return Math.sqrt(dx * dx + dy * dy);
@@ -875,8 +879,11 @@ export function SchedulePage() {
 
     const handleZoomTouchStart = useCallback((event: TouchEvent) => {
         if (event.touches.length === 2) {
+            const t1 = event.touches[0];
+            const t2 = event.touches[1];
+            if (!t1 || !t2) return;
             // Two fingers - start pinch
-            const distance = getDistance(event.touches[0], event.touches[1]);
+            const distance = getDistance(t1, t2);
             pinchStateRef.current = {
                 initialDistance: distance,
                 initialScale: zoomScale,
@@ -887,7 +894,10 @@ export function SchedulePage() {
     const handleZoomTouchMove = useCallback((event: TouchEvent) => {
         if (event.touches.length === 2 && pinchStateRef.current) {
             event.preventDefault();
-            const distance = getDistance(event.touches[0], event.touches[1]);
+            const t1 = event.touches[0];
+            const t2 = event.touches[1];
+            if (!t1 || !t2) return;
+            const distance = getDistance(t1, t2);
             const scaleFactor = distance / pinchStateRef.current.initialDistance;
             const newScale = Math.min(Math.max(pinchStateRef.current.initialScale * scaleFactor, 0.5), 2);
             setZoomScale(newScale);
@@ -1163,10 +1173,12 @@ export function SchedulePage() {
             handleMove(event.clientY);
         };
 
-        const handleTouchMove = (event: TouchEvent) => {
+        const handleTouchMove = (event: globalThis.TouchEvent) => {
             if (!resizeSessionRef.current) return;
+            const touch = event.touches[0];
+            if (!touch) return;
             event.preventDefault(); // Prevent scrolling while resizing
-            handleMove(event.touches[0].clientY);
+            handleMove(touch.clientY);
         };
 
         const handleEnd = () => {

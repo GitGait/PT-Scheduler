@@ -4,6 +4,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
     variant?: "primary" | "secondary" | "danger" | "ghost" | "text";
     size?: "sm" | "md" | "lg";
     children: ReactNode;
+    as?: "button" | "span";
 }
 
 const variantStyles = {
@@ -25,11 +26,10 @@ export function Button({
     size = "md",
     className = "",
     children,
+    as = "button",
     ...props
 }: ButtonProps) {
-    return (
-        <button
-            className={`
+    const combinedClassName = `
         inline-flex items-center justify-center
         font-medium rounded
         transition-all duration-150
@@ -39,9 +39,18 @@ export function Button({
         ${variantStyles[variant]}
         ${sizeStyles[size]}
         ${className}
-      `}
-            {...props}
-        >
+      `;
+
+    if (as === "span") {
+        return (
+            <span className={combinedClassName} aria-disabled={props.disabled || undefined}>
+                {children}
+            </span>
+        );
+    }
+
+    return (
+        <button className={combinedClassName} {...props}>
             {children}
         </button>
     );

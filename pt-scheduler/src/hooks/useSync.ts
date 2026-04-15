@@ -304,7 +304,7 @@ export function useSync(config: SyncConfig | null) {
                 if (existing) {
                     await db.appointments.update(appointmentId, appointmentRecord);
                 } else {
-                    await db.appointments.add(appointmentRecord as import("../types").Appointment);
+                    await db.appointments.add(appointmentRecord as unknown as import("../types").Appointment);
                 }
                 importedAny = true;
 

@@ -1169,7 +1169,7 @@ export function PatientsPage() {
                 const extracted = await extractPatient(
                     referralText.length >= 10 ? referralText : `${referralText} patient`
                 );
-                const fullName = extracted.fullName.trim() || inferNameFromUnstructuredText(rawText);
+                const fullName = (extracted.fullName ?? "").trim() || inferNameFromUnstructuredText(rawText);
                 if (!fullName) {
                     skipped += 1;
                     continue;
@@ -1179,15 +1179,15 @@ export function PatientsPage() {
                     fullName,
                     nicknames: [],
                     phoneNumbers: (() => {
-                        const p = extracted.phone.trim() || inferPhoneFromUnstructuredText(rawText);
+                        const p = (extracted.phone ?? "").trim() || inferPhoneFromUnstructuredText(rawText);
                         return p ? [{ number: p }] : [];
                     })(),
-                    alternateContacts: extracted.alternateContacts,
-                    address: mergeAddressWithCity(extracted.address, city),
-                    facilityName: extracted.facilityName.trim() || undefined,
-                    email: extracted.email.trim() || undefined,
+                    alternateContacts: extracted.alternateContacts ?? [],
+                    address: mergeAddressWithCity(extracted.address ?? "", city),
+                    facilityName: (extracted.facilityName ?? "").trim() || undefined,
+                    email: (extracted.email ?? "").trim() || undefined,
                     status: "active",
-                    notes: extracted.notes.trim(),
+                    notes: (extracted.notes ?? "").trim(),
                 });
             } catch {
                 extractionFailures += 1;
@@ -1485,7 +1485,7 @@ export function PatientsPage() {
                 facilityName: extracted.facilityName || prev.facilityName,
                 email: extracted.email || prev.email,
                 alternateContacts:
-                    extracted.alternateContacts.length > 0
+                    extracted.alternateContacts && extracted.alternateContacts.length > 0
                         ? serializeAlternateContactsField(extracted.alternateContacts)
                         : prev.alternateContacts,
                 notes: extracted.notes
@@ -1840,11 +1840,12 @@ export function PatientsPage() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {CSV_TARGET_FIELDS.map((field) => {
                                     const confidence = csvMappingConfidence[field.key];
+                                    const isRequired = "required" in field && field.required === true;
                                     return (
                                         <div key={field.key}>
                                             <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                                                 {field.label}
-                                                {field.required ? " *" : ""}
+                                                {isRequired ? " *" : ""}
                                                 {typeof confidence === "number" && (
                                                     <span className="ml-2 text-xs text-[var(--color-primary)]">
                                                         {Math.round(confidence * 100)}%

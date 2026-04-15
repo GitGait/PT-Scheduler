@@ -7,6 +7,13 @@ export interface VisitTypeConfig {
     gradient: string;
 }
 
+const DEFAULT_VISIT_TYPE_CONFIG: VisitTypeConfig = {
+    code: null,
+    label: "Unspecified",
+    bg: "#b0bec5",
+    gradient: "linear-gradient(135deg, #b0bec5 0%, #90a4ae 100%)",
+};
+
 export const VISIT_TYPE_CONFIGS: VisitTypeConfig[] = [
     {
         code: "PT01",
@@ -80,12 +87,7 @@ export const VISIT_TYPE_CONFIGS: VisitTypeConfig[] = [
         bg: "#607d8b",
         gradient: "linear-gradient(135deg, #607d8b 0%, #455a64 100%)",
     },
-    {
-        code: null,
-        label: "Unspecified",
-        bg: "#b0bec5",
-        gradient: "linear-gradient(135deg, #b0bec5 0%, #90a4ae 100%)",
-    },
+    { ...DEFAULT_VISIT_TYPE_CONFIG },
 ];
 
 const colorMap = new Map<VisitType, VisitTypeConfig>();
@@ -93,26 +95,21 @@ for (const config of VISIT_TYPE_CONFIGS) {
     colorMap.set(config.code, config);
 }
 
-const defaultConfig = VISIT_TYPE_CONFIGS.find((c) => c.code === null);
-if (!defaultConfig) {
-    throw new Error("VISIT_TYPE_CONFIGS must include a null (default) config entry");
-}
-
 export function getVisitTypeColor(visitType: VisitType | undefined): string {
     const config = colorMap.get(visitType ?? null);
-    return config?.bg ?? defaultConfig.bg;
+    return config?.bg ?? DEFAULT_VISIT_TYPE_CONFIG.bg;
 }
 
 export function getVisitTypeGradient(visitType: VisitType | undefined): string {
     const config = colorMap.get(visitType ?? null);
-    return config?.gradient ?? defaultConfig.gradient;
+    return config?.gradient ?? DEFAULT_VISIT_TYPE_CONFIG.gradient;
 }
 
 export function getVisitTypeLabel(visitType: VisitType | undefined): string {
     const config = colorMap.get(visitType ?? null);
-    return config?.label ?? defaultConfig.label;
+    return config?.label ?? DEFAULT_VISIT_TYPE_CONFIG.label;
 }
 
 export function getVisitTypeConfig(visitType: VisitType | undefined): VisitTypeConfig {
-    return colorMap.get(visitType ?? null) ?? defaultConfig;
+    return colorMap.get(visitType ?? null) ?? DEFAULT_VISIT_TYPE_CONFIG;
 }

@@ -287,7 +287,7 @@ export async function listCalendarEvents(
 
     const raw = await response.json();
     const data = parseWithSchema(calendarEventListResponseSchema, raw, "Calendar events response");
-    const items = data.items;
+    const items = data.items ?? [];
 
     // TODO: handle nextPageToken for >2500 events
     return items

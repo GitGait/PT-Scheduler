@@ -771,7 +771,7 @@ async function fetchPatientSheetRows(
 
     const raw = await response.json();
     const payload = parseWithSchema(sheetValuesSchema, raw, "Sheets values response");
-    return payload.values;
+    return payload.values ?? [];
 }
 
 async function getSheetIdByTitle(
@@ -830,7 +830,8 @@ async function fetchSpreadsheetMetadata(
     }
 
     const raw = await response.json();
-    return parseWithSchema(spreadsheetMetadataSchema, raw, "Spreadsheet metadata response");
+    const parsed = parseWithSchema(spreadsheetMetadataSchema, raw, "Spreadsheet metadata response");
+    return { sheets: parsed.sheets ?? [] };
 }
 
 async function deletePatientSheetRows(
@@ -981,7 +982,7 @@ async function fetchDayNoteSheetRows(
 
     const raw = await response.json();
     const payload = parseWithSchema(sheetValuesSchema, raw, "Sheets values response");
-    return payload.values;
+    return payload.values ?? [];
 }
 
 async function ensureDayNoteSheetExists(spreadsheetId: string, token: string): Promise<void> {
