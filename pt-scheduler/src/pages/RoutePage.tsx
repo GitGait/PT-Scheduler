@@ -7,6 +7,8 @@ import { RouteEmptyState } from "../components/ui/EmptyState";
 import { geocodeAddress } from "../api/geocode";
 import { optimizeRoute } from "../api/optimize";
 import { getDistanceMatrix } from "../api/distance";
+import { distanceCacheDB, makeCoordKey } from "../db/operations";
+import type { CachedDistance } from "../db/schema";
 import type { Patient, Appointment } from "../types";
 import {
     Phone,
@@ -190,18 +192,69 @@ export function RoutePage() {
 
             if (locations.length < 2) return;
 
+            // Build sequential leg keys and read-through the cache
+            const legKeys: string[] = [];
+            for (let i = 0; i < locations.length - 1; i++) {
+                legKeys.push(makeCoordKey(locations[i], locations[i + 1]));
+            }
+
             setIsLoadingDistances(true);
             try {
-                const result = await getDistanceMatrix(locations);
+                const cached = await distanceCacheDB.getMany(legKeys);
                 if (cancelled) return;
 
                 const updates: Record<string, { miles: number; minutes: number }> = {};
+
+                // Full cache hit: populate from cache, skip API entirely
+                if (cached.size === legKeys.length) {
+                    for (let i = 0; i < locations.length - 1; i++) {
+                        const hit = cached.get(legKeys[i]);
+                        if (hit) {
+                            updates[locations[i + 1].id] = {
+                                miles: hit.distanceMiles,
+                                minutes: hit.durationMinutes,
+                            };
+                        }
+                    }
+                    setDrivingDistances(updates);
+                    return;
+                }
+
+                // Cache miss: fetch full day and write every leg back
+                const result = await getDistanceMatrix(locations);
+                if (cancelled) return;
+
+                const entriesToCache: CachedDistance[] = [];
+                const now = new Date();
+
                 for (const dist of result.distances) {
                     updates[dist.destinationId] = {
                         miles: dist.distanceMiles,
-                        minutes: dist.durationMinutes
+                        minutes: dist.durationMinutes,
                     };
+
+                    // Legs are sequential, so destinationId uniquely identifies
+                    // the leg index within locations[].
+                    const legIndex = locations.findIndex(
+                        (loc, idx) => idx > 0 && loc.id === dist.destinationId,
+                    );
+                    if (legIndex > 0) {
+                        const legKey = makeCoordKey(
+                            locations[legIndex - 1],
+                            locations[legIndex],
+                        );
+                        entriesToCache.push({
+                            coordKey: legKey,
+                            distanceMiles: dist.distanceMiles,
+                            durationMinutes: dist.durationMinutes,
+                            createdAt: now,
+                        });
+                    }
                 }
+
+                await distanceCacheDB.putMany(entriesToCache);
+                if (cancelled) return;
+
                 setDrivingDistances(updates);
             } catch (err) {
                 console.error('Failed to fetch driving distances:', err);
