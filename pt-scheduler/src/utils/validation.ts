@@ -63,26 +63,6 @@ export const extractPatientResponseSchema = z.object({
   notes: z.string().default("")
 });
 
-export const csvColumnMappingSchema = z.object({
-  id: z.string().nullable(),
-  fullName: z.string().nullable(),
-  nicknames: z.string().nullable(),
-  phone: z.string().nullable(),
-  alternateContacts: z.string().nullable(),
-  address: z.string().nullable(),
-  facilityName: z.string().nullable(),
-  lat: z.string().nullable(),
-  lng: z.string().nullable(),
-  status: z.string().nullable(),
-  notes: z.string().nullable(),
-  email: z.string().nullable()
-});
-
-export const csvMappingResponseSchema = z.object({
-  mapping: csvColumnMappingSchema,
-  confidence: z.record(z.string(), z.number().min(0).max(1)).optional()
-});
-
 export const distanceMatrixElementSchema = z.object({
   originId: z.string(),
   destinationId: z.string(),
@@ -144,8 +124,6 @@ export type AIMatchResponse = z.infer<typeof aiMatchResponseSchema>;
 export type AlternateContact = z.infer<typeof alternateContactSchema>;
 export type PhoneEntry = z.infer<typeof phoneEntrySchema>;
 export type ExtractPatientResponse = z.infer<typeof extractPatientResponseSchema>;
-export type CSVColumnMapping = z.infer<typeof csvColumnMappingSchema>;
-export type CSVMappingResponse = z.infer<typeof csvMappingResponseSchema>;
 export type DistanceMatrixElement = z.infer<typeof distanceMatrixElementSchema>;
 export type DistanceMatrixResponse = z.infer<typeof distanceMatrixResponseSchema>;
 export type SheetValues = z.infer<typeof sheetValuesSchema>;
@@ -201,11 +179,6 @@ export const extractPatientRequestSchema = z.object({
   referralText: z.string().min(10, "Referral text is too short")
 });
 
-export const csvMappingRequestSchema = z.object({
-  headers: z.array(z.string().min(1)).min(1, "At least one CSV header is required"),
-  sampleRows: z.array(z.array(z.string())).max(25).default([])
-});
-
 export const distanceMatrixRequestSchema = z.object({
   locations: z.array(
     z.object({
@@ -222,7 +195,6 @@ export type OptimizeRequest = z.infer<typeof optimizeRequestSchema>;
 export type GeocodeRequest = z.infer<typeof geocodeRequestSchema>;
 export type MatchPatientRequest = z.infer<typeof matchPatientRequestSchema>;
 export type ExtractPatientRequest = z.infer<typeof extractPatientRequestSchema>;
-export type CSVMappingRequest = z.infer<typeof csvMappingRequestSchema>;
 export type DistanceMatrixRequest = z.infer<typeof distanceMatrixRequestSchema>;
 
 // =============================================================================

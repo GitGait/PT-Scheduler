@@ -558,15 +558,6 @@ export function SettingsPage() {
                 <p className="mt-2 text-xs text-[var(--color-text-secondary)]">
                     alternateContacts format: Name|Phone|Relationship; Name|Phone
                 </p>
-                <div className="mt-3 flex flex-col gap-1">
-                    <a
-                        href="/templates/patients_template.csv"
-                        download
-                        className="inline-block text-sm text-[var(--color-primary)] hover:underline"
-                    >
-                        Download CSV template
-                    </a>
-                </div>
             </Card>
 
             <Card className="mb-4">

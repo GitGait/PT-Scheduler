@@ -20,8 +20,6 @@ export {
   aiMatchResponseSchema,
   extractPatientRequestSchema,
   extractPatientResponseSchema,
-  csvMappingRequestSchema,
-  csvMappingResponseSchema,
   distanceMatrixRequestSchema,
   distanceMatrixResponseSchema
 } from "../src/utils/validation.js";
