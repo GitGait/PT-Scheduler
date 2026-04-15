@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback, useRef, useEffect, type ReactNode } from "react";
 import { Phone, MessageSquare, Navigation, Edit3, Move, Trash2, X, Copy, Check, PauseCircle, StickyNote, Plus, Pencil } from "lucide-react";
 import type { Appointment, Patient } from "../types";
 import { isPersonalEvent, getPersonalCategoryLabel } from "../utils/personalEventColors";
@@ -268,52 +268,49 @@ export function AppointmentActionSheet({
 
                 {/* Action buttons */}
                 <div className="p-2">
-                    {/* Call Patient (Primary) */}
-                    {hasPhone && phoneHref && (
-                        <div className="flex items-center">
-                            <a
-                                href={phoneHref}
-                                onClick={onClose}
-                                className="flex-1 flex items-center gap-4 py-3 px-4 text-left text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] rounded-lg transition-colors"
-                            >
-                                <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--color-primary-light)]">
-                                    <Phone className="w-5 h-5 text-[var(--color-primary)]" />
-                                </div>
-                                <div className="flex flex-col">
-                                    <span className="font-medium">Call Patient</span>
-                                    <span className="text-sm text-[var(--color-text-secondary)]">{formatPhoneDisplay(primaryPhone)}</span>
-                                </div>
-                            </a>
-                            <button
-                                onClick={() => copyToClipboard(primaryPhone ?? '', 'phone')}
-                                className="p-2.5 mr-2 rounded-full hover:bg-[var(--color-surface-hover)] transition-colors"
-                                aria-label="Copy phone number"
-                            >
-                                {copiedKey === 'phone' ? (
-                                    <Check className="w-4 h-4 text-green-600 dark:text-green-400" />
-                                ) : (
-                                    <Copy className="w-4 h-4 text-[var(--color-text-secondary)]" />
-                                )}
-                            </button>
-                        </div>
-                    )}
-
-                    {/* Text Patient (Primary) */}
-                    {hasPhone && smsHref && (
-                        <a
-                            href={smsHref}
-                            onClick={onClose}
-                            className="w-full flex items-center gap-4 py-3 px-4 text-left text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] rounded-lg transition-colors"
-                        >
-                            <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--color-primary-light)]">
-                                <MessageSquare className="w-5 h-5 text-[var(--color-primary)]" />
-                            </div>
-                            <div className="flex flex-col">
-                                <span className="font-medium">Text Patient</span>
-                                <span className="text-sm text-[var(--color-text-secondary)]">{formatPhoneDisplay(primaryPhone)}</span>
-                            </div>
-                        </a>
-                    )}
+                    {/* Primary patient contact */}
+                    {hasPhone && (() => {
+                        const primaryActions: ContactRowAction[] = [];
+                        if (phoneHref) {
+                            primaryActions.push({
+                                key: "call-primary",
+                                icon: <Phone className="w-5 h-5" />,
+                                ariaLabel: "Call patient",
+                                onClick: () => {
+                                    window.location.href = phoneHref;
+                                    onClose();
+                                },
+                            });
+                        }
+                        if (smsHref) {
+                            primaryActions.push({
+                                key: "text-primary",
+                                icon: <MessageSquare className="w-5 h-5" />,
+                                ariaLabel: "Text patient",
+                                onClick: () => {
+                                    window.location.href = smsHref;
+                                    onClose();
+                                },
+                            });
+                        }
+                        primaryActions.push({
+                            key: "phone",
+                            icon: <Copy className="w-4 h-4" />,
+                            ariaLabel: "Copy phone number",
+                            copyable: true,
+                            onClick: () => copyToClipboard(primaryPhone ?? "", "phone"),
+                        });
+                        return (
+                            <ContactRow
+                                role="primary"
+                                leadIcon={<Phone className="w-4 h-4" />}
+                                primaryText={!isPersonal ? (patient?.fullName ?? "Patient") : headerName}
+                                secondaryText={formatPhoneDisplay(primaryPhone)}
+                                copiedKey={copiedKey}
+                                actions={primaryActions}
+                            />
+                        );
+                    })()}
 
                     {/* Alternate Contacts */}
                     {alternateContacts.map((contact, index) => {
@@ -659,6 +656,99 @@ export function AppointmentActionSheet({
                         Cancel
                     </button>
                 </div>
+            </div>
+        </div>
+    );
+}
+
+// ---------- Private helpers ----------
+
+type ContactRole = "primary" | "alt" | "address";
+
+interface ContactRowAction {
+    key: string;
+    icon: ReactNode;
+    onClick: () => void;
+    ariaLabel: string;
+    /** When set, renders a green check instead of the icon if copiedKey === key */
+    copyable?: boolean;
+}
+
+interface ContactRowProps {
+    role: ContactRole;
+    /** Icon rendered in the left badge (a Lucide icon element) */
+    leadIcon: ReactNode;
+    /** First line (e.g. "John Smith" or "Mary · wife" or "1420 Oak Lane") */
+    primaryText: string;
+    /** Second line (phone number or address line 2) — optional */
+    secondaryText?: string;
+    actions: ContactRowAction[];
+    copiedKey: string | null;
+}
+
+function ContactRow({
+    role,
+    leadIcon,
+    primaryText,
+    secondaryText,
+    actions,
+    copiedKey,
+}: ContactRowProps) {
+    const badgeClass =
+        role === "primary"
+            ? "bg-[var(--color-primary-light)] text-[var(--color-primary)]"
+            : role === "alt"
+            ? "bg-amber-100 dark:bg-amber-950 text-amber-500 dark:text-amber-400"
+            : "bg-green-100 dark:bg-green-950 text-green-600 dark:text-green-400";
+
+    const actionBtnClass =
+        role === "primary"
+            ? "bg-[var(--color-primary-light)] text-[var(--color-primary)] hover:brightness-95"
+            : role === "alt"
+            ? "bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400 hover:bg-amber-200 dark:hover:bg-amber-900"
+            : "bg-green-100 dark:bg-green-950 text-green-600 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-900";
+
+    const copyBtnClass =
+        "bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)] hover:brightness-95";
+
+    return (
+        <div className="flex items-center gap-3 py-2 px-3">
+            <div className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center ${badgeClass}`}>
+                {leadIcon}
+            </div>
+            <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium text-[var(--color-text-primary)] truncate">
+                    {primaryText}
+                </div>
+                {secondaryText && (
+                    <div className="text-xs text-[var(--color-text-secondary)] truncate">
+                        {secondaryText}
+                    </div>
+                )}
+            </div>
+            <div className="flex items-center gap-1 shrink-0">
+                {actions.map((action) => {
+                    const showCheck = action.copyable && copiedKey === action.key;
+                    const isCopy = action.copyable === true;
+                    return (
+                        <button
+                            key={action.key}
+                            type="button"
+                            onClick={action.onClick}
+                            aria-label={action.ariaLabel}
+                            title={action.ariaLabel}
+                            className={`w-11 h-11 rounded-xl flex items-center justify-center transition-colors ${
+                                isCopy ? copyBtnClass : actionBtnClass
+                            }`}
+                        >
+                            {showCheck ? (
+                                <Check className="w-5 h-5 text-green-600 dark:text-green-400" />
+                            ) : (
+                                action.icon
+                            )}
+                        </button>
+                    );
+                })}
             </div>
         </div>
     );
