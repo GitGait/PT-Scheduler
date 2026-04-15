@@ -42,6 +42,7 @@ const inputAppointment: Omit<Appointment, "id" | "createdAt" | "updatedAt"> = {
     status: "scheduled",
     syncStatus: "local",
     notes: "Test appointment",
+    visitType: null,
 };
 
 describe("useAppointmentStore.create", () => {
@@ -103,6 +104,7 @@ describe("useAppointmentStore.update", () => {
                     status: "scheduled",
                     syncStatus: "local",
                     notes: "Initial",
+                    visitType: null,
                     createdAt: new Date("2026-02-08T00:00:00.000Z"),
                     updatedAt: new Date("2026-02-08T00:00:00.000Z"),
                 },

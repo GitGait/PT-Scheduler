@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { matchCandidate, MatchCandidate } from "./matching";
+import { matchCandidate, type MatchCandidate } from "./matching";
 
 describe("matchCandidate", () => {
   const candidates: MatchCandidate[] = [

@@ -153,6 +153,7 @@ describe("appointmentDB", () => {
             duration: 45,
             status: "scheduled",
             syncStatus: "local",
+            visitType: null,
         });
 
         expect(id).toBeDefined();
@@ -168,6 +169,7 @@ describe("appointmentDB", () => {
             duration: 60,
             status: "scheduled",
             syncStatus: "local",
+            visitType: null,
         });
         await appointmentDB.create({
             patientId: "p2",
@@ -176,6 +178,7 @@ describe("appointmentDB", () => {
             duration: 60,
             status: "scheduled",
             syncStatus: "local",
+            visitType: null,
         });
         await appointmentDB.create({
             patientId: "p3",
@@ -184,6 +187,7 @@ describe("appointmentDB", () => {
             duration: 60,
             status: "scheduled",
             syncStatus: "local",
+            visitType: null,
         });
 
         const feb10 = await appointmentDB.byDate("2026-02-10");
@@ -201,6 +205,7 @@ describe("appointmentDB", () => {
             duration: 60,
             status: "scheduled",
             syncStatus: "local",
+            visitType: null,
         });
         await appointmentDB.create({
             patientId: "p2",
@@ -209,6 +214,7 @@ describe("appointmentDB", () => {
             duration: 60,
             status: "scheduled",
             syncStatus: "local",
+            visitType: null,
         });
         await appointmentDB.create({
             patientId: "p3",
@@ -217,6 +223,7 @@ describe("appointmentDB", () => {
             duration: 60,
             status: "scheduled",
             syncStatus: "local",
+            visitType: null,
         });
 
         const range = await appointmentDB.byRange("2026-02-09", "2026-02-11");
@@ -232,6 +239,7 @@ describe("appointmentDB", () => {
             duration: 60,
             status: "scheduled",
             syncStatus: "local",
+            visitType: null,
         });
 
         await appointmentDB.update(id, { status: "completed", notes: "All done" });
@@ -248,6 +256,7 @@ describe("appointmentDB", () => {
             duration: 60,
             status: "scheduled",
             syncStatus: "local",
+            visitType: null,
         });
 
         await appointmentDB.delete(id);
@@ -263,6 +272,7 @@ describe("appointmentDB", () => {
             duration: 60,
             status: "scheduled",
             syncStatus: "local",
+            visitType: null,
         });
 
         await appointmentDB.markSynced(id, "google-event-123");
@@ -281,7 +291,7 @@ describe("syncQueueDB", () => {
         const id = await syncQueueDB.add({
             type: "create",
             entity: "appointment",
-            data: { patientId: "p1" },
+            data: { entityId: "p1" },
         });
 
         expect(id).toBeGreaterThan(0);
@@ -291,12 +301,12 @@ describe("syncQueueDB", () => {
         await syncQueueDB.add({
             type: "create",
             entity: "appointment",
-            data: { id: 1 },
+            data: { entityId: "apt-1" },
         });
         await syncQueueDB.add({
             type: "update",
             entity: "patient",
-            data: { id: 2 },
+            data: { entityId: "pt-2" },
         });
 
         const pending = await syncQueueDB.getPending();
@@ -307,7 +317,7 @@ describe("syncQueueDB", () => {
         const id = await syncQueueDB.add({
             type: "create",
             entity: "appointment",
-            data: {},
+            data: { entityId: "test" },
         });
 
         await syncQueueDB.markProcessing(id);
@@ -319,7 +329,7 @@ describe("syncQueueDB", () => {
         const id = await syncQueueDB.add({
             type: "create",
             entity: "appointment",
-            data: {},
+            data: { entityId: "test" },
         });
 
         await syncQueueDB.markFailed(id, "Network error");
@@ -335,7 +345,7 @@ describe("syncQueueDB", () => {
         const id = await syncQueueDB.add({
             type: "create",
             entity: "appointment",
-            data: {},
+            data: { entityId: "test" },
         });
 
         // Fail 5 times
@@ -352,7 +362,7 @@ describe("syncQueueDB", () => {
         const id = await syncQueueDB.add({
             type: "create",
             entity: "appointment",
-            data: {},
+            data: { entityId: "test" },
         });
 
         await syncQueueDB.remove(id);
@@ -361,8 +371,8 @@ describe("syncQueueDB", () => {
     });
 
     it("should get pending count", async () => {
-        await syncQueueDB.add({ type: "create", entity: "appointment", data: {} });
-        await syncQueueDB.add({ type: "update", entity: "patient", data: {} });
+        await syncQueueDB.add({ type: "create", entity: "appointment", data: { entityId: "a" } });
+        await syncQueueDB.add({ type: "update", entity: "patient", data: { entityId: "b" } });
 
         const count = await syncQueueDB.getPendingCount();
         expect(count).toBe(2);
@@ -372,7 +382,7 @@ describe("syncQueueDB", () => {
         const id = await syncQueueDB.add({
             type: "create",
             entity: "appointment",
-            data: {},
+            data: { entityId: "test" },
         });
 
         await syncQueueDB.markSynced(id);

@@ -1,4 +1,4 @@
-import { SyncQueueItem } from "../types";
+import type { SyncQueueItem } from "../types";
 import { getNextRetryAt, shouldStopRetrying } from "../utils/backoff";
 
 let idCounter = 0;

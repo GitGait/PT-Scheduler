@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SyncQueueItem } from "../types";
+import type { SyncQueueItem } from "../types";
 import { markFailure, markProcessing, markSuccess, takeBatch } from "./syncQueue";
 
 function makeItem(overrides: Partial<SyncQueueItem> = {}): SyncQueueItem {
@@ -7,7 +7,7 @@ function makeItem(overrides: Partial<SyncQueueItem> = {}): SyncQueueItem {
     id: 1,
     type: "create",
     entity: "appointment",
-    data: { id: "apt-1" },
+    data: { entityId: "apt-1" },
     timestamp: new Date("2026-02-07T12:00:00.000Z"),
     retryCount: 0,
     status: "pending",

@@ -17,6 +17,7 @@ interface ClearedWeekAppointmentSnapshot {
     startTime: string;
     duration: number;
     status: Appointment["status"];
+    visitType: Appointment["visitType"];
     notes?: string;
     chipNote?: string;
     chipNotes?: string[];
@@ -196,6 +197,7 @@ export function useWeekActions(
                     startTime: appointment.startTime,
                     duration: appointment.duration,
                     status: appointment.status,
+                    visitType: appointment.visitType,
                     notes: appointment.notes,
                     chipNote: appointment.chipNote,
                     chipNotes: appointment.chipNotes,
@@ -274,6 +276,7 @@ export function useWeekActions(
                     duration: appointment.duration,
                     status: appointment.status,
                     syncStatus: "local",
+                    visitType: appointment.visitType,
                     notes: appointment.notes,
                     chipNote: appointment.chipNote,
                     chipNotes: appointment.chipNotes,

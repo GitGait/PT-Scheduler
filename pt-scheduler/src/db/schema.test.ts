@@ -59,6 +59,7 @@ describe("PTSchedulerDB Schema", () => {
             duration: 60,
             status: "scheduled" as const,
             syncStatus: "local" as const,
+            visitType: null,
             createdAt: new Date(),
             updatedAt: new Date(),
         };
@@ -74,7 +75,7 @@ describe("PTSchedulerDB Schema", () => {
         const item = {
             type: "create" as const,
             entity: "appointment" as const,
-            data: { test: true },
+            data: { entityId: "test" },
             timestamp: new Date(),
             retryCount: 0,
             status: "pending" as const,

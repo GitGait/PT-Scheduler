@@ -1,9 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { ErrorBoundary } from "./ErrorBoundary";
 
 // Test component that throws an error
-function ThrowError() {
+function ThrowError(): ReactNode {
     throw new Error("Test error");
 }
 

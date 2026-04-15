@@ -13,7 +13,7 @@ describe("fetchJsonWithTimeout", () => {
 
   it("returns parsed JSON on success", async () => {
     const mockData = { result: "success" };
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve(mockData)
     });
@@ -32,7 +32,7 @@ describe("fetchJsonWithTimeout", () => {
   });
 
   it("throws ApiError on non-ok response", async () => {
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 404,
       json: () => Promise.resolve({ error: "Not found", code: "NOT_FOUND" })
@@ -48,7 +48,7 @@ describe("fetchJsonWithTimeout", () => {
   });
 
   it("uses fallback message when response has no error", async () => {
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 500,
       json: () => Promise.reject(new Error("Invalid JSON"))
@@ -68,7 +68,7 @@ describe("fetchJsonWithTimeout", () => {
     abortError.name = "AbortError";
 
     // Mock fetch to reject with abort error when signal is aborted
-    global.fetch = vi.fn().mockImplementation((_url, options) => {
+    globalThis.fetch = vi.fn().mockImplementation((_url, options) => {
       return new Promise((_, reject) => {
         if (options?.signal) {
           options.signal.addEventListener("abort", () => {
@@ -100,7 +100,7 @@ describe("fetchJsonWithTimeout", () => {
     abortError.name = "AbortError";
 
     // Mock fetch to reject with abort error when signal is aborted
-    global.fetch = vi.fn().mockImplementation((_url, options) => {
+    globalThis.fetch = vi.fn().mockImplementation((_url, options) => {
       return new Promise((_, reject) => {
         if (options?.signal) {
           options.signal.addEventListener("abort", () => {
@@ -127,9 +127,9 @@ describe("fetchJsonWithTimeout", () => {
   });
 
   it("clears timeout on success", async () => {
-    const clearTimeoutSpy = vi.spyOn(global, "clearTimeout");
+    const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
 
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ data: "test" })
     });
@@ -140,9 +140,9 @@ describe("fetchJsonWithTimeout", () => {
   });
 
   it("clears timeout on error", async () => {
-    const clearTimeoutSpy = vi.spyOn(global, "clearTimeout");
+    const clearTimeoutSpy = vi.spyOn(globalThis, "clearTimeout");
 
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: false,
       status: 500,
       json: () => Promise.resolve({ error: "Error" })
@@ -156,7 +156,7 @@ describe("fetchJsonWithTimeout", () => {
   });
 
   it("passes request init options to fetch", async () => {
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({})
     });
@@ -182,9 +182,9 @@ describe("fetchJsonWithTimeout", () => {
   });
 
   it("uses default 30s timeout", async () => {
-    const setTimeoutSpy = vi.spyOn(global, "setTimeout");
+    const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
 
-    global.fetch = vi.fn().mockResolvedValue({
+    globalThis.fetch = vi.fn().mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({})
     });
@@ -197,7 +197,7 @@ describe("fetchJsonWithTimeout", () => {
   it("re-throws non-abort errors", async () => {
     const networkError = new Error("Network failure");
 
-    global.fetch = vi.fn().mockRejectedValue(networkError);
+    globalThis.fetch = vi.fn().mockRejectedValue(networkError);
 
     await expect(
       fetchJsonWithTimeout("/api/test", { method: "GET" }, "Fallback")
