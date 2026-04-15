@@ -274,8 +274,8 @@ export function AppointmentActionSheet({
                                 icon: <Phone className="w-5 h-5" />,
                                 ariaLabel: "Call patient",
                                 onClick: () => {
-                                    window.location.href = phoneHref;
                                     onClose();
+                                    window.location.href = phoneHref;
                                 },
                             });
                         }
@@ -285,8 +285,8 @@ export function AppointmentActionSheet({
                                 icon: <MessageSquare className="w-5 h-5" />,
                                 ariaLabel: "Text patient",
                                 onClick: () => {
-                                    window.location.href = smsHref;
                                     onClose();
+                                    window.location.href = smsHref;
                                 },
                             });
                         }
@@ -301,7 +301,7 @@ export function AppointmentActionSheet({
                             <ContactRow
                                 role="primary"
                                 leadIcon={<Phone className="w-4 h-4" />}
-                                primaryText={!isPersonal ? (patient?.fullName ?? "Patient") : headerName}
+                                primaryText={patient?.fullName ?? "Patient"}
                                 secondaryText={formatPhoneDisplay(primaryPhone)}
                                 copiedKey={copiedKey}
                                 actions={primaryActions}
@@ -325,8 +325,8 @@ export function AppointmentActionSheet({
                                 icon: <Phone className="w-5 h-5" />,
                                 ariaLabel: `Call ${label}`,
                                 onClick: () => {
-                                    window.location.href = altPhoneHref;
                                     onClose();
+                                    window.location.href = altPhoneHref;
                                 },
                             });
                         }
@@ -336,8 +336,8 @@ export function AppointmentActionSheet({
                                 icon: <MessageSquare className="w-5 h-5" />,
                                 ariaLabel: `Text ${label}`,
                                 onClick: () => {
-                                    window.location.href = altSmsHref;
                                     onClose();
+                                    window.location.href = altSmsHref;
                                 },
                             });
                         }
@@ -428,8 +428,8 @@ export function AppointmentActionSheet({
                         <IconBarButton
                             tint="amber"
                             icon={<StickyNote className="w-5 h-5" />}
-                            label={noteCount > 0 ? "Notes" : "Note"}
-                            ariaLabel={noteCount > 0 ? "Edit Notes" : "Add Quick Note"}
+                            label={(chipNoteMode ? notes.length : noteCount) > 0 ? "Notes" : "Note"}
+                            ariaLabel={(chipNoteMode ? notes.length : noteCount) > 0 ? "Edit Notes" : "Add Quick Note"}
                             onClick={() => setChipNoteMode(true)}
                         />
                         <IconBarButton
