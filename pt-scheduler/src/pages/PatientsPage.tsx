@@ -1675,6 +1675,7 @@ export function PatientsPage() {
                                 type="file"
                                 accept=".csv,text/csv"
                                 className="hidden"
+                                disabled={isImportingCsv || isMappingCsv || isCleaningDuplicates}
                                 onChange={(event) => {
                                     const file = event.target.files?.[0];
                                     if (file) {

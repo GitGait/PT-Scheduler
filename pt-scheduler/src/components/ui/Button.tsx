@@ -42,8 +42,16 @@ export function Button({
       `;
 
     if (as === "span") {
+        // `disabled` on an HTML button auto-applies `disabled:opacity-50` etc;
+        // for a span we have to simulate it — and use pointer-events-none so
+        // clicks on the span don't propagate to the wrapping <label> and
+        // trigger the sibling file input.
+        const isDisabled = Boolean(props.disabled);
+        const spanClassName = `${combinedClassName} ${
+            isDisabled ? "opacity-50 cursor-not-allowed pointer-events-none" : ""
+        }`;
         return (
-            <span className={combinedClassName} aria-disabled={props.disabled || undefined}>
+            <span className={spanClassName} aria-disabled={isDisabled || undefined}>
                 {children}
             </span>
         );
