@@ -110,7 +110,14 @@ export const usePatientStore = create<PatientState & PatientActions>((set, get) 
     update: async (id, changes) => {
         set({ error: null });
         try {
-            await patientDB.update(id, changes);
+            // If address changed and no explicit new coords came along, null out
+            // lat/lng so the next geocode pass re-resolves the new address.
+            // Prevents stale coordinates from silently sticking to a new address.
+            const finalChanges: Partial<Omit<Patient, "id" | "createdAt">> =
+                changes.address !== undefined && changes.lat === undefined && changes.lng === undefined
+                    ? { ...changes, lat: undefined, lng: undefined }
+                    : changes;
+            await patientDB.update(id, finalChanges);
             await enqueuePatientSync("update", id);
             const updatedPatient = await patientDB.get(id);
             if (updatedPatient) {
