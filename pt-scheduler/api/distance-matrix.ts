@@ -99,6 +99,8 @@ export default async function handler(
                 durationMinutes: number;
             }> = [];
 
+            let sawAbort = false;
+
             for (let i = 0; i < settled.length; i++) {
                 const result = settled[i];
                 const leg = legs[i];
@@ -113,13 +115,34 @@ export default async function handler(
                         durationMinutes: Math.round(durationSeconds / 60)
                     });
                 } else {
-                    const reason = result.reason instanceof Error
-                        ? result.reason.message
-                        : String(result.reason);
+                    const reasonErr = result.reason;
+                    const isAbort = (reasonErr instanceof Error && reasonErr.name === "AbortError")
+                        || (reasonErr instanceof Error && reasonErr.message.includes("aborted"));
+                    if (isAbort) {
+                        sawAbort = true;
+                    }
+                    const reason = reasonErr instanceof Error
+                        ? reasonErr.message
+                        : String(reasonErr);
                     console.warn(
                         `[DistanceMatrix] leg ${leg.from.id} -> ${leg.to.id} failed: ${reason}`
                     );
                 }
+            }
+
+            // Timeout is more specific than generic upstream failure — check first.
+            if (sawAbort) {
+                res.status(504).json({ error: "Distance Matrix timed out", code: "TIMEOUT" });
+                return;
+            }
+
+            // Total upstream failure: had work to do, nothing succeeded.
+            if (legs.length > 0 && distances.length === 0) {
+                res.status(502).json({
+                    error: "Distance Matrix service unavailable",
+                    code: "UPSTREAM_ERROR"
+                });
+                return;
             }
 
             const result = { distances };

@@ -181,4 +181,44 @@ describe("distance-matrix handler", () => {
         };
         expect(body.distances).toHaveLength(9);
     });
+
+    it("all legs fail returns 502", async () => {
+        const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+        fetchMock.mockImplementation(async () => {
+            return {
+                ok: false,
+                status: 500,
+                json: async () => ({})
+            } as unknown as Response;
+        });
+
+        const locations = makeLocations(11);
+        const req = makeReq({ locations });
+        const res = makeRes();
+
+        await handler(req, res as unknown as VercelResponse);
+
+        expect(res._status).toBe(502);
+        const body = res._body as { error: string; code: string };
+        expect(body.code).toBe("UPSTREAM_ERROR");
+    });
+
+    it("aborted fetch returns 504", async () => {
+        const fetchMock = globalThis.fetch as ReturnType<typeof vi.fn>;
+        fetchMock.mockImplementationOnce(async () => {
+            const err = Object.assign(new Error("aborted"), { name: "AbortError" });
+            throw err;
+        });
+        fetchMock.mockImplementation(async () => googleOkResponse(1609, 300));
+
+        const locations = makeLocations(11);
+        const req = makeReq({ locations });
+        const res = makeRes();
+
+        await handler(req, res as unknown as VercelResponse);
+
+        expect(res._status).toBe(504);
+        const body = res._body as { error: string; code: string };
+        expect(body.code).toBe("TIMEOUT");
+    });
 });
