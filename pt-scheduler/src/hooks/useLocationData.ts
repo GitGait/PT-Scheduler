@@ -281,7 +281,7 @@ export function useLocationData(
 
             if (!allHit) {
                 try {
-                    const result = await getDistanceMatrix(locations);
+                    const result = await getDistanceMatrix(locations, abortController.signal);
 
                     if (abortController.signal.aborted) return;
 

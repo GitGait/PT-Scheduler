@@ -14,7 +14,8 @@ export interface LocationInput {
  * Returns distances from each location to the next in sequence.
  */
 export async function getDistanceMatrix(
-    locations: LocationInput[]
+    locations: LocationInput[],
+    signal?: AbortSignal,
 ): Promise<DistanceMatrixResponse> {
     if (locations.length < 2) {
         return { distances: [] };
@@ -34,7 +35,9 @@ export async function getDistanceMatrix(
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ locations })
         },
-        "Distance calculation failed"
+        "Distance calculation failed",
+        undefined,
+        signal,
     );
 
     return parseWithSchema(distanceMatrixResponseSchema, payload, "getDistanceMatrix");

@@ -56,9 +56,33 @@ export async function fetchJsonWithTimeout<T>(
   input: string,
   init: RequestInit,
   fallbackMessage: string,
-  timeoutMs = 30_000
+  timeoutMs = 30_000,
+  externalSignal?: AbortSignal
 ): Promise<T> {
-  const res = await fetchWithTimeout(input, init, timeoutMs);
+  // If caller supplied an external signal, merge it with any existing init.signal
+  // so fetchWithTimeout sees a single signal to forward into the combined-abort
+  // logic. Either the caller's signal OR init.signal aborting will abort fetch.
+  let mergedInit = init;
+  if (externalSignal) {
+    if (init.signal) {
+      if (typeof AbortSignal.any === "function") {
+        mergedInit = { ...init, signal: AbortSignal.any([init.signal, externalSignal]) };
+      } else {
+        const combined = new AbortController();
+        if (init.signal.aborted || externalSignal.aborted) {
+          combined.abort();
+        } else {
+          init.signal.addEventListener("abort", () => combined.abort(), { once: true });
+          externalSignal.addEventListener("abort", () => combined.abort(), { once: true });
+        }
+        mergedInit = { ...init, signal: combined.signal };
+      }
+    } else {
+      mergedInit = { ...init, signal: externalSignal };
+    }
+  }
+
+  const res = await fetchWithTimeout(input, mergedInit, timeoutMs);
   await assertOk(res, fallbackMessage);
   return (await res.json()) as T;
 }

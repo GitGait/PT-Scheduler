@@ -116,8 +116,11 @@ export default async function handler(
                     });
                 } else {
                     const reasonErr = result.reason;
-                    const isAbort = (reasonErr instanceof Error && reasonErr.name === "AbortError")
-                        || (reasonErr instanceof Error && reasonErr.message.includes("aborted"));
+                    // Real fetch aborts in Vercel Node 20 produce DOMException
+                    // with name === "AbortError"; DOMException IS instanceof
+                    // Error in Node 18+. Loose message substring matching would
+                    // false-positive on upstream Google error strings.
+                    const isAbort = reasonErr instanceof Error && reasonErr.name === "AbortError";
                     if (isAbort) {
                         sawAbort = true;
                     }

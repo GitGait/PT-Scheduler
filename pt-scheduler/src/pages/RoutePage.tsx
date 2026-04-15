@@ -174,6 +174,7 @@ export function RoutePage() {
     // Fetch real driving distances
     useEffect(() => {
         let cancelled = false;
+        const controller = new AbortController();
 
         const fetchDistances = async () => {
             if (dayAppointments.length === 0) return;
@@ -213,9 +214,19 @@ export function RoutePage() {
 
                 const updates: Record<string, { miles: number; minutes: number }> = {};
 
-                // Full cache hit: populate from cache, skip API entirely
-                if (cached.size === legKeys.length) {
-                    for (let i = 0; i < locations.length - 1; i++) {
+                // Full cache hit: iterate per-leg (not by Map size) so duplicate
+                // coordKeys — e.g., consecutive stops at the same address — don't
+                // get miscounted as a cache miss.
+                let allHit = true;
+                for (let i = 0; i < legKeys.length; i++) {
+                    if (!cached.has(legKeys[i])) {
+                        allHit = false;
+                        break;
+                    }
+                }
+
+                if (allHit) {
+                    for (let i = 0; i < legKeys.length; i++) {
                         const hit = cached.get(legKeys[i]);
                         if (hit) {
                             updates[locations[i + 1].id] = {
@@ -229,7 +240,7 @@ export function RoutePage() {
                 }
 
                 // Cache miss: fetch full day and write every leg back
-                const result = await getDistanceMatrix(locations);
+                const result = await getDistanceMatrix(locations, controller.signal);
                 if (cancelled) return;
 
                 const entriesToCache: CachedDistance[] = [];
@@ -281,7 +292,10 @@ export function RoutePage() {
         };
 
         void fetchDistances();
-        return () => { cancelled = true; };
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
     }, [dayAppointments, homeCoordinates, resolvedCoordinates, patientById]);
 
     // Build route stops using real driving distances when available
