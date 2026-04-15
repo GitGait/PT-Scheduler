@@ -237,9 +237,6 @@ export function AppointmentActionSheet({
     const smsHref = buildSmsHref(primaryPhone);
 
     const noteCount = effectiveNotes.length;
-    const notePreview = noteCount > 0
-        ? (noteCount === 1 ? effectiveNotes[0] : `${noteCount} notes`)
-        : "";
 
     return (
         <div
@@ -396,51 +393,71 @@ export function AppointmentActionSheet({
                     {/* Divider */}
                     <div className="my-2 border-t border-[var(--color-border)]" />
 
-                    {/* View / Edit Details */}
-                    <button
-                        onClick={() => {
-                            onViewEdit();
-                            onClose();
-                        }}
-                        className="w-full flex items-center gap-4 py-3 px-4 text-left text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] rounded-lg transition-colors"
-                    >
-                        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-[var(--color-surface-hover)]">
-                            <Edit3 className="w-5 h-5 text-[var(--color-text-secondary)]" />
-                        </div>
-                        <span className="font-medium">View / Edit Details</span>
-                    </button>
+                    {/* Icon action bar */}
+                    <div className="grid grid-cols-6 gap-1 px-1 pt-1">
+                        <IconBarButton
+                            tint="neutral"
+                            icon={<Edit3 className="w-5 h-5" />}
+                            label="Edit"
+                            ariaLabel="View / Edit Details"
+                            onClick={() => {
+                                onViewEdit();
+                                onClose();
+                            }}
+                        />
+                        <IconBarButton
+                            tint="purple"
+                            icon={<Move className="w-5 h-5" />}
+                            label="Move"
+                            ariaLabel="Move Appointment"
+                            onClick={() => {
+                                onMove();
+                                onClose();
+                            }}
+                        />
+                        <IconBarButton
+                            tint="teal"
+                            icon={<Copy className="w-5 h-5" />}
+                            label="Copy"
+                            ariaLabel="Copy Appointment"
+                            onClick={() => {
+                                onCopy();
+                                onClose();
+                            }}
+                        />
+                        <IconBarButton
+                            tint="amber"
+                            icon={<StickyNote className="w-5 h-5" />}
+                            label={noteCount > 0 ? "Notes" : "Note"}
+                            ariaLabel={noteCount > 0 ? "Edit Notes" : "Add Quick Note"}
+                            onClick={() => setChipNoteMode(true)}
+                        />
+                        <IconBarButton
+                            tint="amber"
+                            icon={<PauseCircle className="w-5 h-5" />}
+                            label="Hold"
+                            ariaLabel="Put on Hold"
+                            onClick={() => {
+                                onHold();
+                                onClose();
+                            }}
+                        />
+                        <IconBarButton
+                            tint="red"
+                            icon={<Trash2 className="w-5 h-5" />}
+                            label="Delete"
+                            ariaLabel="Delete Appointment"
+                            labelDanger
+                            onClick={() => {
+                                onDelete();
+                                onClose();
+                            }}
+                        />
+                    </div>
 
-                    {/* Move Appointment */}
-                    <button
-                        onClick={() => {
-                            onMove();
-                            onClose();
-                        }}
-                        className="w-full flex items-center gap-4 py-3 px-4 text-left text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] rounded-lg transition-colors"
-                    >
-                        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-purple-100 dark:bg-purple-950">
-                            <Move className="w-5 h-5 text-purple-600 dark:text-purple-400" />
-                        </div>
-                        <span className="font-medium">Move Appointment</span>
-                    </button>
-
-                    {/* Copy Appointment */}
-                    <button
-                        onClick={() => {
-                            onCopy();
-                            onClose();
-                        }}
-                        className="w-full flex items-center gap-4 py-3 px-4 text-left text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] rounded-lg transition-colors"
-                    >
-                        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-teal-100 dark:bg-teal-950">
-                            <Copy className="w-5 h-5 text-teal-600 dark:text-teal-400" />
-                        </div>
-                        <span className="font-medium">Copy Appointment</span>
-                    </button>
-
-                    {/* Quick Notes */}
-                    {chipNoteMode ? (
-                        <div className="px-4 py-3 space-y-2">
+                    {/* Note inline expansion — reveals below the icon bar when Note tapped */}
+                    {chipNoteMode && (
+                        <div className="px-4 py-3 space-y-2 mt-2 border-t border-[var(--color-border)]">
                             {/* Existing notes list */}
                             {notes.length > 0 && (
                                 <div className="space-y-1">
@@ -545,7 +562,7 @@ export function AppointmentActionSheet({
                                 </div>
                             </div>
 
-                            {/* Remove from all — lives on its own row so it's spatially separate from Save */}
+                            {/* Remove from all */}
                             {!isPersonal && hasPatientNotes && (
                                 <div className="flex pt-1">
                                     <button
@@ -591,50 +608,7 @@ export function AppointmentActionSheet({
                                 </p>
                             )}
                         </div>
-                    ) : (
-                        <button
-                            onClick={() => setChipNoteMode(true)}
-                            className="w-full flex items-center gap-4 py-3 px-4 text-left text-[var(--color-text-primary)] hover:bg-amber-50 dark:hover:bg-amber-950/50 rounded-lg transition-colors"
-                        >
-                            <div className="w-10 h-10 flex items-center justify-center rounded-full bg-amber-100 dark:bg-amber-950">
-                                <StickyNote className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-                            </div>
-                            <span className="font-medium">{noteCount > 0 ? "Edit Notes" : "Quick Note"}</span>
-                            {notePreview && (
-                                <span className="ml-auto text-sm text-[var(--color-text-secondary)] truncate max-w-[140px]">{notePreview}</span>
-                            )}
-                        </button>
                     )}
-
-                    {/* Put on Hold */}
-                    {appointment.status !== "on-hold" && (
-                        <button
-                            onClick={() => {
-                                onHold();
-                                onClose();
-                            }}
-                            className="w-full flex items-center gap-4 py-3 px-4 text-left text-[var(--color-text-primary)] hover:bg-amber-50 dark:hover:bg-amber-950 rounded-lg transition-colors"
-                        >
-                            <div className="w-10 h-10 flex items-center justify-center rounded-full bg-amber-100 dark:bg-amber-950">
-                                <PauseCircle className="w-5 h-5 text-amber-600 dark:text-amber-400" />
-                            </div>
-                            <span className="font-medium text-amber-600 dark:text-amber-400">Put on Hold</span>
-                        </button>
-                    )}
-
-                    {/* Delete Appointment */}
-                    <button
-                        onClick={() => {
-                            onDelete();
-                            onClose();
-                        }}
-                        className="w-full flex items-center gap-4 py-3 px-4 text-left text-[var(--color-text-primary)] hover:bg-red-50 dark:hover:bg-red-950 rounded-lg transition-colors"
-                    >
-                        <div className="w-10 h-10 flex items-center justify-center rounded-full bg-red-50 dark:bg-red-950">
-                            <Trash2 className="w-5 h-5 text-red-600 dark:text-red-400" />
-                        </div>
-                        <span className="font-medium text-red-600 dark:text-red-400">Delete Appointment</span>
-                    </button>
                 </div>
 
                 {/* Cancel button */}
@@ -741,5 +715,57 @@ function ContactRow({
                 })}
             </div>
         </div>
+    );
+}
+
+interface IconBarButtonProps {
+    icon: ReactNode;
+    label: string;
+    ariaLabel: string;
+    onClick: () => void;
+    /** One of the preset tint slots */
+    tint: "neutral" | "purple" | "teal" | "amber" | "red";
+    /** Label color overrides (used for Delete) */
+    labelDanger?: boolean;
+}
+
+function IconBarButton({
+    icon,
+    label,
+    ariaLabel,
+    onClick,
+    tint,
+    labelDanger,
+}: IconBarButtonProps) {
+    const circleClass =
+        tint === "neutral"
+            ? "bg-[var(--color-surface-hover)] text-[var(--color-text-secondary)]"
+            : tint === "purple"
+            ? "bg-purple-100 dark:bg-purple-950 text-purple-600 dark:text-purple-400"
+            : tint === "teal"
+            ? "bg-teal-100 dark:bg-teal-950 text-teal-600 dark:text-teal-400"
+            : tint === "amber"
+            ? "bg-amber-100 dark:bg-amber-950 text-amber-600 dark:text-amber-400"
+            : "bg-red-50 dark:bg-red-950 text-red-600 dark:text-red-400";
+
+    const labelClass = labelDanger
+        ? "text-red-600 dark:text-red-400"
+        : "text-[var(--color-text-secondary)]";
+
+    return (
+        <button
+            type="button"
+            onClick={onClick}
+            aria-label={ariaLabel}
+            title={ariaLabel}
+            className="flex flex-col items-center gap-1 py-2 px-1 rounded-lg hover:bg-[var(--color-surface-hover)] transition-colors"
+        >
+            <div className={`w-[38px] h-[38px] rounded-full flex items-center justify-center ${circleClass}`}>
+                {icon}
+            </div>
+            <span className={`text-[11px] font-medium leading-tight ${labelClass}`}>
+                {label}
+            </span>
+        </button>
     );
 }
