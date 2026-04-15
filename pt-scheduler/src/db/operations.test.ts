@@ -552,14 +552,10 @@ describe("geocodeCacheDB", () => {
 
 describe("normalizeAddressKey", () => {
     it("normalizes leading/trailing whitespace and lowercases", () => {
-        expect(normalizeAddressKey("  123 Main St ")).toBe(
-            normalizeAddressKey("123 main st")
-        );
+        expect(normalizeAddressKey("  123 Main St ")).toBe("123 main st");
     });
 
     it("collapses internal whitespace", () => {
-        expect(normalizeAddressKey("123  Main   St")).toBe(
-            normalizeAddressKey("123 Main St")
-        );
+        expect(normalizeAddressKey("123  Main   St")).toBe("123 main st");
     });
 });
