@@ -22,18 +22,9 @@ export interface RouteCache {
     expiresAt: Date;
 }
 
-// Cached Distance Matrix result for a directional origin->destination pair.
-// The coordKey is directional (A->B != B->A) because real driving distance
-// can differ based on one-way streets, left turns, and divided highways.
-export interface CachedDistance {
-    coordKey: string;
-    distanceMiles: number;
-    durationMinutes: number;
-    createdAt: Date;
-}
-
 // Cached Geocode result for a normalized address string.
-// Buildings don't move, so no TTL — entries are permanent.
+// Per Google Maps Platform ToS §3.2.3(b), Geocoding Content may only be
+// cached temporarily. Enforced via a 30-day TTL in geocodeCacheDB.get.
 export interface CachedGeocode {
     addressKey: string;   // PRIMARY KEY — normalized address (lowercase, collapsed whitespace, trimmed)
     lat: number;
@@ -51,7 +42,6 @@ export class PTSchedulerDB extends Dexie {
     syncQueue!: EntityTable<SyncQueueItem, "id">;
     routeCache!: EntityTable<RouteCache, "id">;
     dayNotes!: EntityTable<DayNote, "id">;
-    distanceCache!: EntityTable<CachedDistance, "coordKey">;
     geocodeCache!: EntityTable<CachedGeocode, "addressKey">;
 
     constructor() {
@@ -216,6 +206,22 @@ export class PTSchedulerDB extends Dexie {
             routeCache: "id, date, expiresAt",
             dayNotes: "id, date",
             distanceCache: "&coordKey",
+            geocodeCache: "&addressKey",
+        });
+
+        // Version 12: Drop distanceCache entirely per Google Maps Platform ToS
+        // §3.2.3(b). Distance/duration values from the Distance Matrix API are
+        // Content that cannot be persistently cached, so the table is removed.
+        // Setting the store value to `null` tells Dexie to delete it on upgrade.
+        this.version(12).stores({
+            patients: "id, fullName, status",
+            appointments: "id, patientId, date, status, syncStatus, visitType",
+            recurringBlocks: "id, patientId, dayOfWeek",
+            calendarEvents: "id, appointmentId, googleEventId",
+            syncQueue: "++id, timestamp, status, nextRetryAt",
+            routeCache: "id, date, expiresAt",
+            dayNotes: "id, date",
+            distanceCache: null,
             geocodeCache: "&addressKey",
         });
     }

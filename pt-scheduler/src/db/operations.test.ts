@@ -4,9 +4,8 @@ import {
     patientDB,
     appointmentDB,
     syncQueueDB,
-    distanceCacheDB,
-    makeCoordKey,
     geocodeCacheDB,
+    GEOCODE_TTL_MS,
     normalizeAddressKey,
 } from "./operations";
 
@@ -399,126 +398,6 @@ describe("syncQueueDB", () => {
     });
 });
 
-describe("distanceCacheDB", () => {
-    beforeEach(async () => {
-        await db.distanceCache.clear();
-    });
-
-    it("should put and get an entry by coordKey", async () => {
-        const entry = {
-            coordKey: "40.0000,-74.0000->40.1000,-74.1000",
-            distanceMiles: 8.5,
-            durationMinutes: 17,
-            createdAt: new Date("2026-04-15T12:00:00Z"),
-        };
-
-        await distanceCacheDB.put(entry);
-        const retrieved = await distanceCacheDB.get(entry.coordKey);
-
-        expect(retrieved).toBeDefined();
-        expect(retrieved?.coordKey).toBe(entry.coordKey);
-        expect(retrieved?.distanceMiles).toBe(8.5);
-        expect(retrieved?.durationMinutes).toBe(17);
-        expect(retrieved?.createdAt).toEqual(entry.createdAt);
-    });
-
-    it("should return undefined for an unknown key", async () => {
-        const result = await distanceCacheDB.get("nonexistent->key");
-        expect(result).toBeUndefined();
-    });
-
-    it("getMany should return a Map containing only the hits", async () => {
-        const hit1 = {
-            coordKey: "40.0000,-74.0000->40.1000,-74.1000",
-            distanceMiles: 8.5,
-            durationMinutes: 17,
-            createdAt: new Date(),
-        };
-        const hit2 = {
-            coordKey: "40.2000,-74.2000->40.3000,-74.3000",
-            distanceMiles: 5.2,
-            durationMinutes: 11,
-            createdAt: new Date(),
-        };
-
-        await distanceCacheDB.put(hit1);
-        await distanceCacheDB.put(hit2);
-
-        const missKey = "99.9999,-99.9999->88.8888,-88.8888";
-        const result = await distanceCacheDB.getMany([
-            hit1.coordKey,
-            missKey,
-            hit2.coordKey,
-        ]);
-
-        expect(result.size).toBe(2);
-        expect(result.get(hit1.coordKey)?.distanceMiles).toBe(8.5);
-        expect(result.get(hit2.coordKey)?.distanceMiles).toBe(5.2);
-        expect(result.has(missKey)).toBe(false);
-    });
-
-    it("putMany should bulk insert entries retrievable via getMany", async () => {
-        const entries = [
-            {
-                coordKey: "40.0000,-74.0000->40.1000,-74.1000",
-                distanceMiles: 8.5,
-                durationMinutes: 17,
-                createdAt: new Date(),
-            },
-            {
-                coordKey: "40.1000,-74.1000->40.2000,-74.2000",
-                distanceMiles: 6.3,
-                durationMinutes: 14,
-                createdAt: new Date(),
-            },
-            {
-                coordKey: "40.2000,-74.2000->40.3000,-74.3000",
-                distanceMiles: 5.2,
-                durationMinutes: 11,
-                createdAt: new Date(),
-            },
-        ];
-
-        await distanceCacheDB.putMany(entries);
-
-        const result = await distanceCacheDB.getMany(entries.map((e) => e.coordKey));
-        expect(result.size).toBe(3);
-        expect(result.get(entries[0].coordKey)?.distanceMiles).toBe(8.5);
-        expect(result.get(entries[1].coordKey)?.distanceMiles).toBe(6.3);
-        expect(result.get(entries[2].coordKey)?.distanceMiles).toBe(5.2);
-    });
-
-    it("putMany with an empty array is a no-op and does not throw", async () => {
-        await expect(distanceCacheDB.putMany([])).resolves.toBeUndefined();
-    });
-});
-
-describe("makeCoordKey", () => {
-    it("should produce different keys for opposite directions", () => {
-        const a = { lat: 40.0, lng: -74.0 };
-        const b = { lat: 40.1, lng: -74.1 };
-
-        const ab = makeCoordKey(a, b);
-        const ba = makeCoordKey(b, a);
-
-        expect(ab).not.toBe(ba);
-        expect(ab).toBe("40.0000,-74.0000->40.1000,-74.1000");
-        expect(ba).toBe("40.1000,-74.1000->40.0000,-74.0000");
-    });
-
-    it("should round coordinates to 4 decimals (sub-5th-decimal inputs collapse)", () => {
-        const from1 = { lat: 40.00001, lng: -74.00001 };
-        const from2 = { lat: 40.00002, lng: -74.00002 };
-        const to = { lat: 40.5, lng: -74.5 };
-
-        const key1 = makeCoordKey(from1, to);
-        const key2 = makeCoordKey(from2, to);
-
-        expect(key1).toBe(key2);
-        expect(key1).toBe("40.0000,-74.0000->40.5000,-74.5000");
-    });
-});
-
 describe("geocodeCacheDB", () => {
     beforeEach(async () => {
         await db.geocodeCache.clear();
@@ -547,6 +426,56 @@ describe("geocodeCacheDB", () => {
     it("should return undefined for an unknown address key", async () => {
         const result = await geocodeCacheDB.get("nonexistent address");
         expect(result).toBeUndefined();
+    });
+
+    it("expires entries older than GEOCODE_TTL_MS and evicts them on get", async () => {
+        const addressKey = "999 expired ave";
+        const staleCreatedAt = new Date(Date.now() - GEOCODE_TTL_MS - 1000);
+        await db.geocodeCache.put({
+            addressKey,
+            lat: 40,
+            lng: -74,
+            createdAt: staleCreatedAt,
+        });
+
+        const firstRead = await geocodeCacheDB.get(addressKey);
+        expect(firstRead).toBeUndefined();
+
+        // Entry should have been deleted so a direct re-read also misses
+        const directRead = await db.geocodeCache.get(addressKey);
+        expect(directRead).toBeUndefined();
+    });
+
+    it("returns fresh entries that are still within the TTL window", async () => {
+        const addressKey = "111 fresh ln";
+        const recentCreatedAt = new Date(Date.now() - 1000);
+        await db.geocodeCache.put({
+            addressKey,
+            lat: 41,
+            lng: -75,
+            createdAt: recentCreatedAt,
+        });
+
+        const hit = await geocodeCacheDB.get(addressKey);
+        expect(hit).toBeDefined();
+        expect(hit?.lat).toBe(41);
+    });
+
+    it("purgeExpired removes all entries older than the TTL and leaves fresh ones", async () => {
+        const staleCreatedAt = new Date(Date.now() - GEOCODE_TTL_MS - 1000);
+        const freshCreatedAt = new Date(Date.now() - 1000);
+        await db.geocodeCache.bulkPut([
+            { addressKey: "stale a", lat: 1, lng: 1, createdAt: staleCreatedAt },
+            { addressKey: "stale b", lat: 2, lng: 2, createdAt: staleCreatedAt },
+            { addressKey: "fresh c", lat: 3, lng: 3, createdAt: freshCreatedAt },
+        ]);
+
+        const deletedCount = await geocodeCacheDB.purgeExpired();
+        expect(deletedCount).toBe(2);
+
+        const remaining = await db.geocodeCache.toArray();
+        expect(remaining).toHaveLength(1);
+        expect(remaining[0].addressKey).toBe("fresh c");
     });
 });
 

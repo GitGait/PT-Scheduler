@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { db } from "./schema";
-import type { CachedDistance, CachedGeocode } from "./schema";
+import type { CachedGeocode } from "./schema";
 import type {
     Patient,
     Appointment,
@@ -436,65 +436,46 @@ export const syncQueueDB = {
 };
 
 // =============================================================================
-// Distance Cache Operations
-// =============================================================================
-
-export const distanceCacheDB = {
-    /** Get cached distance by directional coord key */
-    async get(coordKey: string): Promise<CachedDistance | undefined> {
-        return db.distanceCache.get(coordKey);
-    },
-
-    /** Upsert a cached distance entry */
-    async put(entry: CachedDistance): Promise<void> {
-        await db.distanceCache.put(entry);
-    },
-
-    /** Bulk upsert cached distance entries in a single IndexedDB round-trip */
-    async putMany(entries: CachedDistance[]): Promise<void> {
-        if (entries.length === 0) return;
-        await db.distanceCache.bulkPut(entries);
-    },
-
-    /** Bulk fetch: returns a Map containing only the coord keys that hit */
-    async getMany(
-        coordKeys: string[]
-    ): Promise<Map<string, CachedDistance>> {
-        const rows = await db.distanceCache.bulkGet(coordKeys);
-        const map = new Map<string, CachedDistance>();
-        rows.forEach((row, i) => {
-            if (row) map.set(coordKeys[i], row);
-        });
-        return map;
-    },
-};
-
-/**
- * Build a directional coord key for the distance cache.
- * Direction-sensitive: makeCoordKey(A, B) !== makeCoordKey(B, A) because
- * real driving distance can differ by direction (one-way streets, left turns,
- * divided highways). Coordinates are rounded to 4 decimals (~11m precision).
- */
-export function makeCoordKey(
-    from: { lat: number; lng: number },
-    to: { lat: number; lng: number }
-): string {
-    return `${from.lat.toFixed(4)},${from.lng.toFixed(4)}->${to.lat.toFixed(4)},${to.lng.toFixed(4)}`;
-}
-
-// =============================================================================
 // Geocode Cache Operations
 // =============================================================================
 
+// Google Maps Platform ToS §3.2.3(b): Geocoding Content may only be cached
+// temporarily. Google's guidance allows up to 30 consecutive calendar days;
+// entries older than this MUST be deleted and re-fetched on next access.
+export const GEOCODE_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+
 export const geocodeCacheDB = {
-    /** Get cached geocode by normalized address key */
+    /**
+     * Get cached geocode by normalized address key.
+     * Enforces the 30-day TTL: entries older than GEOCODE_TTL_MS are deleted
+     * and reported as a miss, forcing a fresh API call on next access.
+     */
     async get(addressKey: string): Promise<CachedGeocode | undefined> {
-        return db.geocodeCache.get(addressKey);
+        const hit = await db.geocodeCache.get(addressKey);
+        if (!hit) return undefined;
+        const age = Date.now() - hit.createdAt.getTime();
+        if (age > GEOCODE_TTL_MS) {
+            await db.geocodeCache.delete(addressKey);
+            return undefined;
+        }
+        return hit;
     },
 
     /** Upsert a cached geocode entry */
     async put(entry: CachedGeocode): Promise<void> {
         await db.geocodeCache.put(entry);
+    },
+
+    /**
+     * Delete all cache entries older than the 30-day TTL.
+     * Called opportunistically on app startup to keep the cache compliant
+     * even if specific addressKeys are never looked up again.
+     */
+    async purgeExpired(): Promise<number> {
+        const cutoffMs = Date.now() - GEOCODE_TTL_MS;
+        return db.geocodeCache
+            .filter((row) => row.createdAt.getTime() < cutoffMs)
+            .delete();
     },
 };
 

@@ -8,8 +8,8 @@ vi.mock("../api/distance", () => ({
     getDistanceMatrix: (...args: unknown[]) => getDistanceMatrixMock(...args),
 }));
 
-// Mock geocoding so it never fires in tests (patients all pre-have lat/lng).
-// Individual tests may override via vi.mocked(geocodeAddress).mockResolvedValueOnce.
+// Mock geocoding so it never fires network. Each test sets specific returns
+// per address via vi.mocked(geocodeAddress).mockImplementation.
 vi.mock("../api/geocode", () => ({
     geocodeAddress: vi.fn(async () => ({ lat: 0, lng: 0 })),
 }));
@@ -28,7 +28,7 @@ function makePatient(overrides: Partial<Patient> & { id: string }): Patient {
         nicknames: [],
         phoneNumbers: [],
         alternateContacts: [],
-        address: "123 Main St",
+        address: `${overrides.id} main st`,
         status: "active",
         notes: "",
         createdAt: new Date(),
@@ -61,11 +61,8 @@ function setHomeBase(lat: number, lng: number): void {
 describe("useLocationData", () => {
     beforeEach(async () => {
         getDistanceMatrixMock.mockReset();
-        vi.mocked(geocodeAddress).mockClear();
-        await db.distanceCache.clear();
+        vi.mocked(geocodeAddress).mockReset();
         await db.patients.clear();
-        // Reset Zustand store to an empty state so seeded patients from one test
-        // don't bleed into the next test's geocode-effect checks.
         usePatientStore.setState({ patients: [], loading: false, error: null, searchQuery: "" });
         window.localStorage.clear();
         setHomeBase(40.5, -74.5);
@@ -87,13 +84,19 @@ describe("useLocationData", () => {
 
     it("fetches distances on first render for the selected day", async () => {
         const patients = [
-            makePatient({ id: "p1", lat: 40.6, lng: -74.6 }),
-            makePatient({ id: "p2", lat: 40.7, lng: -74.7 }),
+            makePatient({ id: "p1", address: "p1 main st" }),
+            makePatient({ id: "p2", address: "p2 main st" }),
         ];
         const appointments = [
             makeAppointment({ id: "apt1", patientId: "p1" }),
             makeAppointment({ id: "apt2", patientId: "p2", startTime: "10:00" }),
         ];
+
+        vi.mocked(geocodeAddress).mockImplementation(async (address: string) => {
+            if (address === "p1 main st") return { lat: 40.6, lng: -74.6 };
+            if (address === "p2 main st") return { lat: 40.7, lng: -74.7 };
+            return { lat: 0, lng: 0 };
+        });
 
         getDistanceMatrixMock.mockResolvedValue({
             distances: [
@@ -123,89 +126,26 @@ describe("useLocationData", () => {
         }, { timeout: 2000 });
     });
 
-    it("does NOT refetch on re-render with identical inputs (cache hit)", async () => {
-        const patients = [
-            makePatient({ id: "p1", lat: 40.6, lng: -74.6 }),
-            makePatient({ id: "p2", lat: 40.7, lng: -74.7 }),
-        ];
-        const appointments = [
-            makeAppointment({ id: "apt1", patientId: "p1" }),
-            makeAppointment({ id: "apt2", patientId: "p2", startTime: "10:00" }),
-        ];
-
-        getDistanceMatrixMock.mockResolvedValue({
-            distances: [
-                { originId: `home-${SELECTED_DATE}`, destinationId: "apt1", distanceMiles: 5, durationMinutes: 12 },
-                { originId: "apt1", destinationId: "apt2", distanceMiles: 3, durationMinutes: 7 },
-            ],
-        });
-
-        const inputs = buildInputs(patients, appointments);
-
-        const { rerender } = renderHook(
-            ({ appts, byDay, byId, selAppts, sel }) =>
-                useLocationData(appts, byId, byDay, selAppts, sel),
-            {
-                initialProps: {
-                    appts: inputs.appointments,
-                    byDay: inputs.appointmentsByDay,
-                    byId: inputs.patientById,
-                    selAppts: inputs.selectedDayAppointments,
-                    sel: SELECTED_DATE,
-                },
-            },
-        );
-
-        await waitFor(() => {
-            expect(getDistanceMatrixMock).toHaveBeenCalledTimes(1);
-        }, { timeout: 2000 });
-
-        // Re-render with fresh-reference but identical inputs. Every reference
-        // is newly allocated — Map, record, arrays — but the rounded-coord
-        // signature is stable. This proves the signature memo (not reference
-        // equality) is what gates the fetch effect.
-        rerender({
-            appts: [...appointments],
-            byDay: { [SELECTED_DATE]: [...appointments] },
-            byId: new Map(patients.map((p) => [p.id, p])),
-            selAppts: [...appointments],
-            sel: SELECTED_DATE,
-        });
-
-        // Give any pending effect a chance to fire
-        await new Promise((resolve) => setTimeout(resolve, 700));
-
-        expect(getDistanceMatrixMock).toHaveBeenCalledTimes(1);
-    });
-
-    it("persists geocoded patient coords to IndexedDB via the store on successful geocode", async () => {
+    it("does NOT persist geocoded patient coords to the Patient record (ToS §3.2.3(b))", async () => {
         // Seed a patient with an address but no lat/lng in the real DB.
         const patientId = await patientDB.add({
-            fullName: "Geocode Test Patient",
+            fullName: "Non-Persist Test Patient",
             nicknames: [],
             phoneNumbers: [],
             alternateContacts: [],
-            address: "456 Elm St",
+            address: "456 elm st",
             status: "active",
             notes: "",
         });
 
-        // Make geocodeAddress return specific known coords for this test.
-        vi.mocked(geocodeAddress).mockResolvedValueOnce({ lat: 40, lng: -74 });
+        vi.mocked(geocodeAddress).mockImplementation(async () => ({ lat: 40, lng: -74 }));
 
-        // Load the patient into the Zustand store so the store's update action
-        // can refresh the in-memory patient after the DB write.
         await usePatientStore.getState().loadAll();
 
-        const patient = makePatient({ id: patientId, address: "456 Elm St" });
-        // No lat/lng on the patient — the hook must geocode and persist them.
-        delete (patient as Partial<Patient>).lat;
-        delete (patient as Partial<Patient>).lng;
-
-        const appointments = [makeAppointment({ id: "apt-persist", patientId })];
+        const patient = makePatient({ id: patientId, address: "456 elm st" });
+        const appointments = [makeAppointment({ id: "apt-no-persist", patientId })];
         const inputs = buildInputs([patient], appointments);
 
-        // Distance Matrix not needed for this test.
         getDistanceMatrixMock.mockResolvedValue({ distances: [] });
 
         renderHook(() =>
@@ -218,72 +158,22 @@ describe("useLocationData", () => {
             ),
         );
 
-        // Wait until geocodeAddress has been called (meaning geocoding ran).
         await waitFor(() => {
-            expect(vi.mocked(geocodeAddress)).toHaveBeenCalledWith("456 Elm St");
+            expect(vi.mocked(geocodeAddress)).toHaveBeenCalledWith("456 elm st");
         }, { timeout: 2000 });
 
-        // Give the store's async update action time to finish writing to IndexedDB.
-        await waitFor(async () => {
-            const saved = await patientDB.get(patientId);
-            expect(saved?.lat).toBe(40);
-            expect(saved?.lng).toBe(-74);
-        }, { timeout: 2000 });
+        // Give the hook's effects a chance to do anything they might try.
+        await new Promise((resolve) => setTimeout(resolve, 100));
 
-        // Flush the distance-matrix debounce (500 ms) so it fires and resolves
-        // inside this test rather than potentially interfering with the next one.
+        // Compliance assertion: the Patient record in IndexedDB must NOT have
+        // been updated with lat/lng. Geocoded coordinates should live in React
+        // state only for the session, and in the geocodeAddress wrapper's
+        // 30-day-TTL cache — never persistently on the Patient itself.
+        const saved = await patientDB.get(patientId);
+        expect(saved?.lat).toBeUndefined();
+        expect(saved?.lng).toBeUndefined();
+
+        // Flush any pending distance-matrix debounce so it doesn't pollute later tests.
         await new Promise((resolve) => setTimeout(resolve, 600));
-    });
-
-    it("does NOT refetch on coordinate jitter below 4-decimal rounding", async () => {
-        const patient1a = makePatient({ id: "p1", lat: 40.00001, lng: -74.00001 });
-        const patient2 = makePatient({ id: "p2", lat: 40.7, lng: -74.7 });
-        const appointments = [
-            makeAppointment({ id: "apt1", patientId: "p1" }),
-            makeAppointment({ id: "apt2", patientId: "p2", startTime: "10:00" }),
-        ];
-
-        getDistanceMatrixMock.mockResolvedValue({
-            distances: [
-                { originId: `home-${SELECTED_DATE}`, destinationId: "apt1", distanceMiles: 5, durationMinutes: 12 },
-                { originId: "apt1", destinationId: "apt2", distanceMiles: 3, durationMinutes: 7 },
-            ],
-        });
-
-        const { rerender } = renderHook(
-            ({ appts, byDay, byId, selAppts, sel }) =>
-                useLocationData(appts, byId, byDay, selAppts, sel),
-            {
-                initialProps: {
-                    appts: appointments,
-                    byDay: { [SELECTED_DATE]: appointments } as Record<string, Appointment[]>,
-                    byId: new Map<string, Patient>([[patient1a.id, patient1a], [patient2.id, patient2]]),
-                    selAppts: appointments,
-                    sel: SELECTED_DATE,
-                },
-            },
-        );
-
-        await waitFor(() => {
-            expect(getDistanceMatrixMock).toHaveBeenCalledTimes(1);
-        }, { timeout: 2000 });
-
-        // Jitter patient1's coordinates by less than 0.00005 (sub-rounding).
-        // Rounded to 4 decimals both produce "40.0000,-74.0000", so the
-        // signature is identical and no refetch should occur — even when
-        // every reference passed to rerender is freshly allocated.
-        const patient1b = makePatient({ id: "p1", lat: 40.00002, lng: -74.00002 });
-
-        rerender({
-            appts: [...appointments],
-            byDay: { [SELECTED_DATE]: [...appointments] },
-            byId: new Map<string, Patient>([[patient1b.id, patient1b], [patient2.id, patient2]]),
-            selAppts: [...appointments],
-            sel: SELECTED_DATE,
-        });
-
-        await new Promise((resolve) => setTimeout(resolve, 700));
-
-        expect(getDistanceMatrixMock).toHaveBeenCalledTimes(1);
     });
 });

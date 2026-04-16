@@ -7,8 +7,6 @@ import { RouteEmptyState } from "../components/ui/EmptyState";
 import { geocodeAddress } from "../api/geocode";
 import { optimizeRoute } from "../api/optimize";
 import { getDistanceMatrix } from "../api/distance";
-import { distanceCacheDB, makeCoordKey } from "../db/operations";
-import type { CachedDistance } from "../db/schema";
 import type { Patient, Appointment } from "../types";
 import {
     Phone,
@@ -193,93 +191,22 @@ export function RoutePage() {
 
             if (locations.length < 2) return;
 
-            // Build sequential leg keys and read-through the cache
-            const legKeys: string[] = [];
-            for (let i = 0; i < locations.length - 1; i++) {
-                legKeys.push(makeCoordKey(locations[i], locations[i + 1]));
-            }
-
             setIsLoadingDistances(true);
             try {
-                let cached = new Map<string, CachedDistance>();
-                try {
-                    cached = await distanceCacheDB.getMany(legKeys);
-                } catch (err) {
-                    console.warn(
-                        '[DistanceMatrix] Cache read failed, falling through to API:',
-                        err instanceof Error ? err.message : err,
-                    );
-                }
-                if (cancelled) return;
-
-                const updates: Record<string, { miles: number; minutes: number }> = {};
-
-                // Full cache hit: iterate per-leg (not by Map size) so duplicate
-                // coordKeys — e.g., consecutive stops at the same address — don't
-                // get miscounted as a cache miss.
-                let allHit = true;
-                for (let i = 0; i < legKeys.length; i++) {
-                    if (!cached.has(legKeys[i])) {
-                        allHit = false;
-                        break;
-                    }
-                }
-
-                if (allHit) {
-                    for (let i = 0; i < legKeys.length; i++) {
-                        const hit = cached.get(legKeys[i]);
-                        if (hit) {
-                            updates[locations[i + 1].id] = {
-                                miles: hit.distanceMiles,
-                                minutes: hit.durationMinutes,
-                            };
-                        }
-                    }
-                    setDrivingDistances(updates);
-                    return;
-                }
-
-                // Cache miss: fetch full day and write every leg back
+                // Per Google Maps Platform ToS §3.2.3(b), Distance Matrix
+                // distance/duration values cannot be persistently cached. Fetch
+                // fresh from the API on every distinct route; results live only
+                // in React state for the lifetime of this view.
                 const result = await getDistanceMatrix(locations, controller.signal);
                 if (cancelled) return;
 
-                const entriesToCache: CachedDistance[] = [];
-                const now = new Date();
-
+                const updates: Record<string, { miles: number; minutes: number }> = {};
                 for (const dist of result.distances) {
                     updates[dist.destinationId] = {
                         miles: dist.distanceMiles,
                         minutes: dist.durationMinutes,
                     };
-
-                    // Legs are sequential, so destinationId uniquely identifies
-                    // the leg index within locations[].
-                    const legIndex = locations.findIndex(
-                        (loc, idx) => idx > 0 && loc.id === dist.destinationId,
-                    );
-                    if (legIndex > 0) {
-                        const legKey = makeCoordKey(
-                            locations[legIndex - 1],
-                            locations[legIndex],
-                        );
-                        entriesToCache.push({
-                            coordKey: legKey,
-                            distanceMiles: dist.distanceMiles,
-                            durationMinutes: dist.durationMinutes,
-                            createdAt: now,
-                        });
-                    }
                 }
-
-                try {
-                    await distanceCacheDB.putMany(entriesToCache);
-                } catch (err) {
-                    console.warn(
-                        '[DistanceMatrix] Cache write failed:',
-                        err instanceof Error ? err.message : err,
-                    );
-                }
-                if (cancelled) return;
 
                 setDrivingDistances(updates);
             } catch (err) {

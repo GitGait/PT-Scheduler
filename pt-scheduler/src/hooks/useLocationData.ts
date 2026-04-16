@@ -2,15 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Appointment, Patient } from "../types";
 import { geocodeAddress } from "../api/geocode";
 import { getDistanceMatrix } from "../api/distance";
-import { distanceCacheDB, makeCoordKey } from "../db/operations";
-import type { CachedDistance } from "../db/schema";
 import {
     getHomeBase,
     calculateMilesBetweenCoordinates,
     estimateDriveMinutes,
 } from "../utils/scheduling";
 import { isPersonalEvent } from "../utils/personalEventColors";
-import { usePatientStore } from "../stores/patientStore";
 
 export interface LegInfo {
     miles: number | null;
@@ -111,9 +108,10 @@ export function useLocationData(
             if (!patient?.address?.trim()) {
                 continue;
             }
-            if (patient.lat !== undefined && patient.lng !== undefined) {
-                continue;
-            }
+            // Note: we no longer short-circuit on patient.lat/lng because per
+            // Google Maps Platform ToS §3.2.3(b) we cannot persist Geocoding
+            // Content indefinitely on the Patient record. All lookups now go
+            // through the geocodeAddress wrapper which enforces a 30-day TTL.
             if (resolvedPatientCoordinates[patient.id]) {
                 continue;
             }
@@ -143,22 +141,11 @@ export function useLocationData(
                         try {
                             const geocoded = await geocodeAddress(patient.address);
                             updates[patient.id] = { lat: geocoded.lat, lng: geocoded.lng };
-                            // Persist via the Zustand store so both IndexedDB AND the in-memory
-                            // `patients` array get the new coords. Subsequent reloads short-circuit
-                            // via the `patient.lat !== undefined` guard; within the current session
-                            // the refreshed store prevents re-entry on state churn. Wrap so a DB
-                            // failure doesn't mask a successful geocode.
-                            try {
-                                await usePatientStore.getState().update(patient.id, {
-                                    lat: geocoded.lat,
-                                    lng: geocoded.lng,
-                                });
-                            } catch (err) {
-                                console.warn(
-                                    "[Geocode] Failed to persist patient coords:",
-                                    err instanceof Error ? err.message : err,
-                                );
-                            }
+                            // Intentionally NOT persisting lat/lng onto the Patient
+                            // record. The geocodeAddress wrapper backs onto a 30-day
+                            // TTL cache (per Maps Platform ToS §3.2.3(b)), so repeat
+                            // lookups are cheap within that window and re-resolve
+                            // automatically afterward.
                         } catch {
                             // Skip unresolved addresses
                         }
@@ -219,9 +206,10 @@ export function useLocationData(
     }, [appointmentsByDay, selectedDate, patientById, resolvedPatientCoordinates]);
 
     // Fetch real driving distances from Google Distance Matrix API.
-    // Scoped to selectedDate only. Reads from distanceCacheDB first; on any
-    // cache miss, calls the API with the full day's locations and re-caches
-    // every leg in the response.
+    // Scoped to selectedDate only. Per Google Maps Platform ToS §3.2.3(b),
+    // Distance Matrix distance/duration values may NOT be persistently cached,
+    // so this hook fetches fresh from the API on every distinct route signature
+    // and holds results only in React state for the lifetime of the current view.
     useEffect(() => {
         const abortController = new AbortController();
 
@@ -249,13 +237,8 @@ export function useLocationData(
 
                 if (isPersonalEvent(apt)) {
                     coords = resolvedPatientCoordinates[apt.id] ?? null;
-                } else {
-                    const patient = patientById.get(apt.patientId);
-                    if (patient?.lat !== undefined && patient?.lng !== undefined) {
-                        coords = { lat: patient.lat, lng: patient.lng };
-                    } else if (resolvedPatientCoordinates[apt.patientId]) {
-                        coords = resolvedPatientCoordinates[apt.patientId];
-                    }
+                } else if (resolvedPatientCoordinates[apt.patientId]) {
+                    coords = resolvedPatientCoordinates[apt.patientId];
                 }
 
                 if (coords) {
@@ -266,104 +249,33 @@ export function useLocationData(
             // Need at least 2 locations to calculate distances
             if (locations.length < 2) return;
 
-            // Build sequential leg keys and read-through the cache
-            const legKeys: string[] = [];
-            for (let i = 0; i < locations.length - 1; i++) {
-                legKeys.push(makeCoordKey(locations[i], locations[i + 1]));
-            }
-
-            let cached = new Map<string, CachedDistance>();
             try {
-                cached = await distanceCacheDB.getMany(legKeys);
-            } catch (err) {
-                console.warn(
-                    '[DistanceMatrix] Cache read failed, falling through to API:',
-                    err instanceof Error ? err.message : err,
-                );
-            }
-            if (abortController.signal.aborted) return;
+                const result = await getDistanceMatrix(locations, abortController.signal);
 
-            let allHit = true;
-            for (let i = 0; i < locations.length - 1; i++) {
-                const hit = cached.get(legKeys[i]);
-                if (hit) {
-                    allUpdates[locations[i + 1].id] = {
-                        miles: hit.distanceMiles,
-                        minutes: hit.durationMinutes,
+                if (abortController.signal.aborted) return;
+
+                for (const dist of result.distances) {
+                    allUpdates[dist.destinationId] = {
+                        miles: dist.distanceMiles,
+                        minutes: dist.durationMinutes,
                     };
-                } else {
-                    allHit = false;
                 }
-            }
 
-            if (!allHit) {
-                try {
-                    const result = await getDistanceMatrix(locations, abortController.signal);
-
-                    if (abortController.signal.aborted) return;
-
-                    const entriesToCache: Array<{
-                        coordKey: string;
-                        distanceMiles: number;
-                        durationMinutes: number;
-                        createdAt: Date;
-                    }> = [];
-                    const now = new Date();
-
-                    for (const dist of result.distances) {
-                        allUpdates[dist.destinationId] = {
-                            miles: dist.distanceMiles,
-                            minutes: dist.durationMinutes,
-                        };
-
-                        // Find this leg's position in the sequential chain and
-                        // collect the matching cache entry. Legs are sequential
-                        // so destinationId uniquely identifies the leg index.
-                        const legIndex = locations.findIndex(
-                            (loc, idx) => idx > 0 && loc.id === dist.destinationId,
-                        );
-                        if (legIndex > 0) {
-                            const legKey = makeCoordKey(
-                                locations[legIndex - 1],
-                                locations[legIndex],
-                            );
-                            entriesToCache.push({
-                                coordKey: legKey,
-                                distanceMiles: dist.distanceMiles,
-                                durationMinutes: dist.durationMinutes,
-                                createdAt: now,
-                            });
-                        }
-                    }
-
-                    // Single bulkPut instead of N sequential IndexedDB writes.
-                    // Wrap so a cache-write failure (quota, private mode, ITP
-                    // eviction) does not mask the API's successful distances.
-                    try {
-                        await distanceCacheDB.putMany(entriesToCache);
-                    } catch (err) {
-                        console.warn(
-                            '[DistanceMatrix] Cache write failed:',
-                            err instanceof Error ? err.message : err,
-                        );
-                    }
-
-                    if (result.distances.length === 0) {
-                        console.warn(
-                            '[DistanceMatrix] API returned 0 distances for',
-                            locations.length,
-                            'locations on',
-                            selectedDate,
-                        );
-                    }
-                } catch (err) {
-                    const message = err instanceof Error ? err.message : String(err);
-                    console.error(
-                        `[DistanceMatrix] Failed for ${selectedDate} (${locations.length} locations):`,
-                        message,
+                if (result.distances.length === 0) {
+                    console.warn(
+                        '[DistanceMatrix] API returned 0 distances for',
+                        locations.length,
+                        'locations on',
+                        selectedDate,
                     );
-                    lastError = message;
                 }
+            } catch (err) {
+                const message = err instanceof Error ? err.message : String(err);
+                console.error(
+                    `[DistanceMatrix] Failed for ${selectedDate} (${locations.length} locations):`,
+                    message,
+                );
+                lastError = message;
             }
 
             if (abortController.signal.aborted) return;
@@ -397,9 +309,11 @@ export function useLocationData(
         if (!patient) {
             return null;
         }
-        if (patient.lat !== undefined && patient.lng !== undefined) {
-            return { lat: patient.lat, lng: patient.lng };
-        }
+        // Per Maps Platform ToS §3.2.3(b), we no longer read lat/lng from the
+        // Patient record (it was stored there indefinitely, which isn't
+        // compliant). All coordinate lookups now go through resolvedPatientCoordinates,
+        // which is populated on-demand from the geocodeAddress wrapper's
+        // 30-day TTL cache.
         return resolvedPatientCoordinates[patientId] ?? null;
     };
 
