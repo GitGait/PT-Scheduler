@@ -2,6 +2,10 @@ import type { DistanceMatrixResponse } from "../types";
 import { fetchJsonWithTimeout } from "./request";
 import { distanceMatrixResponseSchema, parseWithSchema } from "../utils/validation";
 
+// Flip to `true` to re-enable Google Distance Matrix API calls.
+// When false, all callers fall back to straight-line distance estimates.
+const DISTANCE_MATRIX_ENABLED = false;
+
 export interface LocationInput {
     id: string;
     lat: number;
@@ -17,7 +21,7 @@ export async function getDistanceMatrix(
     locations: LocationInput[],
     signal?: AbortSignal,
 ): Promise<DistanceMatrixResponse> {
-    if (locations.length < 2) {
+    if (!DISTANCE_MATRIX_ENABLED || locations.length < 2) {
         return { distances: [] };
     }
 
