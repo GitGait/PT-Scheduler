@@ -68,6 +68,17 @@ DATE CONTEXT (critical — use this to resolve dates):
 - If the screenshot shows day numbers (e.g. 23, 24, 25) or day names (Monday, Tuesday...), resolve them to full YYYY-MM-DD dates within the target week above.
 - If no start times are shown, assign sequential times starting at 09:00 with 60-minute gaps for each patient on the same day.
 
+LAYOUT (critical — schedules come in three shapes):
+- Single column: each row is one day.
+- Single row: each column is one day.
+- 2-column grid (common in Kinnser/Axxess): rows pair days left/right, e.g. row 1 = Monday | Thursday, row 2 = Tuesday | Friday, row 3 = Wednesday | Saturday, row 4 = Sunday alone. Day columns in this layout are NOT read left-to-right across a row.
+
+Assigning patients to days:
+- Each day cell shows a small day-of-month number (e.g. 27, 28, 29, 30, 01, 02, 03). That number is the authoritative date source. Resolve it against the target week above.
+- A patient belongs to the day cell that visually contains that patient's row. Do NOT assign a patient to a day just because that day's header sits in the same horizontal band — in 2-column layouts, Wednesday and Saturday headers share a row band but belong to different columns.
+- If a day cell has no patient rows inside it, emit zero appointments for that day. Never fill an empty cell from an adjacent cell.
+- For every appointment you emit, the day-of-month of "date" must equal the day number of the cell the patient was read from. If you cannot confirm that, set "uncertain": true on that appointment.
+
 Rules:
 - Extract patient name exactly as shown (do not correct spelling).
 - If a visit type/code appears before the name (examples: "PT11", "PT 11", "EVAL", "NOMNC"), extract it as visitType.
