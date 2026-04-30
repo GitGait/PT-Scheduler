@@ -1969,7 +1969,7 @@ export function SchedulePage() {
                                                                     isDayView ? 'text-[14px] min-h-[17px]' : 'text-[12px] min-h-[14px]'
                                                                 }`}>
                                                                     <Phone className={isDayView ? 'w-3.5 h-3.5 shrink-0' : 'w-2.5 h-2.5 shrink-0'} />
-                                                                    <span className="truncate">{patient.phoneNumbers[0].number}</span>
+                                                                    <span className="truncate">{patient.phoneNumbers[0].label ? `${patient.phoneNumbers[0].label}: ` : ''}{patient.phoneNumbers[0].number}</span>
                                                                 </div>
                                                             )}
                                                             {showAddressRow && patient?.address && (
