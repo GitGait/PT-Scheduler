@@ -63,8 +63,9 @@ export default async function handler(
               ]
             }
           ],
-          max_tokens: 2048,
-          temperature: 0.1
+          max_tokens: 4096,
+          temperature: 0.1,
+          response_format: { type: "json_object" }
         }),
         signal: controller.signal
       });
@@ -83,6 +84,7 @@ export default async function handler(
 
       const result = await response.json();
       const content = result.choices?.[0]?.message?.content;
+      const finishReason = result.choices?.[0]?.finish_reason;
 
       if (!content) {
         res.status(502).json({
@@ -92,18 +94,38 @@ export default async function handler(
         return;
       }
 
-      // Parse JSON from response (handle potential markdown wrapping)
+      if (finishReason === "length") {
+        console.error("OCR response truncated at max_tokens. Content head:", content.slice(0, 500));
+        res.status(502).json({
+          error: "Schedule too large — try cropping the image to one week at a time.",
+          code: "RESPONSE_TRUNCATED"
+        });
+        return;
+      }
+
+      // Parse JSON from response (JSON mode normally guarantees parseable output;
+      // fallbacks below are last-resort safety nets)
       let parsed: unknown;
       try {
-        // Try direct parse first
         parsed = JSON.parse(content);
       } catch {
-        // Try extracting from markdown code block
         const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
         if (jsonMatch) {
           parsed = JSON.parse(jsonMatch[1].trim());
         } else {
-          throw new Error("Could not parse response as JSON");
+          const first = content.indexOf("{");
+          const last = content.lastIndexOf("}");
+          if (first !== -1 && last > first) {
+            try {
+              parsed = JSON.parse(content.slice(first, last + 1));
+            } catch {
+              console.error("OCR parse failure, content was:", content.slice(0, 2000));
+              throw new Error("Could not parse response as JSON");
+            }
+          } else {
+            console.error("OCR parse failure, content was:", content.slice(0, 2000));
+            throw new Error("Could not parse response as JSON");
+          }
         }
       }
 

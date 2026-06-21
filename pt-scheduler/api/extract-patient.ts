@@ -50,7 +50,8 @@ export default async function handler(
                         { role: "user", content: prompt.user }
                     ],
                     max_tokens: 1024,
-                    temperature: 0.1
+                    temperature: 0.1,
+                    response_format: { type: "json_object" }
                 }),
                 signal: controller.signal
             });
@@ -69,6 +70,7 @@ export default async function handler(
 
             const result = await response.json();
             const content = result.choices?.[0]?.message?.content;
+            const finishReason = result.choices?.[0]?.finish_reason;
 
             if (!content) {
                 res.status(502).json({
@@ -78,7 +80,16 @@ export default async function handler(
                 return;
             }
 
-            // Parse JSON response
+            if (finishReason === "length") {
+                console.error("Extract-patient response truncated at max_tokens. Content head:", content.slice(0, 500));
+                res.status(502).json({
+                    error: "Referral text too long — try pasting a shorter excerpt.",
+                    code: "RESPONSE_TRUNCATED"
+                });
+                return;
+            }
+
+            // Parse JSON response (JSON mode normally guarantees parseable output)
             let parsed: unknown;
             try {
                 parsed = JSON.parse(content);
@@ -87,7 +98,19 @@ export default async function handler(
                 if (jsonMatch) {
                     parsed = JSON.parse(jsonMatch[1].trim());
                 } else {
-                    throw new Error("Could not parse response as JSON");
+                    const first = content.indexOf("{");
+                    const last = content.lastIndexOf("}");
+                    if (first !== -1 && last > first) {
+                        try {
+                            parsed = JSON.parse(content.slice(first, last + 1));
+                        } catch {
+                            console.error("Extract-patient parse failure, content was:", content.slice(0, 2000));
+                            throw new Error("Could not parse response as JSON");
+                        }
+                    } else {
+                        console.error("Extract-patient parse failure, content was:", content.slice(0, 2000));
+                        throw new Error("Could not parse response as JSON");
+                    }
                 }
             }
 
