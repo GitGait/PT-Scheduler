@@ -108,7 +108,7 @@ function parseVisitTypeAndName(input: {
 
 export function ScanPage() {
     const navigate = useNavigate();
-    const { patients, loadAll: loadPatients, add: addPatient } = usePatientStore();
+    const { patients, loadAll: loadPatients, add: addPatient, reactivate } = usePatientStore();
     const { create: createAppointment, update: updateAppointment } = useAppointmentStore();
 
     const [isDragging, setIsDragging] = useState(false);
@@ -495,6 +495,19 @@ export function ScanPage() {
         setError(null);
 
         try {
+            // Auto-reactivate any matched patient that is currently non-active
+            // (e.g. a returning patient picked up from the discharged list).
+            const reactivatedIds = new Set<string>();
+            for (const result of confirmedResults) {
+                const pid = result.matchedPatientId;
+                if (!pid || reactivatedIds.has(pid)) continue;
+                const existing = patients.find((p) => p.id === pid);
+                if (existing && existing.status !== "active") {
+                    await reactivate(pid);
+                    reactivatedIds.add(pid);
+                }
+            }
+
             const importedAppointments: Array<{
                 appointmentId: string;
                 patientId: string;
@@ -919,11 +932,13 @@ export function ScanPage() {
                                         >
                                             <option value="">Choose a patient...</option>
                                             {patients
-                                                .filter((p) => p.status === "active")
                                                 .sort((a, b) => a.fullName.localeCompare(b.fullName))
                                                 .map((p) => (
                                                     <option key={p.id} value={p.id}>
                                                         {p.fullName}
+                                                        {p.status === "discharged" ? " (discharged)" : ""}
+                                                        {p.status === "for-other-pt" ? " (other PT)" : ""}
+                                                        {p.status === "evaluation" ? " (eval)" : ""}
                                                     </option>
                                                 ))}
                                         </select>
