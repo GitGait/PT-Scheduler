@@ -1336,31 +1336,23 @@ export async function upsertVisitTypeToSheet(
         throw new Error("Not authenticated");
     }
 
+    // Unconditional, mirroring upsertPatientToNamedSheet: ensureSheetHeaders
+    // diffs the existing header row and appends whatever is missing. Calling it
+    // only when the tab is empty would leave a partial header row (or a sheet
+    // written by an older version) permanently short of columns, silently
+    // dropping those fields from every row we write.
     await getSheetIdByTitle(spreadsheetId, token, VISIT_TYPES_SHEET_TITLE, true);
-    let rows = await fetchVisitTypeSheetRows(spreadsheetId, token, true);
-    if (rows.length === 0) {
-        await ensureSheetHeaders(
-            spreadsheetId,
-            token,
-            VISIT_TYPES_SHEET_TITLE,
-            DEFAULT_VISIT_TYPE_HEADERS
-        );
-        rows = await fetchVisitTypeSheetRows(spreadsheetId, token, true);
-    }
+    await ensureSheetHeaders(
+        spreadsheetId,
+        token,
+        VISIT_TYPES_SHEET_TITLE,
+        DEFAULT_VISIT_TYPE_HEADERS
+    );
+    const rows = await fetchVisitTypeSheetRows(spreadsheetId, token, true);
 
-    let codeIndex = findHeaderIndex(rows[0] ?? DEFAULT_VISIT_TYPE_HEADERS, ["code"]);
+    const codeIndex = findHeaderIndex(rows[0] ?? DEFAULT_VISIT_TYPE_HEADERS, ["code"]);
     if (codeIndex < 0) {
-        await ensureSheetHeaders(
-            spreadsheetId,
-            token,
-            VISIT_TYPES_SHEET_TITLE,
-            DEFAULT_VISIT_TYPE_HEADERS
-        );
-        rows = await fetchVisitTypeSheetRows(spreadsheetId, token, true);
-        codeIndex = findHeaderIndex(rows[0] ?? DEFAULT_VISIT_TYPE_HEADERS, ["code"]);
-        if (codeIndex < 0) {
-            throw new Error("code column not found in Visit Types sheet");
-        }
+        throw new Error("code column not found in Visit Types sheet");
     }
 
     const effectiveHeaders = rows[0] ?? DEFAULT_VISIT_TYPE_HEADERS;
@@ -1369,7 +1361,7 @@ export async function upsertVisitTypeToSheet(
 
     let rowIndex = -1;
     for (let i = 1; i < rows.length; i++) {
-        if ((rows[i][codeIndex] ?? "").trim().toUpperCase() === def.code) {
+        if ((rows[i][codeIndex] ?? "").trim().toUpperCase() === def.code.toUpperCase()) {
             rowIndex = i + 1;
             break;
         }

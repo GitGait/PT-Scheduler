@@ -388,17 +388,11 @@ export const visitTypeDB = {
     },
 
     /**
-     * Distinct non-null visit type codes actually used by appointments, for the
-     * "unconfigured types found" list. `visitType` is an index, so this reads
-     * keys only rather than loading every appointment.
+     * Occurrence counts per visit type code, for the "unconfigured types found"
+     * list. `visitType` is an index, so this reads keys only rather than
+     * loading every appointment; appointments with a null visit type are absent
+     * from the index and so are naturally excluded.
      */
-    async distinctAppointmentVisitTypes(): Promise<string[]> {
-        const keys = await db.appointments.orderBy("visitType").uniqueKeys();
-        return keys
-            .filter((key): key is string => typeof key === "string" && key.length > 0);
-    },
-
-    /** Occurrence counts per visit type code, for the unconfigured-types list. */
     async appointmentVisitTypeCounts(): Promise<Map<string, number>> {
         const counts = new Map<string, number>();
         await db.appointments.orderBy("visitType").eachKey((key) => {

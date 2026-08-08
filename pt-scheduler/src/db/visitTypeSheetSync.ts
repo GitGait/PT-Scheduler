@@ -33,19 +33,31 @@ export async function reconcileVisitTypesFromSheetSnapshot(
 
     for (const def of sheetTypes) {
         // A hand-edited sheet is untrusted input — never let a malformed code
-        // or colour reach the registry.
+        // reach the registry.
         if (!def?.code || !VISIT_TYPE_CODE_REGEX.test(def.code)) {
             continue;
         }
+
+        // Record presence BEFORE any further rejection. A code that is in the
+        // sheet but unusable must read as "present, not upserted": if it fell
+        // through to the delete pass below it would be silently removed.
+        currentSheetCodes.add(def.code);
+
         if (!isValidVisitTypeColor(def.bg)) {
             continue;
         }
-
-        currentSheetCodes.add(def.code);
-
         if (pendingCodes.has(def.code)) {
             continue;
         }
+
+        // Only write when something actually changed. A steady-state sync then
+        // reports zero changes, so the caller skips the registry swap and the
+        // synced event — which would otherwise fire on every poll tick.
+        const existing = await db.visitTypes.get(def.code);
+        if (existing && !hasVisitTypeChanged(existing, def)) {
+            continue;
+        }
+
         await db.visitTypes.put(def);
         upserted += 1;
     }
@@ -69,6 +81,20 @@ export async function reconcileVisitTypesFromSheetSnapshot(
 
     writeTrackedSheetVisitTypeCodes(spreadsheetId, currentSheetCodes);
     return { upserted, deleted };
+}
+
+/**
+ * Compare only the user-meaningful fields. `createdAt`/`updatedAt` are both
+ * derived from the sheet's single `updatedAt` cell, so they carry no signal
+ * beyond what the other fields already show.
+ */
+function hasVisitTypeChanged(existing: VisitTypeDef, incoming: VisitTypeDef): boolean {
+    return (
+        existing.label !== incoming.label ||
+        existing.bg !== incoming.bg ||
+        existing.hidden !== incoming.hidden ||
+        existing.sortOrder !== incoming.sortOrder
+    );
 }
 
 function readTrackedSheetVisitTypeCodes(spreadsheetId: string): Set<string> {

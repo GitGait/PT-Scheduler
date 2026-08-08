@@ -120,10 +120,14 @@ export const useVisitTypeStore = create<VisitTypeState & VisitTypeActions>((set,
 
     save: async (input) => {
         set({ error: null });
-        const existing = get().stored.find((d) => d.code === input.code);
+        // Codes are canonically uppercase. Normalising here rather than only at
+        // the sheet boundary keeps the Dexie key and the sheet row in agreement,
+        // so an upsert can never append a duplicate row for a case variant.
+        const code = input.code.toUpperCase();
+        const existing = get().stored.find((d) => d.code === code);
         const now = new Date();
         const def: VisitTypeDef = {
-            code: input.code,
+            code,
             label: input.label,
             bg: input.bg.toLowerCase(),
             hidden: input.hidden ?? existing?.hidden ?? false,

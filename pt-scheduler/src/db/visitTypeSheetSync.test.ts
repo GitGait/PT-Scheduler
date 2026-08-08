@@ -98,4 +98,46 @@ describe("reconcileVisitTypesFromSheetSnapshot", () => {
         expect(result.upserted).toBe(0);
         expect(await db.visitTypes.get("PT26")).toBeUndefined();
     });
+
+    it("does not delete a tracked code whose row later has a bad colour", async () => {
+        // The colour guard must not double as an absent-from-sheet signal: the
+        // code is still in the sheet, just unusable, so the stored row stands.
+        await reconcileVisitTypesFromSheetSnapshot(SPREADSHEET_ID, [
+            makeDef({ code: "PT26", label: "Wound Care" }),
+        ]);
+
+        const result = await reconcileVisitTypesFromSheetSnapshot(SPREADSHEET_ID, [
+            makeDef({ code: "PT26", label: "Wound Care", bg: "red" }),
+        ]);
+
+        expect(result.deleted).toBe(0);
+        expect((await db.visitTypes.get("PT26"))?.label).toBe("Wound Care");
+    });
+
+    it("reports no change when the snapshot matches what is already stored", async () => {
+        // Steady state must be quiet: a non-zero count here would make useSync
+        // swap the registry and fire the synced event on every poll tick.
+        const snapshot = [makeDef({ code: "PT26" }), makeDef({ code: "PT11", bg: "#ff0000" })];
+
+        const first = await reconcileVisitTypesFromSheetSnapshot(SPREADSHEET_ID, snapshot);
+        expect(first.upserted).toBe(2);
+
+        const second = await reconcileVisitTypesFromSheetSnapshot(SPREADSHEET_ID, snapshot);
+        expect(second).toEqual({ upserted: 0, deleted: 0 });
+    });
+
+    it("reports a change when a stored row actually differs", async () => {
+        await reconcileVisitTypesFromSheetSnapshot(SPREADSHEET_ID, [makeDef({ code: "PT26" })]);
+
+        const relabelled = await reconcileVisitTypesFromSheetSnapshot(SPREADSHEET_ID, [
+            makeDef({ code: "PT26", label: "Renamed" }),
+        ]);
+        expect(relabelled.upserted).toBe(1);
+
+        const hidden = await reconcileVisitTypesFromSheetSnapshot(SPREADSHEET_ID, [
+            makeDef({ code: "PT26", label: "Renamed", hidden: true }),
+        ]);
+        expect(hidden.upserted).toBe(1);
+        expect((await db.visitTypes.get("PT26"))?.hidden).toBe(true);
+    });
 });

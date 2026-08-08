@@ -240,7 +240,3 @@ export function getVisitTypeGradient(visitType: VisitType | undefined): string {
 export function getVisitTypeLabel(visitType: VisitType | undefined): string {
     return registryByCode.get(visitType ?? null)?.label ?? DEFAULT_VISIT_TYPE_CONFIG.label;
 }
-
-export function getVisitTypeConfig(visitType: VisitType | undefined): VisitTypeConfig {
-    return registryByCode.get(visitType ?? null) ?? DEFAULT_VISIT_TYPE_CONFIG;
-}

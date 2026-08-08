@@ -5,6 +5,7 @@ import {
     appointmentDB,
     syncQueueDB,
     geocodeCacheDB,
+    visitTypeDB,
     GEOCODE_TTL_MS,
     normalizeAddressKey,
 } from "./operations";
@@ -286,6 +287,68 @@ describe("appointmentDB", () => {
         const appt = await appointmentDB.get(id);
         expect(appt?.syncStatus).toBe("synced");
         expect(appt?.calendarEventId).toBe("google-event-123");
+    });
+});
+
+describe("visitTypeDB", () => {
+    beforeEach(async () => {
+        await db.appointments.clear();
+        await db.visitTypes.clear();
+    });
+
+    const seed = (visitType: string | null) =>
+        appointmentDB.create({
+            patientId: "p1",
+            date: "2026-02-10",
+            startTime: "09:00",
+            duration: 60,
+            status: "scheduled",
+            syncStatus: "local",
+            visitType,
+        });
+
+    it("stores and reads back a definition by code", async () => {
+        await visitTypeDB.put({
+            code: "PT26",
+            label: "Wound Care",
+            bg: "#112233",
+            hidden: false,
+            sortOrder: 1,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+        });
+
+        expect((await visitTypeDB.get("PT26"))?.label).toBe("Wound Care");
+        expect(await visitTypeDB.all()).toHaveLength(1);
+
+        await visitTypeDB.delete("PT26");
+        expect(await visitTypeDB.get("PT26")).toBeUndefined();
+    });
+
+    it("counts duplicate visit types rather than collapsing them", async () => {
+        await seed("PT11");
+        await seed("PT11");
+        await seed("PT11");
+        await seed("PT26");
+
+        const counts = await visitTypeDB.appointmentVisitTypeCounts();
+
+        expect(counts.get("PT11")).toBe(3);
+        expect(counts.get("PT26")).toBe(1);
+    });
+
+    it("excludes appointments with no visit type", async () => {
+        await seed(null);
+        await seed("PT26");
+
+        const counts = await visitTypeDB.appointmentVisitTypeCounts();
+
+        expect(counts.size).toBe(1);
+        expect([...counts.keys()]).toEqual(["PT26"]);
+    });
+
+    it("returns an empty map when there are no appointments", async () => {
+        expect((await visitTypeDB.appointmentVisitTypeCounts()).size).toBe(0);
     });
 });
 
