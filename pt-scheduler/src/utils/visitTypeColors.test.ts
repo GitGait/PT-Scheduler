@@ -10,8 +10,11 @@ import {
     getVisitTypeGradient,
     getVisitTypeLabel,
     setVisitTypeRegistry,
+    VISIT_TYPE_HUES,
+    findVisitTypeHue,
     type VisitTypeConfig,
 } from "./visitTypeColors";
+import { VISIT_TYPE_COLOR_REGEX } from "./visitTypeCodes";
 
 const PT11 = BUILT_IN_VISIT_TYPE_CONFIGS.find((c) => c.code === "PT11")!;
 
@@ -72,6 +75,46 @@ describe("deriveGradient", () => {
 
     it("falls back to the default gradient for a malformed colour", () => {
         expect(deriveGradient("red")).toBe(DEFAULT_VISIT_TYPE_CONFIG.gradient);
+    });
+});
+
+describe("VISIT_TYPE_HUES", () => {
+    const allShades = VISIT_TYPE_HUES.flatMap((hue) => hue.shades);
+
+    it("offers four lowercase hex steps per family", () => {
+        for (const hue of VISIT_TYPE_HUES) {
+            expect(hue.shades).toHaveLength(4);
+            for (const shade of hue.shades) {
+                expect(shade).toMatch(VISIT_TYPE_COLOR_REGEX);
+                expect(shade).toBe(shade.toLowerCase());
+            }
+        }
+    });
+
+    it("never repeats a colour across families", () => {
+        expect(new Set(allShades).size).toBe(allShades.length);
+    });
+
+    it("never repeats a family name", () => {
+        const names = VISIT_TYPE_HUES.map((hue) => hue.name);
+        expect(new Set(names).size).toBe(names.length);
+    });
+
+    it("contains every built-in colour, so an existing choice stays findable", () => {
+        for (const config of BUILT_IN_VISIT_TYPE_CONFIGS) {
+            expect(allShades).toContain(config.bg.toLowerCase());
+        }
+    });
+});
+
+describe("findVisitTypeHue", () => {
+    it("finds the family for any shade, case-insensitively", () => {
+        expect(findVisitTypeHue("#039be5")?.name).toBe("Light Blue");
+        expect(findVisitTypeHue("#01579B")?.name).toBe("Light Blue");
+    });
+
+    it("returns undefined for a colour outside the palette", () => {
+        expect(findVisitTypeHue("#123456")).toBeUndefined();
     });
 });
 

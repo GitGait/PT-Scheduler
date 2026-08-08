@@ -2,14 +2,7 @@ import { useEffect, useState } from "react";
 import { Eye, EyeOff, RotateCcw, Trash2 } from "lucide-react";
 import type { VisitTypeConfig } from "../../utils/visitTypeColors";
 import { isValidVisitTypeColor, MAX_VISIT_TYPE_LABEL_LENGTH } from "../../utils/visitTypeCodes";
-
-/** One-tap swatches for iPhone: the 12 built-in colours plus two neutrals. */
-export const VISIT_TYPE_COLOR_PRESETS = [
-    "#00897b", "#8e24aa", "#5c6bc0", "#fb8c00",
-    "#e53935", "#039be5", "#d81b60", "#ff6d00",
-    "#ffab00", "#00bcd4", "#795548", "#607d8b",
-    "#546e7a", "#9e9e9e",
-];
+import { VisitTypeColorPicker } from "./VisitTypeColorPicker";
 
 interface VisitTypeEditorRowProps {
     config: VisitTypeConfig;
@@ -32,7 +25,7 @@ export function VisitTypeEditorRow({
 }: VisitTypeEditorRowProps) {
     const code = config.code ?? "";
     const [label, setLabel] = useState(config.label);
-    const [showPresets, setShowPresets] = useState(false);
+    const [showPicker, setShowPicker] = useState(false);
     const [confirmingDelete, setConfirmingDelete] = useState(false);
 
     // Adopt external changes (e.g. a sheet sync landing while Settings is open)
@@ -64,7 +57,7 @@ export function VisitTypeEditorRow({
             <div className="flex items-center gap-2">
                 <button
                     type="button"
-                    onClick={() => setShowPresets((v) => !v)}
+                    onClick={() => setShowPicker((v) => !v)}
                     aria-label={`Change color for ${code}`}
                     className="w-6 h-6 rounded-full flex-shrink-0 ring-1 ring-black/10"
                     style={{ backgroundColor: config.bg }}
@@ -119,27 +112,14 @@ export function VisitTypeEditorRow({
                 )}
             </div>
 
-            {showPresets && (
-                <div className="mt-2 pl-8 flex items-center gap-1.5 flex-wrap">
-                    {VISIT_TYPE_COLOR_PRESETS.map((preset) => (
-                        <button
-                            key={preset}
-                            type="button"
-                            aria-label={`Use ${preset} for ${code}`}
-                            onClick={() => {
-                                commitColor(preset);
-                                setShowPresets(false);
-                            }}
-                            className="w-6 h-6 rounded-full ring-1 ring-black/10"
-                            style={{ backgroundColor: preset }}
-                        />
-                    ))}
-                    <input
-                        type="color"
+            {/* The panel only closes via the swatch button — auto-closing on the
+                first tap would hide the shade row the user is reaching for. */}
+            {showPicker && (
+                <div className="mt-2 pl-8">
+                    <VisitTypeColorPicker
                         value={config.bg}
-                        aria-label={`Custom color for ${code}`}
-                        onChange={(e) => commitColor(e.target.value)}
-                        className="w-8 h-8 p-0 bg-transparent border border-[var(--color-border)] rounded cursor-pointer"
+                        onChange={commitColor}
+                        subject={code}
                     />
                 </div>
             )}

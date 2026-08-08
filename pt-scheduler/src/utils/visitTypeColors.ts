@@ -138,6 +138,54 @@ export function deriveGradient(bg: string): string {
 }
 
 // =============================================================================
+// Swatch palette
+// =============================================================================
+
+export interface VisitTypeHue {
+    /** Display name — used for aria-labels and as the open-family key. */
+    name: string;
+    /** Four steps, lightest first. `shades[1]` is the family's representative swatch. */
+    shades: readonly [string, string, string, string];
+}
+
+/**
+ * The curated palette offered in Settings, grouped so a user can pick "the same
+ * blue, but darker" in one tap.
+ *
+ * Chips render hardcoded white text, and nothing in the app computes a readable
+ * foreground, so the light end of every family is capped at roughly the
+ * lightness of the lightest colour already shipping (#ffab00 / #00bcd4). Never
+ * add a step lighter than these — it would make white chip text unreadable.
+ *
+ * Every built-in `bg` appears here verbatim, so the colour a type already has is
+ * always findable in the grid. `visitTypeColors.test.ts` locks both invariants.
+ */
+export const VISIT_TYPE_HUES: readonly VisitTypeHue[] = Object.freeze([
+    { name: "Red", shades: ["#ef5350", "#e53935", "#c62828", "#b71c1c"] },
+    { name: "Pink", shades: ["#ec407a", "#d81b60", "#ad1457", "#880e4f"] },
+    { name: "Purple", shades: ["#ab47bc", "#8e24aa", "#6a1b9a", "#4a148c"] },
+    { name: "Deep Purple", shades: ["#7e57c2", "#5e35b1", "#4527a0", "#311b92"] },
+    { name: "Indigo", shades: ["#5c6bc0", "#3949ab", "#283593", "#1a237e"] },
+    { name: "Blue", shades: ["#42a5f5", "#1e88e5", "#1565c0", "#0d47a1"] },
+    { name: "Light Blue", shades: ["#29b6f6", "#039be5", "#0277bd", "#01579b"] },
+    { name: "Cyan", shades: ["#26c6da", "#00bcd4", "#0097a7", "#006064"] },
+    { name: "Teal", shades: ["#26a69a", "#00897b", "#00695c", "#004d40"] },
+    { name: "Green", shades: ["#4caf50", "#43a047", "#2e7d32", "#1b5e20"] },
+    { name: "Amber", shades: ["#ffab00", "#ffa000", "#ff8f00", "#ff6f00"] },
+    { name: "Orange", shades: ["#fb8c00", "#ff6d00", "#ef6c00", "#e65100"] },
+    { name: "Deep Orange", shades: ["#ff7043", "#f4511e", "#d84315", "#bf360c"] },
+    { name: "Brown", shades: ["#8d6e63", "#795548", "#5d4037", "#3e2723"] },
+    { name: "Blue Grey", shades: ["#78909c", "#607d8b", "#546e7a", "#37474f"] },
+    { name: "Grey", shades: ["#9e9e9e", "#757575", "#616161", "#212121"] },
+] as VisitTypeHue[]);
+
+/** The family a colour belongs to, or undefined for a hex outside the palette. */
+export function findVisitTypeHue(bg: string): VisitTypeHue | undefined {
+    const normalized = bg.toLowerCase();
+    return VISIT_TYPE_HUES.find((hue) => hue.shades.includes(normalized));
+}
+
+// =============================================================================
 // Registry — the effective list, swapped in by visitTypeStore
 // =============================================================================
 

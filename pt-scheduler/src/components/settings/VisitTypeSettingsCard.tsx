@@ -14,7 +14,8 @@ import {
     validateVisitTypeLabel,
     type NewVisitTypeCodeError,
 } from "../../utils/visitTypeCodes";
-import { VisitTypeEditorRow, VISIT_TYPE_COLOR_PRESETS } from "./VisitTypeEditorRow";
+import { VisitTypeEditorRow } from "./VisitTypeEditorRow";
+import { VisitTypeColorPicker } from "./VisitTypeColorPicker";
 
 const DEFAULT_NEW_COLOR = "#546e7a";
 
@@ -195,28 +196,15 @@ export function VisitTypeSettingsCard() {
                             aria-label="New visit type description"
                             className="input-google flex-1 min-w-[8rem] text-sm"
                         />
-                        <input
-                            type="color"
-                            value={newColor}
-                            aria-label="New visit type color"
-                            onChange={(e) => setNewColor(e.target.value.toLowerCase())}
-                            className="w-9 h-9 p-0 bg-transparent border border-[var(--color-border)] rounded cursor-pointer"
-                        />
                     </div>
 
-                    <div className="mt-2 flex items-center gap-1.5 flex-wrap">
-                        {VISIT_TYPE_COLOR_PRESETS.map((preset) => (
-                            <button
-                                key={preset}
-                                type="button"
-                                aria-label={`Use ${preset} for the new type`}
-                                onClick={() => setNewColor(preset)}
-                                className={`w-6 h-6 rounded-full ring-1 ${
-                                    newColor === preset ? "ring-2 ring-[var(--color-primary)]" : "ring-black/10"
-                                }`}
-                                style={{ backgroundColor: preset }}
-                            />
-                        ))}
+                    {/* The picker owns the only custom-colour input on this form. */}
+                    <div className="mt-2">
+                        <VisitTypeColorPicker
+                            value={newColor}
+                            onChange={setNewColor}
+                            subject="the new type"
+                        />
                     </div>
 
                     {formError && (
