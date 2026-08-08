@@ -4,9 +4,16 @@
 
 import { getAccessToken } from "./auth";
 import { fetchWithTimeout } from "./request";
-import type { Patient, DayNote, DayNoteColor } from "../types";
+import type { Patient, DayNote, DayNoteColor, VisitTypeDef } from "../types";
+import { BUILT_IN_VISIT_TYPE_CODES } from "../types";
 import { sheetValuesSchema, spreadsheetMetadataSchema, parseWithSchema } from "../utils/validation";
 import type { SpreadsheetMetadata } from "../utils/validation";
+import {
+    MAX_VISIT_TYPE_LABEL_LENGTH,
+    VISIT_TYPE_CODE_REGEX,
+    VISIT_TYPE_COLOR_REGEX,
+} from "../utils/visitTypeCodes";
+import { DEFAULT_VISIT_TYPE_CONFIG } from "../utils/visitTypeColors";
 
 const SHEETS_API_BASE = "https://sheets.googleapis.com/v4/spreadsheets";
 const ALT_CONTACT_ENTRY_SEPARATOR = ";";
@@ -489,7 +496,7 @@ async function upsertPatientToNamedSheet(
     patient: Patient
 ): Promise<void> {
     await ensurePatientSheetExists(spreadsheetId, token, sheetTitle);
-    await ensurePatientSheetHeaders(spreadsheetId, token, sheetTitle);
+    await ensureSheetHeaders(spreadsheetId, token, sheetTitle, DEFAULT_PATIENT_HEADERS);
     const rows = await fetchPatientSheetRows(spreadsheetId, token, sheetTitle, true);
 
     const headers = rows[0] ?? DEFAULT_PATIENT_HEADERS;
@@ -696,16 +703,23 @@ async function ensurePatientSheetExists(
     await getSheetIdByTitle(spreadsheetId, token, sheetTitle, true);
 }
 
-async function ensurePatientSheetHeaders(
+/**
+ * Ensure a tab has the expected header row, appending any missing columns
+ * rather than overwriting what's there. Shared by the Patients and Visit Types
+ * tabs — both need the diff-and-append behaviour, not a blind overwrite.
+ */
+async function ensureSheetHeaders(
     spreadsheetId: string,
     token: string,
-    sheetTitle: string
+    sheetTitle: string,
+    defaultHeaders: string[]
 ): Promise<void> {
-    const rows = await fetchPatientSheetRows(spreadsheetId, token, sheetTitle, false);
+    const range = `${sheetTitle}!A:${toColumnLetter(defaultHeaders.length)}`;
+    const rows = await fetchPatientSheetRows(spreadsheetId, token, range, false);
     if (rows.length > 0 && rows[0].some((cell) => cell.trim() !== "")) {
         // Headers exist — check for missing columns and append them
         const existingHeaders = rows[0].map((h) => h.trim().toLowerCase());
-        const missing = DEFAULT_PATIENT_HEADERS.filter(
+        const missing = defaultHeaders.filter(
             (h) => !existingHeaders.includes(h.toLowerCase())
         );
         if (missing.length > 0) {
@@ -730,7 +744,7 @@ async function ensurePatientSheetHeaders(
     }
 
     const writeUrl = `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(
-        `${sheetTitle}!A1:${toColumnLetter(DEFAULT_PATIENT_HEADERS.length)}1`
+        `${sheetTitle}!A1:${toColumnLetter(defaultHeaders.length)}1`
     )}?valueInputOption=USER_ENTERED`;
     const response = await fetchWithTimeout(writeUrl, {
         method: "PUT",
@@ -738,7 +752,7 @@ async function ensurePatientSheetHeaders(
             Authorization: `Bearer ${token}`,
             "Content-Type": "application/json",
         },
-        body: JSON.stringify({ values: [DEFAULT_PATIENT_HEADERS] }),
+        body: JSON.stringify({ values: [defaultHeaders] }),
     });
 
     if (!response.ok) {
@@ -1155,5 +1169,288 @@ export async function deleteDayNotesFromSheetByIds(
     }
 
     await deletePatientSheetRows(spreadsheetId, token, DAY_NOTES_SHEET_TITLE, rowIndicesToDelete);
+    return rowIndicesToDelete.length;
+}
+
+// =============================================================================
+// Visit Types Sheet Sync
+// =============================================================================
+
+export const VISIT_TYPES_SHEET_TITLE = "Visit Types";
+export const DEFAULT_VISIT_TYPE_HEADERS = [
+    "code",
+    "label",
+    "color",
+    "hidden",
+    "sortOrder",
+    "isBuiltIn",
+    "updatedAt",
+];
+
+const VISIT_TYPES_RANGE = `${VISIT_TYPES_SHEET_TITLE}!A:${toColumnLetter(DEFAULT_VISIT_TYPE_HEADERS.length)}`;
+
+function parseSheetBoolean(raw: string): boolean {
+    const value = raw.trim().toLowerCase();
+    return value === "true" || value === "1" || value === "yes";
+}
+
+/**
+ * Parse one row of the Visit Types tab.
+ *
+ * A hand-edited sheet is untrusted input: a malformed code or colour is
+ * rejected here rather than passed through to the registry, where a bad value
+ * would render chips transparent instead of gray.
+ */
+export function parseVisitTypeRow(headers: string[], row: string[]): VisitTypeDef | null {
+    const getValue = (header: string) => {
+        const index = findHeaderIndex(headers, [header.toLowerCase()]);
+        return index >= 0 ? (row[index] ?? "").trim() : "";
+    };
+
+    const code = getValue("code").toUpperCase();
+    if (!VISIT_TYPE_CODE_REGEX.test(code)) {
+        return null;
+    }
+
+    const label = getValue("label") || code;
+
+    const colorRaw = getValue("color").toLowerCase();
+    const bg = VISIT_TYPE_COLOR_REGEX.test(colorRaw) ? colorRaw : DEFAULT_VISIT_TYPE_CONFIG.bg;
+
+    const sortOrderRaw = Number.parseInt(getValue("sortorder"), 10);
+    const updatedAtRaw = getValue("updatedat");
+
+    // `isBuiltIn` is written for human readability and deliberately ignored on
+    // parse — otherwise a hand-edited sheet could make PT18 deletable.
+    return {
+        code,
+        label: label.slice(0, MAX_VISIT_TYPE_LABEL_LENGTH),
+        bg,
+        hidden: parseSheetBoolean(getValue("hidden")),
+        sortOrder: Number.isFinite(sortOrderRaw) ? sortOrderRaw : 0,
+        createdAt: updatedAtRaw ? new Date(updatedAtRaw) : new Date(),
+        updatedAt: updatedAtRaw ? new Date(updatedAtRaw) : new Date(),
+    };
+}
+
+export function buildVisitTypeRowForHeaders(headers: string[], def: VisitTypeDef): string[] {
+    const normalizedHeaders = headers.length > 0 ? headers : DEFAULT_VISIT_TYPE_HEADERS;
+    const row = new Array(normalizedHeaders.length).fill("");
+
+    const setCell = (aliases: string[], value: string) => {
+        const index = findHeaderIndex(normalizedHeaders, aliases);
+        if (index >= 0) {
+            row[index] = value;
+        }
+    };
+
+    setCell(["code"], def.code);
+    setCell(["label"], def.label);
+    setCell(["color"], def.bg);
+    setCell(["hidden"], def.hidden ? "TRUE" : "FALSE");
+    setCell(["sortorder"], String(def.sortOrder ?? 0));
+    setCell(
+        ["isbuiltin"],
+        (BUILT_IN_VISIT_TYPE_CODES as readonly string[]).includes(def.code) ? "TRUE" : "FALSE"
+    );
+    setCell(["updatedat"], def.updatedAt.toISOString());
+
+    return row;
+}
+
+async function fetchVisitTypeSheetRows(
+    spreadsheetId: string,
+    token: string,
+    throwIfMissing = true
+): Promise<string[][]> {
+    const fetchUrl = `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(VISIT_TYPES_RANGE)}`;
+    const response = await fetchWithTimeout(fetchUrl, {
+        headers: { Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) {
+        if (!throwIfMissing && (response.status === 400 || response.status === 404)) {
+            return [];
+        }
+        const fallback = `Sheets API error (${response.status})`;
+        throw new Error(await getSheetsErrorMessage(response, fallback));
+    }
+
+    const raw = await response.json();
+    const payload = parseWithSchema(sheetValuesSchema, raw, "Sheets values response");
+    return payload.values ?? [];
+}
+
+/**
+ * Fetch the visit type config from the "Visit Types" tab.
+ *
+ * Returns `null` — not `[]` — when the tab is absent or unreadable. An empty
+ * array makes the reconciler delete every tracked row, which for a config
+ * table would wipe the user's setup on every device. Existence is checked via
+ * spreadsheet metadata rather than inferred from a 400.
+ */
+export async function fetchVisitTypesFromSheet(
+    spreadsheetId: string
+): Promise<VisitTypeDef[] | null> {
+    const token = await getAccessToken();
+    if (!token) {
+        throw new Error("Not authenticated");
+    }
+
+    const sheetId = await getSheetIdByTitle(spreadsheetId, token, VISIT_TYPES_SHEET_TITLE, false);
+    if (sheetId === null) {
+        return null;
+    }
+
+    const rows = await fetchVisitTypeSheetRows(spreadsheetId, token, false);
+    if (rows.length === 0) {
+        // The tab existed a moment ago but reads empty — a rename race, not a
+        // deliberate wipe. Treat it as absent rather than "delete everything".
+        return null;
+    }
+    if (rows.length < 2) {
+        return [];
+    }
+
+    const headers = rows[0];
+    const defs: VisitTypeDef[] = [];
+    for (let i = 1; i < rows.length; i++) {
+        const def = parseVisitTypeRow(headers, rows[i]);
+        if (def) {
+            defs.push(def);
+        }
+    }
+    return defs;
+}
+
+/**
+ * Upsert a single visit type to the "Visit Types" tab (match on code, or append).
+ * Creates the tab and its headers lazily on first write.
+ */
+export async function upsertVisitTypeToSheet(
+    spreadsheetId: string,
+    def: VisitTypeDef
+): Promise<void> {
+    const token = await getAccessToken();
+    if (!token) {
+        throw new Error("Not authenticated");
+    }
+
+    await getSheetIdByTitle(spreadsheetId, token, VISIT_TYPES_SHEET_TITLE, true);
+    let rows = await fetchVisitTypeSheetRows(spreadsheetId, token, true);
+    if (rows.length === 0) {
+        await ensureSheetHeaders(
+            spreadsheetId,
+            token,
+            VISIT_TYPES_SHEET_TITLE,
+            DEFAULT_VISIT_TYPE_HEADERS
+        );
+        rows = await fetchVisitTypeSheetRows(spreadsheetId, token, true);
+    }
+
+    let codeIndex = findHeaderIndex(rows[0] ?? DEFAULT_VISIT_TYPE_HEADERS, ["code"]);
+    if (codeIndex < 0) {
+        await ensureSheetHeaders(
+            spreadsheetId,
+            token,
+            VISIT_TYPES_SHEET_TITLE,
+            DEFAULT_VISIT_TYPE_HEADERS
+        );
+        rows = await fetchVisitTypeSheetRows(spreadsheetId, token, true);
+        codeIndex = findHeaderIndex(rows[0] ?? DEFAULT_VISIT_TYPE_HEADERS, ["code"]);
+        if (codeIndex < 0) {
+            throw new Error("code column not found in Visit Types sheet");
+        }
+    }
+
+    const effectiveHeaders = rows[0] ?? DEFAULT_VISIT_TYPE_HEADERS;
+    const rowValues = buildVisitTypeRowForHeaders(effectiveHeaders, def);
+    const colCount = Math.max(effectiveHeaders.length, DEFAULT_VISIT_TYPE_HEADERS.length);
+
+    let rowIndex = -1;
+    for (let i = 1; i < rows.length; i++) {
+        if ((rows[i][codeIndex] ?? "").trim().toUpperCase() === def.code) {
+            rowIndex = i + 1;
+            break;
+        }
+    }
+
+    if (rowIndex >= 0) {
+        const endCol = toColumnLetter(colCount);
+        const updateUrl = `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(
+            `${VISIT_TYPES_SHEET_TITLE}!A${rowIndex}:${endCol}${rowIndex}`
+        )}?valueInputOption=USER_ENTERED`;
+        const updateResponse = await fetchWithTimeout(updateUrl, {
+            method: "PUT",
+            headers: {
+                Authorization: `Bearer ${token}`,
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ values: [rowValues] }),
+        });
+        if (!updateResponse.ok) {
+            const fallback = `Sheets API error (${updateResponse.status})`;
+            throw new Error(await getSheetsErrorMessage(updateResponse, fallback));
+        }
+        return;
+    }
+
+    const appendUrl = `${SHEETS_API_BASE}/${spreadsheetId}/values/${encodeURIComponent(
+        `${VISIT_TYPES_SHEET_TITLE}!A:${toColumnLetter(colCount)}`
+    )}:append?valueInputOption=USER_ENTERED`;
+    const appendResponse = await fetchWithTimeout(appendUrl, {
+        method: "POST",
+        headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ values: [rowValues] }),
+    });
+    if (!appendResponse.ok) {
+        const fallback = `Sheets API error (${appendResponse.status})`;
+        throw new Error(await getSheetsErrorMessage(appendResponse, fallback));
+    }
+}
+
+/**
+ * Delete visit type rows from the "Visit Types" tab by code.
+ */
+export async function deleteVisitTypesFromSheetByCodes(
+    spreadsheetId: string,
+    codes: string[]
+): Promise<number> {
+    const normalized = new Set(codes.map((code) => code.trim().toUpperCase()).filter(Boolean));
+    if (normalized.size === 0) {
+        return 0;
+    }
+
+    const token = await getAccessToken();
+    if (!token) {
+        throw new Error("Not authenticated");
+    }
+
+    const rows = await fetchVisitTypeSheetRows(spreadsheetId, token, false);
+    if (rows.length < 2) {
+        return 0;
+    }
+
+    const codeIndex = findHeaderIndex(rows[0], ["code"]);
+    if (codeIndex < 0) {
+        return 0;
+    }
+
+    const rowIndicesToDelete: number[] = [];
+    for (let i = 1; i < rows.length; i++) {
+        const code = (rows[i][codeIndex] ?? "").trim().toUpperCase();
+        if (code && normalized.has(code)) {
+            rowIndicesToDelete.push(i + 1);
+        }
+    }
+
+    if (rowIndicesToDelete.length === 0) {
+        return 0;
+    }
+
+    await deletePatientSheetRows(spreadsheetId, token, VISIT_TYPES_SHEET_TITLE, rowIndicesToDelete);
     return rowIndicesToDelete.length;
 }

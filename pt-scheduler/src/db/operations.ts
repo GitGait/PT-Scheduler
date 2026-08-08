@@ -8,6 +8,7 @@ import type {
     SyncQueueItem,
     PatientStatus,
     SyncStatus,
+    VisitTypeDef,
 } from "../types";
 
 // =============================================================================
@@ -352,6 +353,59 @@ export const dayNoteDB = {
     /** Delete day note */
     async delete(id: string): Promise<void> {
         await db.dayNotes.delete(id);
+    },
+};
+
+// =============================================================================
+// Visit Type Operations
+// =============================================================================
+// Holds ONLY overrides of built-in types and user-created types. The built-in
+// 12 are compiled into visitTypeColors.ts and never seeded here, which is what
+// makes them structurally unremovable — "reset to default" is a row delete.
+
+export const visitTypeDB = {
+    /** All stored overrides and custom types */
+    async all(): Promise<VisitTypeDef[]> {
+        return db.visitTypes.toArray();
+    },
+
+    async get(code: string): Promise<VisitTypeDef | undefined> {
+        return db.visitTypes.get(code);
+    },
+
+    /** Insert or replace by code (the primary key) */
+    async put(def: VisitTypeDef): Promise<void> {
+        await db.visitTypes.put(def);
+    },
+
+    async bulkPut(defs: VisitTypeDef[]): Promise<void> {
+        if (defs.length === 0) return;
+        await db.visitTypes.bulkPut(defs);
+    },
+
+    async delete(code: string): Promise<void> {
+        await db.visitTypes.delete(code);
+    },
+
+    /**
+     * Distinct non-null visit type codes actually used by appointments, for the
+     * "unconfigured types found" list. `visitType` is an index, so this reads
+     * keys only rather than loading every appointment.
+     */
+    async distinctAppointmentVisitTypes(): Promise<string[]> {
+        const keys = await db.appointments.orderBy("visitType").uniqueKeys();
+        return keys
+            .filter((key): key is string => typeof key === "string" && key.length > 0);
+    },
+
+    /** Occurrence counts per visit type code, for the unconfigured-types list. */
+    async appointmentVisitTypeCounts(): Promise<Map<string, number>> {
+        const counts = new Map<string, number>();
+        await db.appointments.orderBy("visitType").eachKey((key) => {
+            if (typeof key !== "string" || !key) return;
+            counts.set(key, (counts.get(key) ?? 0) + 1);
+        });
+        return counts;
     },
 };
 

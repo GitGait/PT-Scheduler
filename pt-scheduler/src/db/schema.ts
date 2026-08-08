@@ -1,6 +1,5 @@
 import Dexie, { type EntityTable } from "dexie";
 import {
-    VISIT_TYPE_CODES,
     type Patient,
     type Appointment,
     type RecurringBlock,
@@ -8,6 +7,7 @@ import {
     type SyncQueueItem,
     type DayNote,
     type VisitType,
+    type VisitTypeDef,
 } from "../types";
 
 // Route cache for storing optimized route results
@@ -43,6 +43,7 @@ export class PTSchedulerDB extends Dexie {
     routeCache!: EntityTable<RouteCache, "id">;
     dayNotes!: EntityTable<DayNote, "id">;
     geocodeCache!: EntityTable<CachedGeocode, "addressKey">;
+    visitTypes!: EntityTable<VisitTypeDef, "code">;
 
     constructor() {
         super("PTSchedulerDB");
@@ -224,11 +225,33 @@ export class PTSchedulerDB extends Dexie {
             distanceCache: null,
             geocodeCache: "&addressKey",
         });
+
+        // Version 13: Add visitTypes table for user-editable visit type config.
+        // Holds only overrides of built-ins and user-created types — the
+        // built-in 12 are compiled in and never seeded here. No upgrade needed.
+        this.version(13).stores({
+            patients: "id, fullName, status",
+            appointments: "id, patientId, date, status, syncStatus, visitType",
+            recurringBlocks: "id, patientId, dayOfWeek",
+            calendarEvents: "id, appointmentId, googleEventId",
+            syncQueue: "++id, timestamp, status, nextRetryAt",
+            routeCache: "id, date, expiresAt",
+            dayNotes: "id, date",
+            distanceCache: null,
+            geocodeCache: "&addressKey",
+            visitTypes: "code",
+        });
     }
 }
 
-// Valid visit type codes (from single source of truth)
-const VALID_VISIT_TYPES = new Set<string>(VISIT_TYPE_CODES);
+// HISTORICAL AND IMMUTABLE. The v2 migration reconstructs 2024-era data from
+// notes. It must never read user-configurable visit types: if it did, the same
+// DB upgrade would produce different results on two devices. Do not replace
+// this with the shared list, and do not add codes to it.
+const MIGRATION_V2_VALID_VISIT_TYPES = new Set<string>([
+    "PT00", "PT01", "PT02", "PT05", "PT06", "PT10",
+    "PT11", "PT15", "PT18", "PT19", "PT33", "NOMNC",
+]);
 
 /**
  * Extract visit type from notes field during migration.
@@ -245,7 +268,7 @@ function extractVisitTypeFromNotes(notes?: string): VisitType {
     );
     if (labeledMatch) {
         const normalized = normalizeVisitTypeCode(labeledMatch[1]);
-        if (normalized && VALID_VISIT_TYPES.has(normalized)) {
+        if (normalized && MIGRATION_V2_VALID_VISIT_TYPES.has(normalized)) {
             return normalized as VisitType;
         }
     }
@@ -256,7 +279,7 @@ function extractVisitTypeFromNotes(notes?: string): VisitType {
     );
     if (bracketedMatch) {
         const normalized = normalizeVisitTypeCode(bracketedMatch[1]);
-        if (normalized && VALID_VISIT_TYPES.has(normalized)) {
+        if (normalized && MIGRATION_V2_VALID_VISIT_TYPES.has(normalized)) {
             return normalized as VisitType;
         }
     }
@@ -266,7 +289,7 @@ function extractVisitTypeFromNotes(notes?: string): VisitType {
     const prefixMatch = firstLine.match(/^([A-Za-z]{1,6}\s*[-]?\s*\d{1,3})\b/i);
     if (prefixMatch) {
         const normalized = normalizeVisitTypeCode(prefixMatch[1]);
-        if (normalized && VALID_VISIT_TYPES.has(normalized)) {
+        if (normalized && MIGRATION_V2_VALID_VISIT_TYPES.has(normalized)) {
             return normalized as VisitType;
         }
     }

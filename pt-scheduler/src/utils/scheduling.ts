@@ -164,40 +164,6 @@ export function isValidQuarterHour(time: string): boolean {
 }
 
 /**
- * Normalize visit type strings to a consistent format.
- */
-export function normalizeVisitType(value?: string): string | undefined {
-    const raw = (value ?? "").trim();
-    if (!raw) {
-        return undefined;
-    }
-
-    const cleaned = raw
-        .replace(/^[[({<]+|[\])}>]+$/g, "")
-        .replace(/^visit\s*type\s*[:-]?\s*/i, "")
-        .replace(/[–—]/g, "-")
-        .replace(/^[\s:;-]+|[\s:;-]+$/g, "")
-        .replace(/\s+/g, " ")
-        .trim();
-
-    if (!cleaned) {
-        return undefined;
-    }
-
-    const alphaNumeric = cleaned.match(/^([A-Za-z]{1,6})\s*[-]?\s*(\d{1,3})$/);
-    if (alphaNumeric) {
-        return `${alphaNumeric[1].toUpperCase()}${alphaNumeric[2]}`;
-    }
-
-    const keyword = cleaned.match(/^(EVAL|SOC|DC|ROC|RE[-\s]?EVAL)$/i);
-    if (keyword) {
-        return keyword[1].toUpperCase().replace(/[-\s]/g, "");
-    }
-
-    return cleaned.toUpperCase();
-}
-
-/**
  * Parse a local ISO date string (YYYY-MM-DD) into a Date at noon local time.
  * Using noon avoids timezone-related date shifts.
  */

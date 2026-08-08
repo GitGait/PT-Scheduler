@@ -35,7 +35,7 @@ export default async function handler(
 
   try {
     const apiKey = requireEnv("OPENAI_API_KEY");
-    const prompt = buildOCRPrompt(body.targetWeekStart);
+    const prompt = buildOCRPrompt(body.targetWeekStart, body.visitTypeCodes);
 
     // Call OpenAI with timeout
     const controller = new AbortController();

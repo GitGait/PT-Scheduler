@@ -6,8 +6,13 @@ import { processScreenshotFile } from "../api/ocr";
 import { geocodeAddress } from "../api/geocode";
 import { matchPatient, type MatchCandidate, type MatchTier } from "../utils/matching";
 import { usePatientStore, useAppointmentStore, useScheduleStore } from "../stores";
-import type { ExtractedAppointment, Patient, VisitType, VisitTypeCode } from "../types";
-import { VISIT_TYPE_CODES } from "../types";
+import type { BuiltInVisitTypeCode, ExtractedAppointment, Patient, VisitType } from "../types";
+import {
+    isPlausibleVisitTypeCode,
+    normalizeVisitType,
+    parseVisitTypeAndName,
+} from "../utils/visitTypeCodes";
+import { useVisitTypes } from "../utils/visitTypeColors";
 import {
     Upload,
     Check,
@@ -33,6 +38,10 @@ interface OCRResult extends ExtractedAppointment {
 import { getHomeBase, calculateMilesBetweenCoordinates } from "../utils/scheduling";
 const SLOT_MINUTES = 15;
 
+// Behavioural contract: NOMNC scans route to the NOMNC flow rather than the
+// regular import. Typed as a built-in code so a typo is a build error.
+const NOMNC_CODE: BuiltInVisitTypeCode = "NOMNC";
+
 function minutesToTimeString(totalMinutes: number): string {
     const bounded = Math.max(0, Math.min(23 * 60 + 59, totalMinutes));
     const hours = Math.floor(bounded / 60);
@@ -40,75 +49,10 @@ function minutesToTimeString(totalMinutes: number): string {
     return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
 }
 
-function normalizeVisitType(value?: string): string | undefined {
-    const raw = (value ?? "").trim();
-    if (!raw) {
-        return undefined;
-    }
-
-    const cleaned = raw
-        .replace(/^[[({<]+|[\])}>]+$/g, "")
-        .replace(/^visit\s*type\s*[:-]?\s*/i, "")
-        .replace(/[–—]/g, "-")
-        .replace(/^[\s:;-]+|[\s:;-]+$/g, "")
-        .replace(/\s+/g, " ")
-        .trim();
-
-    if (!cleaned) {
-        return undefined;
-    }
-
-    const alphaNumeric = cleaned.match(/^([A-Za-z]{1,6})\s*[-]?\s*(\d{1,3})$/);
-    if (alphaNumeric) {
-        return `${alphaNumeric[1].toUpperCase()}${alphaNumeric[2]}`;
-    }
-
-    const keyword = cleaned.match(/^(EVAL|SOC|DC|ROC|RE[-\s]?EVAL|NOMNC)$/i);
-    if (keyword) {
-        return keyword[1].toUpperCase().replace(/[-\s]/g, "");
-    }
-
-    return cleaned.toUpperCase();
-}
-
-const VISIT_TYPE_PREFIX_REGEX =
-    /^([A-Za-z]{1,6}\s*[-]?\s*\d{1,3}|EVAL|SOC|DC|ROC|RE[-\s]?EVAL|NOMNC)\s*(?:[-:–—]\s*|\s+)(.+)$/i;
-
-function parseVisitTypeAndName(input: {
-    rawName: string;
-    visitType?: string;
-}): { rawName: string; visitType?: string } {
-    const nameValue = (input.rawName ?? "").replace(/\s+/g, " ").trim();
-    const visitTypeValue = normalizeVisitType(input.visitType);
-
-    if (visitTypeValue) {
-        const withoutVisitType = nameValue
-            .replace(
-                /^([A-Za-z]{1,6}\s*[-]?\s*\d{1,3}|EVAL|SOC|DC|ROC|RE[-\s]?EVAL|NOMNC)\s*(?:[-:–—]\s*)?/i,
-                ""
-            )
-            .trim();
-        return {
-            rawName: withoutVisitType || nameValue,
-            visitType: visitTypeValue,
-        };
-    }
-
-    const match = nameValue.match(VISIT_TYPE_PREFIX_REGEX);
-    if (match) {
-        const normalizedVisitType = normalizeVisitType(match[1]);
-        return {
-            rawName: match[2].trim() || nameValue,
-            visitType: normalizedVisitType,
-        };
-    }
-
-    return { rawName: nameValue };
-}
-
 export function ScanPage() {
     const navigate = useNavigate();
     const { patients, loadAll: loadPatients, add: addPatient, reactivate } = usePatientStore();
+    const visitTypes = useVisitTypes();
     const { create: createAppointment, update: updateAppointment } = useAppointmentStore();
 
     const [isDragging, setIsDragging] = useState(false);
@@ -378,6 +322,14 @@ export function ScanPage() {
         [patientCandidates]
     );
 
+    // Sent to the OCR prompt to sharpen code extraction. Hidden types are
+    // included: "hidden" means "not in my dropdown", not "never in my schedule".
+    const ocrVisitTypeCodes = useMemo(
+        () =>
+            [...new Set(visitTypes.map((c) => c.code).filter((c): c is string => c !== null))].sort(),
+        [visitTypes]
+    );
+
     const handleFile = useCallback(
         async (file: File) => {
             if (!file.type.startsWith("image/")) {
@@ -392,7 +344,7 @@ export function ScanPage() {
             setImportRouteMessage(null);
 
             try {
-                const response = await processScreenshotFile(file, targetWeek);
+                const response = await processScreenshotFile(file, targetWeek, ocrVisitTypeCodes);
                 const newResults: OCRResult[] = response.appointments.map((apt) => {
                     const normalized = parseVisitTypeAndName({
                         rawName: apt.rawName,
@@ -423,7 +375,7 @@ export function ScanPage() {
                 setIsProcessing(false);
             }
         },
-        [runMatchingForResult, targetWeek]
+        [runMatchingForResult, targetWeek, ocrVisitTypeCodes]
     );
 
     const handleDrop = useCallback(
@@ -480,10 +432,10 @@ export function ScanPage() {
     const handleImportConfirmed = async () => {
         const confirmedResults = results.filter((r) => r.confirmed);
         const regularResults = confirmedResults.filter(
-            (r) => normalizeVisitType(r.visitType) !== "NOMNC"
+            (r) => normalizeVisitType(r.visitType) !== NOMNC_CODE
         );
         const nomncResults = confirmedResults.filter(
-            (r) => normalizeVisitType(r.visitType) === "NOMNC"
+            (r) => normalizeVisitType(r.visitType) === NOMNC_CODE
         );
 
         if (confirmedResults.length === 0) {
@@ -538,10 +490,14 @@ export function ScanPage() {
                     visitType: result.visitType,
                 });
                 const visitType = normalizedImport.visitType;
-                const validVisitType: VisitType =
-                    visitType && (VISIT_TYPE_CODES as readonly string[]).includes(visitType)
-                        ? (visitType as VisitTypeCode)
-                        : null;
+                // Keep any plausible code, configured or not — an unconfigured
+                // PT26 renders gray and shows up in Settings under
+                // "Unconfigured types found". The shape guard is load-bearing:
+                // normalizeVisitType falls through to a bare uppercase, so
+                // without it a garbage OCR read would land on the appointment.
+                const validVisitType: VisitType = isPlausibleVisitTypeCode(visitType)
+                    ? visitType
+                    : null;
                 const notesWithVisitType = [
                     visitType ? `Visit Type: ${visitType}` : "",
                     result.notes ?? "",

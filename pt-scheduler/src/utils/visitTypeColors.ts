@@ -1,20 +1,33 @@
+import { useSyncExternalStore } from "react";
 import type { VisitType } from "../types";
+import { VISIT_TYPE_COLOR_REGEX } from "./visitTypeCodes";
 
 export interface VisitTypeConfig {
     code: VisitType;
     label: string;
     bg: string;
     gradient: string;
+    /** Hidden from the dropdown only — still colours existing chips. */
+    hidden?: boolean;
 }
 
-const DEFAULT_VISIT_TYPE_CONFIG: VisitTypeConfig = {
+export const DEFAULT_VISIT_TYPE_CONFIG: VisitTypeConfig = {
     code: null,
     label: "Unspecified",
     bg: "#b0bec5",
     gradient: "linear-gradient(135deg, #b0bec5 0%, #90a4ae 100%)",
 };
 
-export const VISIT_TYPE_CONFIGS: VisitTypeConfig[] = [
+/**
+ * The visit types compiled into the bundle. Users can rename, recolor and hide
+ * these from Settings, but they are never stored in Dexie and never removable:
+ * PT18/PT19 drive auto-discharge and NOMNC drives scan routing, so the codes
+ * are behavioural contracts — never remove one.
+ *
+ * These gradients are also the `var()` fallbacks used before Dexie hydrates,
+ * so a fresh device's first paint is pixel-identical to the built-in scheme.
+ */
+export const BUILT_IN_VISIT_TYPE_CONFIGS: readonly VisitTypeConfig[] = Object.freeze([
     {
         code: "PT01",
         label: "PT Evaluation",
@@ -87,29 +100,147 @@ export const VISIT_TYPE_CONFIGS: VisitTypeConfig[] = [
         bg: "#607d8b",
         gradient: "linear-gradient(135deg, #607d8b 0%, #455a64 100%)",
     },
-    { ...DEFAULT_VISIT_TYPE_CONFIG },
-];
+] as VisitTypeConfig[]);
 
-const colorMap = new Map<VisitType, VisitTypeConfig>();
-for (const config of VISIT_TYPE_CONFIGS) {
-    colorMap.set(config.code, config);
+const BUILT_IN_BY_CODE = new Map<VisitType, VisitTypeConfig>(
+    BUILT_IN_VISIT_TYPE_CONFIGS.map((config) => [config.code, config])
+);
+
+// =============================================================================
+// Colour maths
+// =============================================================================
+
+/** Only values matching this exact shape are ever written into a CSS custom property. */
+const SAFE_GRADIENT_REGEX = /^linear-gradient\(135deg, #[0-9a-f]{6} 0%, #[0-9a-f]{6} 100%\)$/i;
+
+function darkenHex(hex: string, amount: number): string {
+    const value = hex.replace("#", "");
+    const r = parseInt(value.slice(0, 2), 16);
+    const g = parseInt(value.slice(2, 4), 16);
+    const b = parseInt(value.slice(4, 6), 16);
+    const scale = (channel: number) =>
+        Math.max(0, Math.min(255, Math.round(channel * (1 - amount))))
+            .toString(16)
+            .padStart(2, "0");
+    return `#${scale(r)}${scale(g)}${scale(b)}`;
 }
 
+/**
+ * Derive a two-stop gradient from a user-chosen background colour. Built-ins
+ * whose `bg` is untouched keep their hand-picked gradient pair instead.
+ */
+export function deriveGradient(bg: string): string {
+    if (!VISIT_TYPE_COLOR_REGEX.test(bg)) {
+        return DEFAULT_VISIT_TYPE_CONFIG.gradient;
+    }
+    const normalized = bg.toLowerCase();
+    return `linear-gradient(135deg, ${normalized} 0%, ${darkenHex(normalized, 0.18)} 100%)`;
+}
+
+// =============================================================================
+// Registry — the effective list, swapped in by visitTypeStore
+// =============================================================================
+
+let registry: readonly VisitTypeConfig[] = BUILT_IN_VISIT_TYPE_CONFIGS;
+let registryByCode = new Map<VisitType, VisitTypeConfig>(BUILT_IN_BY_CODE);
+let cssText = buildVisitTypeCssText(BUILT_IN_VISIT_TYPE_CONFIGS);
+
+const listeners = new Set<() => void>();
+
+export function setVisitTypeRegistry(configs: readonly VisitTypeConfig[]): void {
+    registry = configs;
+    registryByCode = new Map(configs.map((config) => [config.code, config]));
+    cssText = buildVisitTypeCssText(configs);
+    for (const listener of listeners) {
+        listener();
+    }
+}
+
+export function subscribeVisitTypes(listener: () => void): () => void {
+    listeners.add(listener);
+    return () => {
+        listeners.delete(listener);
+    };
+}
+
+export function getVisitTypeRegistry(): readonly VisitTypeConfig[] {
+    return registry;
+}
+
+export function getVisitTypeCssText(): string {
+    return cssText;
+}
+
+/**
+ * The effective visit type list, for callers that need labels or list
+ * membership (which CSS custom properties cannot carry). SchedulePage never
+ * uses this — its chips repaint via the custom properties alone.
+ */
+export function useVisitTypes(): readonly VisitTypeConfig[] {
+    return useSyncExternalStore(subscribeVisitTypes, getVisitTypeRegistry, getVisitTypeRegistry);
+}
+
+// =============================================================================
+// CSS custom properties
+// =============================================================================
+
+/** `PT11` → `--vt-grad-PT11`; the unspecified type → `--vt-grad--none`. */
+export function cssVarNameForCode(code: VisitType, kind: "grad" | "bg" = "grad"): string {
+    return `--vt-${kind}-${code ?? "-none"}`;
+}
+
+/**
+ * Build the `:root { … }` block.
+ *
+ * Every value is re-validated here. A malformed custom property makes
+ * `background: var(--vt-grad-PT26, …)` *invalid at computed-value time*, and
+ * CSS then applies `unset` rather than the `var()` fallback — the chip would
+ * render transparent, not gray. So an entry that fails validation is omitted
+ * entirely, which lets the compile-time fallback do its job.
+ */
+export function buildVisitTypeCssText(configs: readonly VisitTypeConfig[]): string {
+    const lines: string[] = [];
+    for (const config of configs) {
+        if (!VISIT_TYPE_COLOR_REGEX.test(config.bg ?? "")) {
+            continue;
+        }
+        const bg = config.bg.toLowerCase();
+        const gradient = SAFE_GRADIENT_REGEX.test(config.gradient ?? "")
+            ? config.gradient.toLowerCase()
+            : deriveGradient(bg);
+        lines.push(`  ${cssVarNameForCode(config.code, "bg")}: ${bg};`);
+        lines.push(`  ${cssVarNameForCode(config.code, "grad")}: ${gradient};`);
+    }
+    return `:root {\n${lines.join("\n")}\n}`;
+}
+
+// =============================================================================
+// Accessors
+// =============================================================================
+
+function builtInFallback(visitType: VisitType | undefined): VisitTypeConfig {
+    return BUILT_IN_BY_CODE.get(visitType ?? null) ?? DEFAULT_VISIT_TYPE_CONFIG;
+}
+
+/**
+ * Returns a `var()` expression, not a literal colour. The browser repaints
+ * chips when the custom property changes, so callers inside render (notably
+ * SchedulePage) need no subscription. The fallback is the compile-time
+ * built-in, so the first paint before hydration matches the built-in scheme.
+ */
 export function getVisitTypeColor(visitType: VisitType | undefined): string {
-    const config = colorMap.get(visitType ?? null);
-    return config?.bg ?? DEFAULT_VISIT_TYPE_CONFIG.bg;
+    return `var(${cssVarNameForCode(visitType ?? null, "bg")}, ${builtInFallback(visitType).bg})`;
 }
 
 export function getVisitTypeGradient(visitType: VisitType | undefined): string {
-    const config = colorMap.get(visitType ?? null);
-    return config?.gradient ?? DEFAULT_VISIT_TYPE_CONFIG.gradient;
+    return `var(${cssVarNameForCode(visitType ?? null, "grad")}, ${builtInFallback(visitType).gradient})`;
 }
 
+/** Text can't live in a CSS variable, so these read the registry directly. */
 export function getVisitTypeLabel(visitType: VisitType | undefined): string {
-    const config = colorMap.get(visitType ?? null);
-    return config?.label ?? DEFAULT_VISIT_TYPE_CONFIG.label;
+    return registryByCode.get(visitType ?? null)?.label ?? DEFAULT_VISIT_TYPE_CONFIG.label;
 }
 
 export function getVisitTypeConfig(visitType: VisitType | undefined): VisitTypeConfig {
-    return colorMap.get(visitType ?? null) ?? DEFAULT_VISIT_TYPE_CONFIG;
+    return registryByCode.get(visitType ?? null) ?? DEFAULT_VISIT_TYPE_CONFIG;
 }

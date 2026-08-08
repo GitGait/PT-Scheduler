@@ -149,7 +149,16 @@ export const ocrRequestSchema = z.object({
     ),
   targetWeekStart: z
     .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD format")
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD format"),
+  /**
+   * The user's configured visit type codes, sent to sharpen OCR extraction.
+   * Optional: absent, the prompt is byte-identical to the previous version, so
+   * a service-worker-cached old client keeps working.
+   */
+  visitTypeCodes: z
+    .array(z.string().regex(/^[A-Z][A-Z0-9]{1,9}$/))
+    .max(60)
+    .optional()
 });
 
 export const optimizeRequestSchema = z.object({

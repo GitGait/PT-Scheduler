@@ -2,7 +2,12 @@ import { useEffect } from "react";
 import { appointmentDB, patientDB } from "../db/operations";
 import { usePatientStore } from "../stores/patientStore";
 import { toLocalIsoDate } from "../utils/scheduling";
-import type { Appointment } from "../types";
+import type { Appointment, BuiltInVisitTypeCode } from "../types";
+
+// Behavioural contract: these codes trigger auto-discharge. Users can rename,
+// recolor or hide them, but the codes themselves are compile-time constants,
+// so a typo here is a build error.
+const DISCHARGE_CODES: BuiltInVisitTypeCode[] = ["PT18", "PT19"];
 
 const COOLDOWN_KEY = "ptScheduler.lastAutoDischargeCheck";
 const COOLDOWN_MS = 6 * 60 * 60 * 1000; // 6 hours
@@ -41,7 +46,7 @@ export async function processAutoDischarges(): Promise<number> {
   // Filter to PT18/PT19 appointments that are scheduled or completed (not cancelled/no-show)
   const dischargeAppointments = appointments.filter(
     (appt: Appointment) =>
-      (appt.visitType === "PT18" || appt.visitType === "PT19") &&
+      (appt.visitType !== null && (DISCHARGE_CODES as string[]).includes(appt.visitType)) &&
       (appt.status === "scheduled" || appt.status === "completed")
   );
 

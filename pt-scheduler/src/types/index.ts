@@ -50,10 +50,26 @@ export interface Patient {
 export type AppointmentStatus = "scheduled" | "completed" | "cancelled" | "no-show" | "on-hold";
 export type SyncStatus = "local" | "pending" | "synced" | "error";
 
-// Single source of truth for visit type codes
-export const VISIT_TYPE_CODES = ["PT00", "PT01", "PT02", "PT05", "PT06", "PT10", "PT11", "PT15", "PT18", "PT19", "PT33", "NOMNC"] as const;
-export type VisitTypeCode = typeof VISIT_TYPE_CODES[number];
-export type VisitType = VisitTypeCode | null;
+// The 12 visit type codes compiled into the app. Users can rename, recolor and
+// hide these, but never remove them: PT18/PT19 drive auto-discharge and NOMNC
+// drives scan routing, so the codes are behavioural contracts.
+export const BUILT_IN_VISIT_TYPE_CODES = ["PT00", "PT01", "PT02", "PT05", "PT06", "PT10", "PT11", "PT15", "PT18", "PT19", "PT33", "NOMNC"] as const;
+export type BuiltInVisitTypeCode = typeof BUILT_IN_VISIT_TYPE_CODES[number];
+
+// Users can define their own codes, so this is an open string. Shape is
+// validated by isPlausibleVisitTypeCode in utils/visitTypeCodes.ts.
+export type VisitType = string | null;
+
+/** A user-configurable visit type. Built-ins live in code; Dexie holds only overrides and custom types. */
+export interface VisitTypeDef {
+  code: string;        // PRIMARY KEY, immutable, /^[A-Z][A-Z0-9]{1,9}$/
+  label: string;
+  bg: string;          // "#rrggbb"
+  hidden: boolean;     // hidden from the dropdown only; still colors existing chips
+  sortOrder: number;
+  createdAt: Date;
+  updatedAt: Date;
+}
 
 export interface Appointment {
   id: string;
@@ -116,7 +132,7 @@ export interface DayNote {
 // =============================================================================
 
 export type SyncAction = "create" | "update" | "delete";
-export type SyncEntity = "appointment" | "calendarEvent" | "patient" | "dayNote";
+export type SyncEntity = "appointment" | "calendarEvent" | "patient" | "dayNote" | "visitType";
 export type SyncQueueStatus =
   | "pending"
   | "processing"
@@ -142,11 +158,17 @@ export interface SyncQueueDataDayNote {
   entityId: string;
 }
 
+/** `entityId` is the visit type `code` — the table's primary key. */
+export interface SyncQueueDataVisitType {
+  entityId: string;
+}
+
 export type SyncQueueData =
   | SyncQueueDataAppointment
   | SyncQueueDataPatient
   | SyncQueueDataCalendarEvent
-  | SyncQueueDataDayNote;
+  | SyncQueueDataDayNote
+  | SyncQueueDataVisitType;
 
 interface SyncQueueItemBase {
   id?: number;
@@ -164,4 +186,5 @@ export type SyncQueueItem = SyncQueueItemBase & (
   | { entity: "patient"; data: SyncQueueDataPatient }
   | { entity: "calendarEvent"; data: SyncQueueDataCalendarEvent }
   | { entity: "dayNote"; data: SyncQueueDataDayNote }
+  | { entity: "visitType"; data: SyncQueueDataVisitType }
 );

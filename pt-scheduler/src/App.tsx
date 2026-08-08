@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
+import { VisitTypeStyleProvider } from "./components/VisitTypeStyleProvider";
 import { Sidebar } from "./components/ui/Sidebar";
 import { TopNav } from "./components/ui/TopNav";
 import { useSync } from "./hooks/useSync";
@@ -76,6 +77,7 @@ function App() {
 
   return (
     <ErrorBoundary>
+      <VisitTypeStyleProvider />
       <BrowserRouter>
         <AppContent />
       </BrowserRouter>

@@ -12,6 +12,9 @@ import {
     fetchDayNotesFromSheet,
     upsertDayNoteToSheet,
     deleteDayNotesFromSheetByIds,
+    fetchVisitTypesFromSheet,
+    upsertVisitTypeToSheet,
+    deleteVisitTypesFromSheetByCodes,
 } from "../api/sheets";
 import { toLocalIsoDate, toLocalTime } from "../utils/scheduling";
 import {
@@ -23,9 +26,11 @@ import {
 import { db } from "../db/schema";
 import { reconcilePatientsFromSheetSnapshot } from "../db/patientSheetSync";
 import { reconcileDayNotesFromSheetSnapshot } from "../db/dayNoteSheetSync";
+import { reconcileVisitTypesFromSheetSnapshot } from "../db/visitTypeSheetSync";
+import { useVisitTypeStore } from "../stores/visitTypeStore";
 import { syncQueueDB, getDeletedPatientIds, getDeletedAppointmentIds, cleanExpiredDeletedAppointmentIds } from "../db/operations";
 import type { AppointmentStatus, SyncQueueItem, VisitType } from "../types";
-import { VISIT_TYPE_CODES } from "../types";
+import { isPlausibleVisitTypeCode } from "../utils/visitTypeCodes";
 import { PERSONAL_PATIENT_ID, parsePersonalCategory } from "../utils/personalEventColors";
 
 const MAX_BATCH_SIZE = 5;
@@ -59,6 +64,7 @@ export interface SyncConfig {
 
 const APPOINTMENTS_SYNCED_EVENT = "pt-scheduler:appointments-synced";
 const DAY_NOTES_SYNCED_EVENT = "pt-scheduler:day-notes-synced";
+export const VISIT_TYPES_SYNCED_EVENT = "pt-scheduler:visit-types-synced";
 export const REQUEST_SYNC_EVENT = "pt-scheduler:request-sync";
 const LAST_SHEETS_SYNC_KEY_PREFIX = "ptScheduler.lastSheetsAutoSync.";
 const LAST_APPOINTMENT_BACKFILL_KEY_PREFIX = "ptScheduler.lastCalendarBackfill.";
@@ -106,6 +112,35 @@ export function useSync(config: SyncConfig | null) {
             }
         } catch (err) {
             console.error("Day note sync failed:", err);
+        }
+    }, [config?.spreadsheetId]);
+
+    /**
+     * Sync user-editable visit types from Google Sheets to the local database.
+     *
+     * No cooldown — the config table is tiny. A `null` snapshot means the tab
+     * is absent or unreadable, and must short-circuit: passing `[]` to the
+     * reconciler would delete every tracked row and wipe the setup everywhere.
+     */
+    const syncVisitTypesFromSheets = useCallback(async () => {
+        if (!config?.spreadsheetId || !isSignedIn()) return;
+        try {
+            const sheetTypes = await fetchVisitTypesFromSheet(config.spreadsheetId);
+            if (sheetTypes === null) {
+                return;
+            }
+            const result = await reconcileVisitTypesFromSheetSnapshot(
+                config.spreadsheetId,
+                sheetTypes
+            );
+            if (result.upserted > 0 || result.deleted > 0) {
+                await useVisitTypeStore.getState().loadAll();
+                if (typeof window !== "undefined") {
+                    window.dispatchEvent(new Event(VISIT_TYPES_SYNCED_EVENT));
+                }
+            }
+        } catch (err) {
+            console.error("Visit type sync failed:", err);
         }
     }, [config?.spreadsheetId]);
 
@@ -557,6 +592,7 @@ export function useSync(config: SyncConfig | null) {
                 await backfillLocalAppointmentsToCalendar();
                 await syncPatientsFromSheets();
                 await syncDayNotesFromSheets();
+                await syncVisitTypesFromSheets();
                 await syncAppointmentsFromCalendar(pushedIds);
             } finally {
                 useSyncStore.getState().endSync();
@@ -583,6 +619,7 @@ export function useSync(config: SyncConfig | null) {
 
                 await syncPatientsFromSheets(options?.force ? { force: true } : undefined);
                 await syncDayNotesFromSheets();
+                await syncVisitTypesFromSheets();
                 await syncAppointmentsFromCalendar(pushedIds);
             } finally {
                 useSyncStore.getState().endSync();
@@ -626,6 +663,7 @@ export function useSync(config: SyncConfig | null) {
         backfillLocalAppointmentsToCalendar,
         syncPatientsFromSheets,
         syncDayNotesFromSheets,
+        syncVisitTypesFromSheets,
         syncAppointmentsFromCalendar,
         processQueue,
     ]);
@@ -713,11 +751,14 @@ function parseAppointmentStatus(value?: string): AppointmentStatus {
     return "scheduled";
 }
 
+/**
+ * Read a visit type off a Google Calendar event's private metadata.
+ *
+ * Shape check, not a whitelist: a PT26 appointment created on another device
+ * would otherwise be nulled out when this device pulls it from the calendar.
+ */
 function parseVisitType(value?: string): VisitType {
-    if (value && (VISIT_TYPE_CODES as readonly string[]).includes(value)) {
-        return value as VisitType;
-    }
-    return null;
+    return isPlausibleVisitTypeCode(value) ? value : null;
 }
 
 function extractPatientNameFromEventSummary(summary: string): string | null {
@@ -911,6 +952,22 @@ async function processSyncItem(item: SyncQueueItem, config: SyncConfig): Promise
                 }
             } else if (action === "delete" && entityId) {
                 await deleteDayNotesFromSheetByIds(config.spreadsheetId, [entityId]);
+            }
+            break;
+        }
+
+        case "visitType": {
+            if (!config.spreadsheetId) {
+                throw new Error("Spreadsheet ID not configured");
+            }
+            // entityId is the visit type code (the table's primary key).
+            if ((action === "create" || action === "update") && entityId) {
+                const def = await db.visitTypes.get(entityId);
+                if (def) {
+                    await upsertVisitTypeToSheet(config.spreadsheetId, def);
+                }
+            } else if (action === "delete" && entityId) {
+                await deleteVisitTypesFromSheetByCodes(config.spreadsheetId, [entityId]);
             }
             break;
         }

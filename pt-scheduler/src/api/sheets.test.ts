@@ -4,7 +4,10 @@ import {
     serializeAlternateContactsField,
     serializeAdditionalPhonesField,
     parseAdditionalPhonesField,
+    parseVisitTypeRow,
+    buildVisitTypeRowForHeaders,
 } from "./sheets";
+import type { VisitTypeDef } from "../types";
 
 describe("sheets alternate contacts", () => {
   it("parses alternate contacts with relationship", () => {
@@ -82,5 +85,102 @@ describe("sheets additional phones", () => {
     it("returns empty array for empty string", () => {
         expect(parseAdditionalPhonesField("")).toEqual([]);
         expect(parseAdditionalPhonesField("  ")).toEqual([]);
+    });
+});
+
+describe("visit type sheet rows", () => {
+    const HEADERS = [
+        "code",
+        "label",
+        "color",
+        "hidden",
+        "sortOrder",
+        "isBuiltIn",
+        "updatedAt",
+    ];
+
+    const def: VisitTypeDef = {
+        code: "PT26",
+        label: "Wound Care",
+        bg: "#112233",
+        hidden: false,
+        sortOrder: 3,
+        createdAt: new Date("2026-01-01T00:00:00.000Z"),
+        updatedAt: new Date("2026-02-02T00:00:00.000Z"),
+    };
+
+    it("round-trips a custom type", () => {
+        const row = buildVisitTypeRowForHeaders(HEADERS, def);
+        const parsed = parseVisitTypeRow(HEADERS, row);
+
+        expect(parsed).toMatchObject({
+            code: "PT26",
+            label: "Wound Care",
+            bg: "#112233",
+            hidden: false,
+            sortOrder: 3,
+        });
+    });
+
+    it("parses regardless of header order", () => {
+        const permuted = ["updatedAt", "hidden", "label", "code", "isBuiltIn", "sortOrder", "color"];
+        const row = buildVisitTypeRowForHeaders(permuted, def);
+        const parsed = parseVisitTypeRow(permuted, row);
+
+        expect(parsed).toMatchObject({ code: "PT26", label: "Wound Care", bg: "#112233" });
+    });
+
+    it("rejects a blank code", () => {
+        expect(parseVisitTypeRow(HEADERS, ["", "Label", "#112233", "", "", "", ""])).toBeNull();
+    });
+
+    it("uppercases a lowercase code", () => {
+        expect(parseVisitTypeRow(HEADERS, ["pt26", "Label", "#112233", "", "", "", ""])?.code).toBe(
+            "PT26"
+        );
+    });
+
+    it("rejects a code containing a space", () => {
+        expect(
+            parseVisitTypeRow(HEADERS, ["PT 26", "Label", "#112233", "", "", "", ""])
+        ).toBeNull();
+    });
+
+    it("reads hidden from TRUE/true/1 and treats blank as false", () => {
+        const hiddenOf = (raw: string) =>
+            parseVisitTypeRow(HEADERS, ["PT26", "Label", "#112233", raw, "", "", ""])?.hidden;
+
+        expect(hiddenOf("TRUE")).toBe(true);
+        expect(hiddenOf("true")).toBe(true);
+        expect(hiddenOf("1")).toBe(true);
+        expect(hiddenOf("yes")).toBe(true);
+        expect(hiddenOf("")).toBe(false);
+        expect(hiddenOf("FALSE")).toBe(false);
+    });
+
+    it("ignores the isBuiltIn cell so a hand-edited sheet can't make PT18 deletable", () => {
+        const parsed = parseVisitTypeRow(HEADERS, [
+            "PT18",
+            "OASIS Discharge",
+            "#fb8c00",
+            "",
+            "",
+            "FALSE",
+            "",
+        ]);
+
+        expect(parsed?.code).toBe("PT18");
+        expect(parsed).not.toHaveProperty("isBuiltIn");
+    });
+
+    it("writes isBuiltIn for humans based on the compiled-in list", () => {
+        const builtIn: VisitTypeDef = { ...def, code: "PT18" };
+        expect(buildVisitTypeRowForHeaders(HEADERS, builtIn)[5]).toBe("TRUE");
+        expect(buildVisitTypeRowForHeaders(HEADERS, def)[5]).toBe("FALSE");
+    });
+
+    it("falls back to the default colour rather than storing a raw cell", () => {
+        const parsed = parseVisitTypeRow(HEADERS, ["PT26", "Label", "red", "", "", "", ""]);
+        expect(parsed?.bg).toBe("#b0bec5");
     });
 });

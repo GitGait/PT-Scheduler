@@ -7,7 +7,11 @@ import { prepareImageForOCR, validateImageSize } from "../utils/image";
  * Process a screenshot image through OCR to extract appointments.
  * Accepts a base64 string (already encoded) or will compress if needed.
  */
-export async function processScreenshot(imageBase64: string, targetWeekStart: string): Promise<OCRResponse> {
+export async function processScreenshot(
+  imageBase64: string,
+  targetWeekStart: string,
+  visitTypeCodes?: string[]
+): Promise<OCRResponse> {
   // Validate size before sending
   // Note: large images (>5MB) may cause memory pressure on mobile devices
   validateImageSize(imageBase64);
@@ -17,7 +21,12 @@ export async function processScreenshot(imageBase64: string, targetWeekStart: st
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ image: imageBase64, targetWeekStart })
+      body: JSON.stringify({
+        image: imageBase64,
+        targetWeekStart,
+        // Omitted when empty so the server builds the original prompt.
+        ...(visitTypeCodes && visitTypeCodes.length > 0 ? { visitTypeCodes } : {})
+      })
     },
     "OCR failed",
     60_000 // OCR with large images can take longer than the default 30s
@@ -30,7 +39,11 @@ export async function processScreenshot(imageBase64: string, targetWeekStart: st
  * Process a screenshot file through OCR.
  * Handles compression and base64 encoding automatically.
  */
-export async function processScreenshotFile(file: File, targetWeekStart: string): Promise<OCRResponse> {
+export async function processScreenshotFile(
+  file: File,
+  targetWeekStart: string,
+  visitTypeCodes?: string[]
+): Promise<OCRResponse> {
   const base64 = await prepareImageForOCR(file);
-  return processScreenshot(base64, targetWeekStart);
+  return processScreenshot(base64, targetWeekStart, visitTypeCodes);
 }

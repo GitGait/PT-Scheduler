@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePatientStore, useSyncStore, useThemeStore, type ThemeMode } from "../stores";
 import { Card, CardHeader } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
+import { VisitTypeSettingsCard } from "../components/settings/VisitTypeSettingsCard";
 import { initAuth, isSignedIn, signIn, signOut, getAccessToken, AUTH_STATE_CHANGED_EVENT } from "../api/auth";
 import { fetchPatientsFromSheet } from "../api/sheets";
 import { createCalendarEvent, listCalendars } from "../api/calendar";
@@ -571,6 +572,8 @@ export function SettingsPage() {
                     {importing ? "Importing..." : "Import Patients Now"}
                 </Button>
             </Card>
+
+            <VisitTypeSettingsCard />
 
             <Card className="mb-4">
                 <CardHeader title="Calendar Sync" subtitle="Push all local appointments to Google Calendar" />

@@ -44,7 +44,10 @@ Which patient is the best match? Respond with JSON only.`
 // OCR screenshot extraction prompt
 // ---------------------------------------------------------------------------
 
-export function buildOCRPrompt(targetWeekStart: string): { system: string; userPrefix: string } {
+export function buildOCRPrompt(
+  targetWeekStart: string,
+  visitTypeCodes?: string[]
+): { system: string; userPrefix: string } {
   const weekStart = new Date(targetWeekStart + "T00:00:00");
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekEnd.getDate() + 6);
@@ -89,7 +92,16 @@ Rules:
 - Estimate duration in minutes. Default to 60 if not shown.
 - If any field is uncertain, set "uncertain": true on that entry.
 - Return ONLY valid JSON — no markdown, no explanation.
-
+${
+      visitTypeCodes && visitTypeCodes.length > 0
+        ? `
+KNOWN VISIT TYPE CODES (this user's configured list):
+${visitTypeCodes.join(", ")}
+- When a code you read is ambiguous and closely resembles one of the codes above, prefer the exact match (e.g. read "PTI1" -> emit "PT11").
+- Do NOT force a match. If the code you read is clearly different from every code above, emit it verbatim.
+`
+        : ""
+    }
 Response format (strict JSON):
 {
   "appointments": [
