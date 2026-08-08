@@ -10,6 +10,9 @@ import {
     PERSONAL_CATEGORIES,
     getPersonalCategoryLabel,
 } from "../utils/personalEventColors";
+import { ChipNoteEditor } from "./appointments/ChipNoteEditor";
+import { useChipNoteEditor } from "./appointments/useChipNoteEditor";
+import { firstMeaningfulNoteLine } from "../utils/chipNoteText";
 
 interface AppointmentDetailModalProps {
     appointment: Appointment;
@@ -18,6 +21,8 @@ interface AppointmentDetailModalProps {
     onClose: () => void;
     onSavePatient: (patientId: string, changes: Partial<Patient>) => Promise<void>;
     onSaveAppointment: (appointmentId: string, changes: Partial<Appointment>) => Promise<void>;
+    onChipNote: (notes: string[], color?: string) => void;
+    onPatientChipNote: (notes: string[], color?: string) => void;
     onDeleteAppointment?: (appointmentId: string, options?: { immediate?: boolean }) => Promise<void>;
     onSyncToSheet?: (patient: Patient) => Promise<void>;
 }
@@ -29,6 +34,8 @@ export function AppointmentDetailModal({
     onClose,
     onSavePatient,
     onSaveAppointment,
+    onChipNote,
+    onPatientChipNote,
     onDeleteAppointment,
     onSyncToSheet,
 }: AppointmentDetailModalProps) {
@@ -36,7 +43,6 @@ export function AppointmentDetailModal({
     const [address, setAddress] = useState("");
     const [nicknames, setNicknames] = useState("");
     const [facilityName, setFacilityName] = useState("");
-    const [notes, setNotes] = useState("");
     const [visitType, setVisitType] = useState<VisitType>(null);
     const [altContacts, setAltContacts] = useState<AlternateContact[]>([]);
     const [personalTitle, setPersonalTitle] = useState("");
@@ -51,6 +57,15 @@ export function AppointmentDetailModal({
 
     const isPersonal = isPersonalEvent(appointment);
     const initializedRef = useRef(false);
+
+    // The old "Appointment Notes" box wrote Appointment.notes, which mirrors the
+    // Google Calendar description and is never rendered. Seed the chip-note
+    // input from it so text typed there before isn't stranded.
+    const chipNoteEditor = useChipNoteEditor(appointment, patient, {
+        onChipNote,
+        onPatientChipNote,
+        seedNewNoteText: firstMeaningfulNoteLine(appointment.notes),
+    });
 
     // Initialize form values once when modal opens — gated by ref so
     // background sync refreshing patient/appointment props won't overwrite edits
@@ -75,7 +90,6 @@ export function AppointmentDetailModal({
             setFacilityName(patient.facilityName || "");
             setAltContacts(patient.alternateContacts?.length ? [...patient.alternateContacts] : []);
         }
-        setNotes(appointment.notes || "");
         setVisitType(appointment.visitType ?? null);
         setPersonalTitle(appointment.title || "");
         setPersonalAddress(appointment.address || "");
@@ -146,18 +160,20 @@ export function AppointmentDetailModal({
         setConfirmingDelete(null);
 
         try {
+            // Chip notes persist through their own handlers, independent of the
+            // patient/appointment change checks below.
+            chipNoteEditor.save();
+
             if (isPersonal) {
                 const titleChanged = personalTitle !== (appointment.title || "");
                 const addressChanged = personalAddress.trim() !== (appointment.address || "");
                 const categoryChanged = personalCategory !== (appointment.personalCategory || "other");
-                const notesChanged = notes !== (appointment.notes || "");
 
-                if (titleChanged || addressChanged || categoryChanged || notesChanged) {
+                if (titleChanged || addressChanged || categoryChanged) {
                     await onSaveAppointment(appointment.id, {
                         title: personalTitle.trim(),
                         address: personalAddress.trim() || undefined,
                         personalCategory,
-                        notes: notes || undefined,
                     });
 
                     // Update all recurring siblings if checkbox is checked
@@ -198,7 +214,7 @@ export function AppointmentDetailModal({
                 const facilityChanged = facilityName.trim() !== (patient!.facilityName || "");
                 const patientChanged = phonesChanged || address !== patient!.address || altContactsChanged || nicknamesChanged || facilityChanged;
                 const visitTypeChanged = visitType !== (appointment.visitType ?? null);
-                const appointmentChanged = notes !== (appointment.notes || "") || visitTypeChanged;
+                const appointmentChanged = visitTypeChanged;
 
                 if (patientChanged) {
                     await onSavePatient(patient!.id, {
@@ -224,7 +240,6 @@ export function AppointmentDetailModal({
 
                 if (appointmentChanged) {
                     await onSaveAppointment(appointment.id, {
-                        notes: notes || undefined,
                         visitType: visitType,
                     });
                 }
@@ -545,19 +560,16 @@ export function AppointmentDetailModal({
                         </>
                     )}
 
-                    {/* Notes */}
+                    {/* Chip note — shown as a banner on the appointment chip */}
                     <div>
                         <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                             <FileText className="w-4 h-4" />
-                            {isPersonal ? "Notes" : "Appointment Notes"}
+                            {isPersonal ? "Note" : "Appointment Note"}
                         </label>
-                        <textarea
-                            value={notes}
-                            onChange={(e) => setNotes(e.target.value)}
-                            placeholder={isPersonal ? "Add notes..." : "Add notes for this appointment..."}
-                            rows={4}
-                            className="w-full input-google resize-none"
-                            style={{ height: "auto", minHeight: "100px" }}
+                        <ChipNoteEditor
+                            editor={chipNoteEditor}
+                            onRemovedFromAll={onClose}
+                            placeholder={isPersonal ? "Add a note..." : "e.g., Call 15 min before"}
                         />
                     </div>
 

@@ -249,6 +249,10 @@ export function useSync(config: SyncConfig | null) {
                 // Parse chipNotes from calendar metadata — supports both
                 // new JSON array format and old plain-string format.
                 const rawChipNote = metadata[CALENDAR_METADATA_KEYS.chipNote];
+                // An empty string means the note was deliberately cleared; an
+                // absent key means the event predates chip-note metadata, so
+                // local data still wins.
+                const chipNoteCleared = rawChipNote === "";
                 let chipNotes: string[] | undefined;
                 if (rawChipNote) {
                     try {
@@ -262,13 +266,16 @@ export function useSync(config: SyncConfig | null) {
                     }
                 }
                 // Fall back to existing local data
-                if (!chipNotes?.length) {
+                if (!chipNotes?.length && !chipNoteCleared) {
                     chipNotes = existing?.chipNotes ?? (existing?.chipNote ? [existing.chipNote] : undefined);
                 }
 
                 // Parse chipNoteColor from calendar metadata
                 const rawChipNoteColor = metadata[CALENDAR_METADATA_KEYS.chipNoteColor];
-                const chipNoteColor = rawChipNoteColor || existing?.chipNoteColor || undefined;
+                const chipNoteColorCleared = rawChipNoteColor === "";
+                const chipNoteColor = chipNoteColorCleared
+                    ? undefined
+                    : rawChipNoteColor || existing?.chipNoteColor || undefined;
 
                 const appointmentRecord: Record<string, unknown> = {
                     id: appointmentId,
@@ -286,12 +293,18 @@ export function useSync(config: SyncConfig | null) {
                 };
 
                 // Only include chipNotes when they have values — passing
-                // undefined to Dexie's .update() deletes the property.
+                // undefined to Dexie's .update() deletes the property. When the
+                // remote explicitly cleared them, that deletion is what we want.
                 if (chipNotes?.length) {
                     appointmentRecord.chipNotes = chipNotes;
+                } else if (chipNoteCleared) {
+                    appointmentRecord.chipNotes = undefined;
+                    appointmentRecord.chipNote = undefined;
                 }
                 if (chipNoteColor) {
                     appointmentRecord.chipNoteColor = chipNoteColor;
+                } else if (chipNoteColorCleared) {
+                    appointmentRecord.chipNoteColor = undefined;
                 }
 
                 if (isPersonalEvent) {

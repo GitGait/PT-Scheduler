@@ -1,19 +1,9 @@
 import { useState, useCallback, useRef, useEffect, type ReactNode } from "react";
-import { Phone, MessageSquare, Navigation, Edit3, Move, Trash2, X, Copy, Check, PauseCircle, StickyNote, Plus, Pencil, User } from "lucide-react";
+import { Phone, MessageSquare, Navigation, Edit3, Move, Trash2, X, Copy, Check, PauseCircle, StickyNote, User } from "lucide-react";
 import type { Appointment, Patient } from "../types";
 import { isPersonalEvent, getPersonalCategoryLabel } from "../utils/personalEventColors";
-import { CHIP_NOTE_COLORS, CHIP_NOTE_SWATCH_HEX } from "../utils/chipNoteColors";
-
-const MAX_CHIP_NOTES = 4;
-
-/** Merge chipNotes array + legacy chipNote into a single array */
-function mergeChipNotes(chipNotes?: string[], chipNote?: string): string[] {
-    const notes = [...(chipNotes ?? [])];
-    if (chipNote && !notes.includes(chipNote)) {
-        notes.push(chipNote);
-    }
-    return notes;
-}
+import { ChipNoteEditor } from "./appointments/ChipNoteEditor";
+import { useChipNoteEditor } from "./appointments/useChipNoteEditor";
 
 interface AppointmentActionSheetProps {
     appointment: Appointment;
@@ -77,40 +67,25 @@ export function AppointmentActionSheet({
     const [copiedKey, setCopiedKey] = useState<string | null>(null);
     const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const [chipNoteMode, setChipNoteMode] = useState(false);
+    const [lastAppointmentId, setLastAppointmentId] = useState(appointment?.id);
     const isPersonal = isPersonalEvent(appointment);
 
-    // Merge existing notes from both old and new fields
-    const appointmentNotes = mergeChipNotes(appointment.chipNotes, appointment.chipNote);
-    const patientNotes = mergeChipNotes(patient?.chipNotes, patient?.chipNote);
-    const hasPatientNotes = patientNotes.length > 0;
-    const hasAppointmentNotes = appointmentNotes.length > 0;
-    const noteFromPatient = !hasAppointmentNotes && hasPatientNotes;
+    const chipNoteEditor = useChipNoteEditor(appointment, patient, {
+        onChipNote,
+        onPatientChipNote,
+    });
 
-    // The effective notes are appointment-level if they exist, else patient-level
-    const effectiveNotes = hasAppointmentNotes ? appointmentNotes : patientNotes;
-    const [notes, setNotes] = useState<string[]>(effectiveNotes);
-    const [newNoteText, setNewNoteText] = useState("");
-    const [applyToAll, setApplyToAll] = useState(false);
-    const effectiveColor = hasAppointmentNotes
-        ? (appointment.chipNoteColor ?? "yellow")
-        : (patient?.chipNoteColor ?? "yellow");
-    const [selectedColor, setSelectedColor] = useState<string>(effectiveColor);
-    const [editingIndex, setEditingIndex] = useState<number | null>(null);
-    const [editingText, setEditingText] = useState("");
-    const [confirmingRemoveAll, setConfirmingRemoveAll] = useState(false);
-    const [lastAppointmentId, setLastAppointmentId] = useState(appointment?.id);
-    const editInputRef = useRef<HTMLInputElement>(null);
-
-    // Reset local state when the appointment changes so stale data doesn't persist
+    // Reset local state when the appointment changes so stale data doesn't
+    // persist. The editor resets its own state on the same signal.
     if (appointment?.id !== lastAppointmentId) {
         setLastAppointmentId(appointment?.id);
-        setNotes(effectiveNotes);
         setChipNoteMode(false);
-        setNewNoteText("");
-        setEditingIndex(null);
-        setSelectedColor(effectiveColor);
-        setConfirmingRemoveAll(false);
     }
+
+    const saveNotes = () => {
+        chipNoteEditor.save();
+        onClose();
+    };
 
     // Clean up copy timer on unmount
     useEffect(() => {
@@ -133,81 +108,6 @@ export function AppointmentActionSheet({
             // Clipboard write failed — do not show success indicator
         }
     }, []);
-
-    const addNote = () => {
-        const trimmed = newNoteText.trim();
-        if (!trimmed || notes.length >= MAX_CHIP_NOTES) return;
-        setNotes([...notes, trimmed]);
-        setNewNoteText("");
-        setConfirmingRemoveAll(false);
-    };
-
-    const removeNote = (index: number) => {
-        setNotes(notes.filter((_, i) => i !== index));
-        if (editingIndex === index) {
-            setEditingIndex(null);
-        } else if (editingIndex !== null && editingIndex > index) {
-            setEditingIndex(editingIndex - 1);
-        }
-        setConfirmingRemoveAll(false);
-    };
-
-    const startEditing = (index: number) => {
-        setEditingIndex(index);
-        setEditingText(notes[index]);
-        setConfirmingRemoveAll(false);
-    };
-
-    const commitEdit = () => {
-        if (editingIndex === null) return;
-        const trimmed = editingText.trim();
-        if (trimmed) {
-            setNotes(notes.map((n, i) => i === editingIndex ? trimmed : n));
-        }
-        setEditingIndex(null);
-    };
-
-    const cancelEdit = () => {
-        setEditingIndex(null);
-    };
-
-    useEffect(() => {
-        if (editingIndex !== null && editInputRef.current) {
-            editInputRef.current.focus();
-            editInputRef.current.select();
-        }
-    }, [editingIndex]);
-
-    // Auto-disarm the "Remove from all" confirmation after 3s so a stale armed
-    // state can't fire on a later tap.
-    useEffect(() => {
-        if (!confirmingRemoveAll) return;
-        const timer = setTimeout(() => setConfirmingRemoveAll(false), 3000);
-        return () => clearTimeout(timer);
-    }, [confirmingRemoveAll]);
-
-    const saveNotes = () => {
-        let finalNotes = notes;
-        const trimmed = newNoteText.trim();
-        if (trimmed && finalNotes.length < MAX_CHIP_NOTES) {
-            finalNotes = [...finalNotes, trimmed];
-        }
-        if (applyToAll && !isPersonal) {
-            onPatientChipNote(finalNotes, selectedColor);
-        } else {
-            onChipNote(finalNotes, selectedColor);
-        }
-        onClose();
-    };
-
-    const handleRemoveFromAll = () => {
-        if (!confirmingRemoveAll) {
-            setConfirmingRemoveAll(true);
-            return;
-        }
-        onPatientChipNote([], undefined);
-        onClose();
-    };
 
     // Close on Escape key
     useEffect(() => {
@@ -236,7 +136,9 @@ export function AppointmentActionSheet({
     const phoneHref = buildPhoneHref(primaryPhone);
     const smsHref = buildSmsHref(primaryPhone);
 
-    const noteCount = effectiveNotes.length;
+    const noteCount = chipNoteMode
+        ? chipNoteEditor.notes.length
+        : chipNoteEditor.effectiveNotes.length;
 
     return (
         <div
@@ -428,8 +330,8 @@ export function AppointmentActionSheet({
                         <IconBarButton
                             tint="amber"
                             icon={<StickyNote className="w-5 h-5" />}
-                            label={(chipNoteMode ? notes.length : noteCount) > 0 ? "Notes" : "Note"}
-                            ariaLabel={(chipNoteMode ? notes.length : noteCount) > 0 ? "Edit Notes" : "Add Quick Note"}
+                            label={noteCount > 0 ? "Notes" : "Note"}
+                            ariaLabel={noteCount > 0 ? "Edit Notes" : "Add Quick Note"}
                             onClick={() => setChipNoteMode(true)}
                         />
                         <IconBarButton
@@ -457,156 +359,13 @@ export function AppointmentActionSheet({
 
                     {/* Note inline expansion — reveals below the icon bar when Note tapped */}
                     {chipNoteMode && (
-                        <div className="px-4 py-3 space-y-2 mt-2 border-t border-[var(--color-border)]">
-                            {/* Existing notes list */}
-                            {notes.length > 0 && (
-                                <div className="space-y-1">
-                                    {notes.map((note, index) => (
-                                        <div
-                                            key={index}
-                                            className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/50 rounded-lg px-3 py-1.5"
-                                        >
-                                            {editingIndex === index ? (
-                                                <input
-                                                    ref={editInputRef}
-                                                    type="text"
-                                                    value={editingText}
-                                                    onChange={(e) => setEditingText(e.target.value)}
-                                                    onBlur={commitEdit}
-                                                    onKeyDown={(e) => {
-                                                        if (e.key === 'Enter') {
-                                                            e.preventDefault();
-                                                            commitEdit();
-                                                        } else if (e.key === 'Escape') {
-                                                            e.preventDefault();
-                                                            cancelEdit();
-                                                        }
-                                                    }}
-                                                    className="flex-1 text-sm text-[var(--color-text-primary)] bg-white dark:bg-amber-900/50 rounded px-2 py-0.5 border border-amber-300 dark:border-amber-600 focus:outline-none focus:ring-1 focus:ring-amber-400"
-                                                />
-                                            ) : (
-                                                <button
-                                                    onClick={() => startEditing(index)}
-                                                    className="flex-1 flex items-center gap-1.5 text-left min-w-0 group"
-                                                >
-                                                    <span className="text-sm text-[var(--color-text-primary)] truncate">{note}</span>
-                                                    <Pencil className="w-3 h-3 text-amber-400 dark:text-amber-600 opacity-0 group-hover:opacity-100 shrink-0 transition-opacity" />
-                                                </button>
-                                            )}
-                                            <button
-                                                onClick={() => removeNote(index)}
-                                                className="p-1 rounded-full hover:bg-amber-200 dark:hover:bg-amber-900 transition-colors shrink-0"
-                                                aria-label={`Remove note: ${note}`}
-                                            >
-                                                <X className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400" />
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-
-                            {/* Add note input */}
-                            {notes.length < MAX_CHIP_NOTES ? (
-                                <div className="flex items-center gap-2">
-                                    <input
-                                        type="text"
-                                        value={newNoteText}
-                                        onChange={(e) => setNewNoteText(e.target.value)}
-                                        placeholder="e.g., Call 15 min before"
-                                        autoFocus
-                                        className="flex-1 px-3 py-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] text-[var(--color-text-primary)] text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
-                                        onKeyDown={(e) => {
-                                            if (e.key === 'Enter') {
-                                                e.preventDefault();
-                                                if (newNoteText.trim()) {
-                                                    addNote();
-                                                } else {
-                                                    saveNotes();
-                                                }
-                                            }
-                                        }}
-                                    />
-                                    <button
-                                        onClick={addNote}
-                                        disabled={!newNoteText.trim()}
-                                        className="p-2 rounded-lg bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                                        aria-label="Add note"
-                                    >
-                                        <Plus className="w-4 h-4" />
-                                    </button>
-                                </div>
-                            ) : (
-                                <p className="text-xs text-amber-600 dark:text-amber-400 px-1">
-                                    Max {MAX_CHIP_NOTES} notes reached
-                                </p>
-                            )}
-
-                            {/* Color picker */}
-                            <div className="flex items-center gap-2 px-1">
-                                <span className="text-xs text-[var(--color-text-secondary)]">Color</span>
-                                <div className="flex gap-1.5">
-                                    {CHIP_NOTE_COLORS.map((color) => (
-                                        <button
-                                            key={color}
-                                            onClick={() => setSelectedColor(color)}
-                                            className={`w-5 h-5 rounded-full border-2 transition-transform ${
-                                                selectedColor === color
-                                                    ? "scale-110 border-[var(--color-text-primary)]"
-                                                    : "border-transparent hover:scale-105"
-                                            }`}
-                                            style={{ backgroundColor: CHIP_NOTE_SWATCH_HEX[color] }}
-                                            title={color}
-                                            aria-label={`${color} note color`}
-                                        />
-                                    ))}
-                                </div>
-                            </div>
-
-                            {/* Remove from all */}
-                            {!isPersonal && hasPatientNotes && (
-                                <div className="flex pt-1">
-                                    <button
-                                        onClick={handleRemoveFromAll}
-                                        className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                                            confirmingRemoveAll
-                                                ? "bg-red-500 text-white hover:bg-red-600"
-                                                : "text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50"
-                                        }`}
-                                    >
-                                        {confirmingRemoveAll ? "Confirm?" : "Remove from all"}
-                                    </button>
-                                </div>
-                            )}
-
-                            {/* Apply to all + Save */}
-                            <div className="flex items-center justify-between gap-2 pt-1">
-                                {!isPersonal && (
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={applyToAll}
-                                            onChange={(e) => {
-                                                setApplyToAll(e.target.checked);
-                                                setConfirmingRemoveAll(false);
-                                            }}
-                                            className="w-4 h-4 rounded border-[var(--color-border)] text-amber-500 focus:ring-amber-400 accent-amber-500"
-                                        />
-                                        <span className="text-sm text-[var(--color-text-secondary)]">Apply to all</span>
-                                    </label>
-                                )}
-                                <button
-                                    onClick={saveNotes}
-                                    className="ml-auto px-4 py-2 rounded-lg bg-amber-500 text-white text-sm font-medium hover:bg-amber-600 transition-colors"
-                                >
-                                    Save
-                                </button>
-                            </div>
-
-                            {effectiveNotes.length > 0 && (
-                                <p className="text-[11px] text-[var(--color-text-tertiary)] px-1 italic">
-                                    {noteFromPatient ? "Notes from patient record" : "Notes on this appointment"}
-                                </p>
-                            )}
+                        <div className="px-4 py-3 mt-2 border-t border-[var(--color-border)]">
+                            <ChipNoteEditor
+                                editor={chipNoteEditor}
+                                onSave={saveNotes}
+                                onRemovedFromAll={onClose}
+                                autoFocus
+                            />
                         </div>
                     )}
                 </div>

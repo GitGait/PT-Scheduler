@@ -342,12 +342,12 @@ function buildCalendarEvent(
         ...(appointment.chipNotes ?? []),
         ...((appointment.chipNote && !(appointment.chipNotes ?? []).includes(appointment.chipNote)) ? [appointment.chipNote] : []),
     ];
-    if (allNotes.length > 0) {
-        privateMetadata[CALENDAR_METADATA_KEYS.chipNote] = JSON.stringify(allNotes);
-    }
-    if (appointment.chipNoteColor) {
-        privateMetadata[CALENDAR_METADATA_KEYS.chipNoteColor] = appointment.chipNoteColor;
-    }
+    // Always write both keys. Google patch-merges extendedProperties.private,
+    // so omitting a key keeps its old value — a deleted note would come back on
+    // the next pull. An empty string is the explicit "cleared" signal.
+    privateMetadata[CALENDAR_METADATA_KEYS.chipNote] =
+        allNotes.length > 0 ? JSON.stringify(allNotes) : "";
+    privateMetadata[CALENDAR_METADATA_KEYS.chipNoteColor] = appointment.chipNoteColor ?? "";
 
     return {
         summary: isPersonal

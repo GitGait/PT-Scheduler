@@ -990,6 +990,36 @@ export function SchedulePage() {
         slotLongPressTargetRef.current = null;
     };
 
+    // Chip note persistence — shared by the action sheet and the detail modal so
+    // both surfaces write the same data.
+    const handleChipNote = (appointmentId: string, notes: string[], color?: string) => {
+        void update(appointmentId, {
+            chipNotes: notes.length > 0 ? notes : undefined,
+            chipNote: undefined,
+            chipNoteColor: notes.length > 0 ? color : undefined,
+        });
+    };
+
+    const handlePatientChipNote = (
+        appointment: Appointment,
+        notes: string[],
+        color?: string
+    ) => {
+        if (appointment.patientId) {
+            void updatePatient(appointment.patientId, {
+                chipNotes: notes.length > 0 ? notes : undefined,
+                chipNote: undefined,
+                chipNoteColor: notes.length > 0 ? color : undefined,
+            });
+        }
+        // Clear appointment-level notes so patient-level takes over
+        void update(appointment.id, {
+            chipNotes: undefined,
+            chipNote: undefined,
+            chipNoteColor: undefined,
+        });
+    };
+
     const handleDeleteAppointment = async (appointment: Appointment) => {
         const patientName = getPatientName(appointment.patientId, appointment);
         const confirmed = window.confirm(
@@ -2368,24 +2398,8 @@ export function SchedulePage() {
                         onHold={() => {
                             void putOnHold(actionSheetAppointmentId);
                         }}
-                        onChipNote={(notes, color) => {
-                            void update(actionSheetAppointmentId, {
-                                chipNotes: notes.length > 0 ? notes : undefined,
-                                chipNote: undefined,
-                                chipNoteColor: notes.length > 0 ? color : undefined,
-                            });
-                        }}
-                        onPatientChipNote={(notes, color) => {
-                            if (actionAppointment.patientId) {
-                                void updatePatient(actionAppointment.patientId, {
-                                    chipNotes: notes.length > 0 ? notes : undefined,
-                                    chipNote: undefined,
-                                    chipNoteColor: notes.length > 0 ? color : undefined,
-                                });
-                            }
-                            // Clear appointment-level notes so patient-level takes over
-                            void update(actionSheetAppointmentId, { chipNotes: undefined, chipNote: undefined, chipNoteColor: undefined });
-                        }}
+                        onChipNote={(notes, color) => handleChipNote(actionSheetAppointmentId, notes, color)}
+                        onPatientChipNote={(notes, color) => handlePatientChipNote(actionAppointment, notes, color)}
                         onDelete={() => {
                             void handleDeleteAppointment(actionAppointment);
                         }}
@@ -2415,6 +2429,8 @@ export function SchedulePage() {
                             await update(appointmentId, changes);
                             triggerSync();
                         }}
+                        onChipNote={(notes, color) => handleChipNote(detailAppointment.id, notes, color)}
+                        onPatientChipNote={(notes, color) => handlePatientChipNote(detailAppointment, notes, color)}
                         onDeleteAppointment={async (appointmentId, options) => {
                             if (options?.immediate) {
                                 await deleteAppointment(appointmentId);

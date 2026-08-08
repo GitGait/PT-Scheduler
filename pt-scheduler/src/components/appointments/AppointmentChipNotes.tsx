@@ -1,5 +1,6 @@
 import type { Appointment, Patient } from "../../types";
 import { getChipNoteClasses } from "../../utils/chipNoteColors";
+import { firstMeaningfulNoteLine } from "../../utils/chipNoteText";
 
 interface AppointmentChipNotesProps {
     appointment: Appointment;
@@ -10,23 +11,6 @@ interface AppointmentChipNotesProps {
 // Minimum chip height before the profile note gets a banner. Chips floor at
 // SLOT_HEIGHT_PX - 2 = 46px (a 15-min visit), which has no room to spare.
 const PROFILE_NOTE_MIN_HEIGHT_PX = 60;
-
-// Patient.notes is also written by machines: ScanPage stamps every auto-created
-// patient, and PatientsPage appends an "Email:" line on save. Neither is worth
-// a banner.
-const BOILERPLATE_NOTE_PATTERNS = [
-    /^created from scan import$/i,
-    /^email\s*:/i,
-];
-
-function profileNoteFirstLine(notes?: string): string {
-    return (
-        (notes ?? "")
-            .split("\n")
-            .map((line) => line.trim())
-            .find((line) => line && !BOILERPLATE_NOTE_PATTERNS.some((p) => p.test(line))) ?? ""
-    );
-}
 
 /**
  * Bottom-anchored note banners on an appointment chip: the color-coded quick
@@ -49,7 +33,7 @@ export function AppointmentChipNotes({ appointment, patient, heightPx }: Appoint
         : [];
     const displayNotes = allNotes.length > 0 ? allNotes : patientAllNotes;
 
-    const profileNote = profileNoteFirstLine(patient?.notes);
+    const profileNote = firstMeaningfulNoteLine(patient?.notes);
     const isDuplicate = displayNotes.some(
         (note) => note.trim().toLowerCase() === profileNote.toLowerCase()
     );
