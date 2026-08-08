@@ -1656,10 +1656,8 @@ export function SchedulePage() {
                         {/* Day headers */}
                         <div className="sticky top-0 z-20 bg-[var(--color-surface)]/98 backdrop-blur-sm border-b border-[var(--color-border-light)] transition-colors duration-200">
                             <div className={`grid ${viewMode === 'day' ? 'grid-cols-[60px_1fr]' : 'grid-cols-[60px_repeat(7,1fr)]'}`}>
-                                {/* GMT offset */}
-                                <div className="py-2 px-1 text-right">
-                                    <span className="text-[10px] text-[var(--color-text-tertiary)]">{Intl.DateTimeFormat().resolvedOptions().timeZone}</span>
-                                </div>
+                                {/* Time gutter spacer — keeps day headers aligned with the grid below */}
+                                <div className="py-2 px-1" />
 
                                 {/* Day headers */}
                                 {displayDates.map((date) => {
