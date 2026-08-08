@@ -3,18 +3,16 @@ import { useParams, useNavigate } from "react-router-dom";
 import { usePatientStore } from "../stores";
 import { Card, CardHeader } from "../components/ui/Card";
 import { Button } from "../components/ui/Button";
-import {
-    parseAlternateContactsField,
-    serializeAlternateContactsField,
-} from "../api/sheets";
+import { AlternateContactsEditor, cleanAlternateContacts } from "../components/ui/AlternateContactsEditor";
 import type { Patient, PatientStatus } from "../types";
+import type { AlternateContact } from "../utils/validation";
 import { Phone, Navigation, Edit2, X, Trash2, Mail } from "lucide-react";
 
 interface EditFormData {
     fullName: string;
     nicknames: string;
     phoneNumbers: { number: string; label: string }[];
-    alternateContacts: string;
+    alternateContacts: AlternateContact[];
     address: string;
     facilityName: string;
     notes: string;
@@ -45,7 +43,7 @@ export function PatientDetailPage() {
                 phoneNumbers: found.phoneNumbers.length > 0
                     ? found.phoneNumbers.map((pn) => ({ number: pn.number, label: pn.label ?? "" }))
                     : [{ number: "", label: "" }],
-                alternateContacts: serializeAlternateContactsField(found.alternateContacts),
+                alternateContacts: found.alternateContacts.map((c) => ({ ...c })),
                 address: found.address,
                 facilityName: found.facilityName || "",
                 notes: found.notes,
@@ -84,7 +82,7 @@ export function PatientDetailPage() {
             phoneNumbers: patient.phoneNumbers.length > 0
                 ? patient.phoneNumbers.map((pn) => ({ number: pn.number, label: pn.label ?? "" }))
                 : [{ number: "", label: "" }],
-            alternateContacts: serializeAlternateContactsField(patient.alternateContacts),
+            alternateContacts: patient.alternateContacts.map((c) => ({ ...c })),
             address: patient.address,
             facilityName: patient.facilityName || "",
             notes: patient.notes,
@@ -127,7 +125,7 @@ export function PatientDetailPage() {
                         const label = pn.label.trim();
                         return label ? { number: pn.number.trim(), label } : { number: pn.number.trim() };
                     }),
-                alternateContacts: parseAlternateContactsField(formData.alternateContacts),
+                alternateContacts: cleanAlternateContacts(formData.alternateContacts),
                 address: formData.address.trim(),
                 facilityName: formData.facilityName.trim() || undefined,
                 notes: formData.notes.trim(),
@@ -285,15 +283,10 @@ export function PatientDetailPage() {
                         <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                             Alternate Contacts
                         </label>
-                        <textarea
-                            value={formData.alternateContacts}
-                            onChange={(e) => handleInputChange("alternateContacts", e.target.value)}
-                            className="w-full input-google resize-y py-2 min-h-[72px]"
-                            placeholder="Name|Phone|Relationship; Name|Phone"
+                        <AlternateContactsEditor
+                            contacts={formData.alternateContacts}
+                            onChange={(next) => handleInputChange("alternateContacts", next)}
                         />
-                        <p className="text-xs text-[var(--color-text-secondary)] mt-1">
-                            Format: Name|Phone|Relationship; Name|Phone
-                        </p>
                     </div>
 
                     <div>

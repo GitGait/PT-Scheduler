@@ -9,9 +9,7 @@ import { extractPatient } from "../api/extract";
 import { isSignedIn } from "../api/auth";
 import {
     deletePatientsFromSheetByIds,
-    parseAlternateContactsField,
     removeDuplicatePatientRowsInSheet,
-    serializeAlternateContactsField,
     syncPatientToSheetByStatus,
 } from "../api/sheets";
 import { db } from "../db/schema";
@@ -19,6 +17,8 @@ import { patientDB, syncQueueDB } from "../db/operations";
 import { Search, Phone, X, Plus, Navigation } from "lucide-react";
 import { startOfWeek, endOfWeek } from "date-fns";
 import type { Patient, PatientStatus } from "../types";
+import type { AlternateContact } from "../utils/validation";
+import { AlternateContactsEditor, cleanAlternateContacts } from "../components/ui/AlternateContactsEditor";
 import { PERSONAL_PATIENT_ID } from "../utils/personalEventColors";
 
 type PatientTab = "current" | "for-other-pt" | "discharged";
@@ -38,7 +38,7 @@ interface PatientFormData {
     address: string;
     facilityName: string;
     email: string;
-    alternateContacts: string;
+    alternateContacts: AlternateContact[];
     notes: string;
     status: PatientStatus;
 }
@@ -50,7 +50,7 @@ const emptyForm: PatientFormData = {
     address: "",
     facilityName: "",
     email: "",
-    alternateContacts: "",
+    alternateContacts: [],
     notes: "",
     status: "active",
 };
@@ -622,7 +622,7 @@ export function PatientsPage() {
                 email: extracted.email || prev.email,
                 alternateContacts:
                     extracted.alternateContacts && extracted.alternateContacts.length > 0
-                        ? serializeAlternateContactsField(extracted.alternateContacts)
+                        ? extracted.alternateContacts
                         : prev.alternateContacts,
                 notes: extracted.notes
                     ? [prev.notes, extracted.notes].filter(Boolean).join("\n").trim()
@@ -667,7 +667,7 @@ export function PatientsPage() {
                         const label = pn.label.trim();
                         return label ? { number: pn.number.trim(), label } : { number: pn.number.trim() };
                     }),
-                alternateContacts: parseAlternateContactsField(formData.alternateContacts),
+                alternateContacts: cleanAlternateContacts(formData.alternateContacts),
                 address: formData.address.trim(),
                 facilityName: formData.facilityName.trim() || undefined,
                 email: normalizedEmail || undefined,
@@ -1056,15 +1056,10 @@ export function PatientsPage() {
                                 <label className="block text-sm font-medium text-[var(--color-text-secondary)] mb-1">
                                     Alternate Contacts
                                 </label>
-                                <textarea
-                                    value={formData.alternateContacts}
-                                    onChange={(e) => handleInputChange("alternateContacts", e.target.value)}
-                                    className="w-full input-google resize-y py-2 min-h-[72px]"
-                                    placeholder="Name|Phone|Relationship; Name|Phone"
+                                <AlternateContactsEditor
+                                    contacts={formData.alternateContacts}
+                                    onChange={(next) => handleInputChange("alternateContacts", next)}
                                 />
-                                <p className="text-xs text-[var(--color-text-secondary)] mt-1">
-                                    Format: Name|Phone|Relationship; Name|Phone
-                                </p>
                             </div>
 
                             <div>

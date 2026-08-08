@@ -4,6 +4,7 @@ import { Button } from "./ui/Button";
 import type { Appointment, Patient, VisitType } from "../types";
 import type { AlternateContact } from "../utils/validation";
 import { VisitTypeSelect } from "./ui/VisitTypeSelect";
+import { AlternateContactsEditor, cleanAlternateContacts } from "./ui/AlternateContactsEditor";
 import { appointmentDB } from "../db/operations";
 import {
     isPersonalEvent,
@@ -213,7 +214,7 @@ export function AppointmentDetailModal({
                 }
             } else {
                 // Filter out empty alternate contacts
-                const cleanedContacts = altContacts.filter(c => c.firstName.trim() && c.phone.trim());
+                const cleanedContacts = cleanAlternateContacts(altContacts);
 
                 // Check if patient data changed
                 const cleanedPhones = phoneNumbers
@@ -529,63 +530,7 @@ export function AppointmentDetailModal({
                                     <Users className="w-4 h-4" />
                                     Alternate Contacts
                                 </label>
-                                <div className="space-y-3">
-                                    {altContacts.map((contact, index) => (
-                                        <div key={index} className="flex gap-2 items-start">
-                                            <div className="flex-1 grid grid-cols-3 gap-2">
-                                                <input
-                                                    type="text"
-                                                    value={contact.firstName}
-                                                    onChange={(e) => {
-                                                        const updated = [...altContacts];
-                                                        updated[index] = { ...updated[index], firstName: e.target.value };
-                                                        setAltContacts(updated);
-                                                    }}
-                                                    placeholder="Name"
-                                                    className="input-google text-sm"
-                                                />
-                                                <input
-                                                    type="tel"
-                                                    value={contact.phone}
-                                                    onChange={(e) => {
-                                                        const updated = [...altContacts];
-                                                        updated[index] = { ...updated[index], phone: e.target.value };
-                                                        setAltContacts(updated);
-                                                    }}
-                                                    placeholder="Phone"
-                                                    className="input-google text-sm"
-                                                />
-                                                <input
-                                                    type="text"
-                                                    value={contact.relationship || ""}
-                                                    onChange={(e) => {
-                                                        const updated = [...altContacts];
-                                                        updated[index] = { ...updated[index], relationship: e.target.value };
-                                                        setAltContacts(updated);
-                                                    }}
-                                                    placeholder="Relation"
-                                                    className="input-google text-sm"
-                                                />
-                                            </div>
-                                            <button
-                                                type="button"
-                                                onClick={() => setAltContacts(altContacts.filter((_, i) => i !== index))}
-                                                className="p-2 rounded-full hover:bg-red-50 dark:hover:bg-red-950 transition-colors mt-1"
-                                                aria-label="Remove contact"
-                                            >
-                                                <Trash2 className="w-4 h-4 text-red-500 dark:text-red-400" />
-                                            </button>
-                                        </div>
-                                    ))}
-                                    <button
-                                        type="button"
-                                        onClick={() => setAltContacts([...altContacts, { firstName: "", phone: "" }])}
-                                        className="flex items-center gap-2 text-sm text-[var(--color-primary)] hover:text-[var(--color-primary-hover)] transition-colors py-1"
-                                    >
-                                        <Plus className="w-4 h-4" />
-                                        Add Contact
-                                    </button>
-                                </div>
+                                <AlternateContactsEditor contacts={altContacts} onChange={setAltContacts} />
                             </div>
 
                             {/* Visit Type */}
