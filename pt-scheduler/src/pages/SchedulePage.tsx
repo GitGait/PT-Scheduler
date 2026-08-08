@@ -25,8 +25,9 @@ import { DayMapModal } from "../components/DayMapModal";
 import { useLocationData } from "../hooks/useLocationData";
 import { useWeekActions } from "../hooks/useWeekActions";
 import { usePendingDelete } from "../hooks/usePendingDelete";
-import type { Appointment, Patient } from "../types";
+import type { Appointment } from "../types";
 import { getVisitTypeGradient } from "../utils/visitTypeColors";
+import { formatPatientDisplayName } from "../utils/patientName";
 import { AppointmentChipNotes } from "../components/appointments/AppointmentChipNotes";
 import {
     PERSONAL_PATIENT_ID,
@@ -399,14 +400,6 @@ export function SchedulePage() {
         (patientId: string) => patientById.get(patientId),
         [patientById]
     );
-
-    const formatPatientDisplayName = (patient: Patient) => {
-        const nickname = patient.nicknames.find((value) => value.trim().length > 0);
-        if (!nickname) {
-            return patient.fullName;
-        }
-        return `${patient.fullName} "${nickname.trim()}"`;
-    };
 
     const getPatientName = (patientId: string, appointment?: Appointment) => {
         if (patientId === PERSONAL_PATIENT_ID && appointment) {
