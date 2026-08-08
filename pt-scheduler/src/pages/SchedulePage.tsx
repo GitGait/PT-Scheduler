@@ -30,6 +30,11 @@ import { getVisitTypeGradient } from "../utils/visitTypeColors";
 import { formatPatientDisplayName } from "../utils/patientName";
 import { AppointmentChipNotes } from "../components/appointments/AppointmentChipNotes";
 import {
+    ChipAlternateContactRows,
+    ChipPhoneRows,
+    chipPhoneTooltip,
+} from "../components/appointments/AppointmentChipContacts";
+import {
     PERSONAL_PATIENT_ID,
     isPersonalEvent,
     getPersonalCategoryGradient,
@@ -41,7 +46,6 @@ import {
     ChevronDown,
     Plus,
     X,
-    Phone,
     MapPin,
     Navigation,
     Clock,
@@ -1880,9 +1884,8 @@ export function SchedulePage() {
                                                     : (visitType ? `[${visitType}]` : null);
                                                 const showFacilityRow = !isPersonal && heightPx >= 46;
                                                 const showMilesRow = !isPersonal && heightPx >= 46;
-                                                const showPhoneRow = !isPersonal && heightPx >= 58;
                                                 const showAddressRow = !isPersonal && heightPx >= 72;
-                                                const showAlternateContactRows = !isPersonal && heightPx >= 88;
+                                                const chipPhones = chipPhoneTooltip(patient);
 
                                                 return (
                                                     <div
@@ -1921,7 +1924,7 @@ export function SchedulePage() {
                                                         }}
                                                         title={isPersonal
                                                             ? chipName
-                                                            : `${getPatientName(appointment.patientId)}${patient?.facilityName ? ` — ${patient.facilityName}` : ''}${patient?.phoneNumbers[0]?.number ? ` - ${patient.phoneNumbers[0].number}` : ''}${patient?.address ? ` - ${patient.address}` : ''}`
+                                                            : `${getPatientName(appointment.patientId)}${patient?.facilityName ? ` — ${patient.facilityName}` : ''}${chipPhones ? ` - ${chipPhones}` : ''}${patient?.address ? ` - ${patient.address}` : ''}`
                                                         }
                                                     >
                                                         {/* Main content area - full width, draggable from anywhere */}
@@ -1987,13 +1990,12 @@ export function SchedulePage() {
                                                                     </span>
                                                                 </div>
                                                             )}
-                                                            {showPhoneRow && patient?.phoneNumbers[0]?.number && (
-                                                                <div className={`inline-flex w-fit max-w-full items-center gap-1 overflow-hidden whitespace-nowrap text-ellipsis opacity-90 ${
-                                                                    isDayView ? 'text-[14px] min-h-[17px]' : 'text-[12px] min-h-[14px]'
-                                                                }`}>
-                                                                    <Phone className={isDayView ? 'w-3.5 h-3.5 shrink-0' : 'w-2.5 h-2.5 shrink-0'} />
-                                                                    <span className="truncate">{patient.phoneNumbers[0].label ? `${patient.phoneNumbers[0].label}: ` : ''}{patient.phoneNumbers[0].number}</span>
-                                                                </div>
+                                                            {!isPersonal && patient && (
+                                                                <ChipPhoneRows
+                                                                    patient={patient}
+                                                                    heightPx={heightPx}
+                                                                    isDayView={isDayView}
+                                                                />
                                                             )}
                                                             {showAddressRow && patient?.address && (
                                                                 <div className={`inline-flex w-fit max-w-full items-center gap-1 overflow-hidden whitespace-nowrap text-ellipsis opacity-90 ${
@@ -2003,17 +2005,13 @@ export function SchedulePage() {
                                                                     <span className="truncate">{patient.address.split(',')[0]}</span>
                                                                 </div>
                                                             )}
-                                                            {showAlternateContactRows && patient?.alternateContacts?.map((contact, idx) => (
-                                                                <div
-                                                                    key={contact.phone || idx}
-                                                                    className={`inline-flex w-fit max-w-full items-center gap-1 overflow-hidden whitespace-nowrap text-ellipsis opacity-85 ${
-                                                                        isDayView ? 'text-[14px] min-h-[17px]' : 'text-[12px] min-h-[14px]'
-                                                                    }`}
-                                                                >
-                                                                    <Phone className={isDayView ? 'w-3.5 h-3.5 shrink-0' : 'w-2.5 h-2.5 shrink-0'} />
-                                                                    <span className="truncate">{contact.firstName ? `${contact.firstName}: ` : ''}{contact.phone}</span>
-                                                                </div>
-                                                            ))}
+                                                            {!isPersonal && patient && (
+                                                                <ChipAlternateContactRows
+                                                                    patient={patient}
+                                                                    heightPx={heightPx}
+                                                                    isDayView={isDayView}
+                                                                />
+                                                            )}
                                                         </div>
 
                                                         {/* Chip note banners (quick notes + patient profile note) */}
