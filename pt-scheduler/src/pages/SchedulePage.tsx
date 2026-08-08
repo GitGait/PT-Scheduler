@@ -27,7 +27,7 @@ import { useWeekActions } from "../hooks/useWeekActions";
 import { usePendingDelete } from "../hooks/usePendingDelete";
 import type { Appointment, Patient } from "../types";
 import { getVisitTypeGradient } from "../utils/visitTypeColors";
-import { getChipNoteClasses } from "../utils/chipNoteColors";
+import { AppointmentChipNotes } from "../components/appointments/AppointmentChipNotes";
 import {
     PERSONAL_PATIENT_ID,
     isPersonalEvent,
@@ -1993,37 +1993,13 @@ export function SchedulePage() {
                                                             ))}
                                                         </div>
 
-                                                        {/* Chip quick note banners (stacked) */}
-                                                        {(() => {
-                                                            const allNotes: string[] = [
-                                                                ...(appointment.chipNotes ?? []),
-                                                                ...((appointment.chipNote && !(appointment.chipNotes ?? []).includes(appointment.chipNote)) ? [appointment.chipNote] : []),
-                                                            ];
-                                                            const patientAllNotes: string[] = allNotes.length === 0 ? [
-                                                                ...(patient?.chipNotes ?? []),
-                                                                ...((patient?.chipNote && !(patient?.chipNotes ?? []).includes(patient?.chipNote)) ? [patient.chipNote] : []),
-                                                            ] : [];
-                                                            const displayNotes = allNotes.length > 0 ? allNotes : patientAllNotes;
-                                                            if (displayNotes.length === 0) return null;
-                                                            const noteColor = allNotes.length > 0 ? appointment.chipNoteColor : patient?.chipNoteColor;
-                                                            const cc = getChipNoteClasses(noteColor);
-                                                            return (
-                                                                <div
-                                                                    className="absolute bottom-0 left-0 right-0 pointer-events-none flex flex-col"
-                                                                    style={{ zIndex: 2 }}
-                                                                    title={displayNotes.join('\n')}
-                                                                >
-                                                                    {displayNotes.map((note, idx) => (
-                                                                        <div
-                                                                            key={note + idx}
-                                                                            className={`${cc.bg} ${cc.text} text-[10px] font-semibold px-1.5 py-0.5 truncate leading-tight border-t ${cc.border} first:border-t-0`}
-                                                                        >
-                                                                            {note}
-                                                                        </div>
-                                                                    ))}
-                                                                </div>
-                                                            );
-                                                        })()}
+                                                        {/* Chip note banners (quick notes + patient profile note) */}
+                                                        <AppointmentChipNotes
+                                                            appointment={appointment}
+                                                            patient={patient}
+                                                            heightPx={heightPx}
+                                                        />
+
 
                                                         {/* Invisible resize handles - larger in day view for easier grabbing */}
                                                         {/* Top resize handle */}
