@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { VisitTypeStyleProvider } from "./components/VisitTypeStyleProvider";
 import { Sidebar } from "./components/ui/Sidebar";
@@ -12,7 +12,6 @@ import {
   SchedulePage,
   PatientsPage,
   ScanPage,
-  RoutePage,
   SettingsPage,
   PatientDetailPage,
 } from "./pages";
@@ -49,7 +48,7 @@ function AppContent() {
             <Route path="/patients" element={<PatientsPage />} />
             <Route path="/patients/:id" element={<PatientDetailPage />} />
             <Route path="/scan" element={<ScanPage />} />
-            <Route path="/route" element={<RoutePage />} />
+            <Route path="/route" element={<Navigate to="/" replace />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </main>

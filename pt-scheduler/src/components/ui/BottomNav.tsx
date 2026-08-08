@@ -1,11 +1,10 @@
 import { NavLink } from "react-router-dom";
-import { Calendar, Users, Camera, Map, Settings, type LucideIcon } from "lucide-react";
+import { Calendar, Users, Camera, Settings, type LucideIcon } from "lucide-react";
 
 const navItems: { to: string; label: string; icon: LucideIcon }[] = [
     { to: "/", label: "Schedule", icon: Calendar },
     { to: "/patients", label: "Patients", icon: Users },
     { to: "/scan", label: "Scan", icon: Camera },
-    { to: "/route", label: "Route", icon: Map },
     { to: "/settings", label: "Settings", icon: Settings },
 ];
 

@@ -5,7 +5,6 @@ import {
   Calendar,
   Users,
   Camera,
-  MapPin,
   Settings,
   HelpCircle,
   Search,
@@ -27,7 +26,6 @@ const navItems = [
   { to: "/", label: "Schedule", icon: Calendar },
   { to: "/patients", label: "Patients", icon: Users },
   { to: "/scan", label: "Scan", icon: Camera },
-  { to: "/route", label: "Route", icon: MapPin },
   { to: "/settings", label: "Settings", icon: Settings },
 ];
 

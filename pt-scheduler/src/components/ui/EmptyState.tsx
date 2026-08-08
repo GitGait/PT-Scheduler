@@ -2,7 +2,6 @@ import { type ReactNode, type ComponentType } from "react";
 import {
   Calendar,
   Users,
-  MapPin,
   Camera,
   FileText,
   Search,
@@ -94,37 +93,6 @@ export function PatientsEmptyState({ onAddPatient }: PatientsEmptyStateProps) {
           ? {
               label: "Add Patient",
               onClick: onAddPatient,
-            }
-          : undefined
-      }
-    />
-  );
-}
-
-interface RouteEmptyStateProps {
-  onViewSchedule?: () => void;
-  hasAppointments?: boolean;
-}
-
-export function RouteEmptyState({
-  onViewSchedule,
-  hasAppointments = false,
-}: RouteEmptyStateProps) {
-  return (
-    <EmptyState
-      icon={MapPin}
-      title={hasAppointments ? "Configure your home base" : "No stops to optimize"}
-      description={
-        hasAppointments
-          ? "Set your home address in Settings to calculate optimal routes between appointments."
-          : "Add appointments to your schedule first, then come back here to optimize your route."
-      }
-      action={
-        onViewSchedule
-          ? {
-              label: hasAppointments ? "Go to Settings" : "View Schedule",
-              onClick: onViewSchedule,
-              icon: hasAppointments ? undefined : Calendar,
             }
           : undefined
       }

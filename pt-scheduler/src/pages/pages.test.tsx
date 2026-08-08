@@ -50,7 +50,6 @@ vi.mock("../api/ocr", () => ({
 
 // Import pages after mocking
 import { ScanPage } from "./ScanPage";
-import { RoutePage } from "./RoutePage";
 import { SettingsPage } from "./SettingsPage";
 
 describe("Page Smoke Tests", () => {
@@ -61,11 +60,6 @@ describe("Page Smoke Tests", () => {
     it("ScanPage renders without crashing", () => {
         renderWithRouter(<ScanPage />);
         expect(screen.getByText(/Scan Schedule/i)).toBeDefined();
-    });
-
-    it("RoutePage renders without crashing", () => {
-        renderWithRouter(<RoutePage />);
-        expect(screen.getByLabelText(/Previous day/i)).toBeDefined();
     });
 
     it("SettingsPage renders without crashing", () => {
