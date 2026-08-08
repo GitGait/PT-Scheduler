@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, Phone, MapPin, Clock, FileText, Save, Loader2, Tag, User, Users, Plus, Trash2 } from "lucide-react";
+import { X, Phone, MapPin, Clock, ClipboardList, FileText, Save, Loader2, Tag, User, Users, Plus, Trash2 } from "lucide-react";
 import { Button } from "./ui/Button";
 import type { Appointment, Patient, VisitType } from "../types";
 import type { AlternateContact } from "../utils/validation";
@@ -44,6 +44,7 @@ export function AppointmentDetailModal({
     const [address, setAddress] = useState("");
     const [nicknames, setNicknames] = useState("");
     const [facilityName, setFacilityName] = useState("");
+    const [patientNotes, setPatientNotes] = useState("");
     const [visitType, setVisitType] = useState<VisitType>(null);
     const [altContacts, setAltContacts] = useState<AlternateContact[]>([]);
     const [personalTitle, setPersonalTitle] = useState("");
@@ -58,6 +59,10 @@ export function AppointmentDetailModal({
 
     const isPersonal = isPersonalEvent(appointment);
     const initializedRef = useRef(false);
+
+    // The chip banner shows only the first line of the profile note that isn't
+    // import boilerplate, so echo back which one that is while the user types.
+    const chipPreview = firstMeaningfulNoteLine(patientNotes);
 
     // The old "Appointment Notes" box wrote Appointment.notes, which mirrors the
     // Google Calendar description and is never rendered. Seed the chip-note
@@ -90,6 +95,7 @@ export function AppointmentDetailModal({
             setAddress(patient.address || "");
             setNicknames(patient.nicknames?.join(", ") || "");
             setFacilityName(patient.facilityName || "");
+            setPatientNotes(patient.notes || "");
             setAltContacts(patient.alternateContacts?.length ? [...patient.alternateContacts] : []);
         }
         setVisitType(appointment.visitType ?? null);
@@ -222,7 +228,8 @@ export function AppointmentDetailModal({
                 const nicknamesChanged = JSON.stringify(nicknamesArray) !== JSON.stringify(patient!.nicknames ?? []);
                 const facilityChanged = facilityName.trim() !== (patient!.facilityName || "");
                 const fullNameChanged = fullName.trim() !== patient!.fullName;
-                const patientChanged = phonesChanged || address !== patient!.address || altContactsChanged || nicknamesChanged || facilityChanged || fullNameChanged;
+                const notesChanged = patientNotes.trim() !== (patient!.notes || "");
+                const patientChanged = phonesChanged || address !== patient!.address || altContactsChanged || nicknamesChanged || facilityChanged || fullNameChanged || notesChanged;
                 const visitTypeChanged = visitType !== (appointment.visitType ?? null);
                 const appointmentChanged = visitTypeChanged;
 
@@ -234,11 +241,13 @@ export function AppointmentDetailModal({
                         alternateContacts: cleanedContacts,
                         nicknames: nicknamesArray,
                         facilityName: facilityName.trim() || undefined,
+                        notes: patientNotes.trim(),
                     });
 
                     if (onSyncToSheet) {
-                        // Must carry fullName too, or this immediate sheet write
-                        // pushes the old name back over the queued one.
+                        // Every edited field must be carried here too, or this
+                        // immediate sheet write pushes the old value back over
+                        // the queued one.
                         const updatedPatient: Patient = {
                             ...patient!,
                             fullName: fullName.trim(),
@@ -247,6 +256,7 @@ export function AppointmentDetailModal({
                             alternateContacts: cleanedContacts,
                             nicknames: nicknamesArray,
                             facilityName: facilityName.trim() || undefined,
+                            notes: patientNotes.trim(),
                         };
                         await onSyncToSheet(updatedPatient);
                     }
@@ -589,11 +599,42 @@ export function AppointmentDetailModal({
                         </>
                     )}
 
+                    {/* Patient profile note — lives on the patient record, so it
+                        banners every one of that patient's chips */}
+                    {!isPersonal && patient && (
+                        <div>
+                            <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                                <ClipboardList className="w-4 h-4" />
+                                Patient Note
+                                <span className="font-normal text-xs text-[var(--color-text-tertiary)]">
+                                    shows on every appointment
+                                </span>
+                            </label>
+                            <textarea
+                                value={patientNotes}
+                                onChange={(e) => setPatientNotes(e.target.value)}
+                                rows={3}
+                                placeholder="e.g., Gate code 4412. Dog in the yard."
+                                className="w-full input-google resize-none"
+                            />
+                            <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">
+                                {chipPreview
+                                    ? `Chip shows: "${chipPreview}"`
+                                    : "Nothing from this note will show on the chip."}
+                            </p>
+                        </div>
+                    )}
+
                     {/* Chip note — shown as a banner on the appointment chip */}
                     <div>
                         <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
                             <FileText className="w-4 h-4" />
                             {isPersonal ? "Note" : "Appointment Note"}
+                            {!isPersonal && (
+                                <span className="font-normal text-xs text-[var(--color-text-tertiary)]">
+                                    this visit only
+                                </span>
+                            )}
                         </label>
                         <ChipNoteEditor
                             editor={chipNoteEditor}
