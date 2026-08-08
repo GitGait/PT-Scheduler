@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
-import { X, Phone, MapPin, Clock, FileText, Save, Loader2, Tag, Users, Plus, Trash2 } from "lucide-react";
+import { X, Phone, MapPin, Clock, FileText, Save, Loader2, Tag, User, Users, Plus, Trash2 } from "lucide-react";
 import { Button } from "./ui/Button";
 import type { Appointment, Patient, VisitType } from "../types";
 import type { AlternateContact } from "../utils/validation";
@@ -39,6 +39,7 @@ export function AppointmentDetailModal({
     onDeleteAppointment,
     onSyncToSheet,
 }: AppointmentDetailModalProps) {
+    const [fullName, setFullName] = useState("");
     const [phoneNumbers, setPhoneNumbers] = useState<{ number: string; label: string }[]>([{ number: "", label: "" }]);
     const [address, setAddress] = useState("");
     const [nicknames, setNicknames] = useState("");
@@ -80,6 +81,7 @@ export function AppointmentDetailModal({
         initializedRef.current = true;
 
         if (patient) {
+            setFullName(patient.fullName || "");
             setPhoneNumbers(
                 patient.phoneNumbers.length > 0
                     ? patient.phoneNumbers.map((pn) => ({ number: pn.number, label: pn.label ?? "" }))
@@ -154,6 +156,13 @@ export function AppointmentDetailModal({
             return;
         }
 
+        // Checked before anything is written — chip notes save below and an
+        // empty name would also make the sheet row unparseable on pull-back.
+        if (!isPersonal && !fullName.trim()) {
+            setError("Patient name is required.");
+            return;
+        }
+
         setIsSaving(true);
         setError(null);
         setSuccessMessage(null);
@@ -212,12 +221,14 @@ export function AppointmentDetailModal({
                 const nicknamesArray = nicknames.split(",").map(n => n.trim()).filter(Boolean);
                 const nicknamesChanged = JSON.stringify(nicknamesArray) !== JSON.stringify(patient!.nicknames ?? []);
                 const facilityChanged = facilityName.trim() !== (patient!.facilityName || "");
-                const patientChanged = phonesChanged || address !== patient!.address || altContactsChanged || nicknamesChanged || facilityChanged;
+                const fullNameChanged = fullName.trim() !== patient!.fullName;
+                const patientChanged = phonesChanged || address !== patient!.address || altContactsChanged || nicknamesChanged || facilityChanged || fullNameChanged;
                 const visitTypeChanged = visitType !== (appointment.visitType ?? null);
                 const appointmentChanged = visitTypeChanged;
 
                 if (patientChanged) {
                     await onSavePatient(patient!.id, {
+                        fullName: fullName.trim(),
                         phoneNumbers: cleanedPhones,
                         address,
                         alternateContacts: cleanedContacts,
@@ -226,8 +237,11 @@ export function AppointmentDetailModal({
                     });
 
                     if (onSyncToSheet) {
+                        // Must carry fullName too, or this immediate sheet write
+                        // pushes the old name back over the queued one.
                         const updatedPatient: Patient = {
                             ...patient!,
+                            fullName: fullName.trim(),
                             phoneNumbers: cleanedPhones,
                             address,
                             alternateContacts: cleanedContacts,
@@ -308,7 +322,7 @@ export function AppointmentDetailModal({
                         <h3 className="text-xl font-medium text-[var(--color-text-primary)]">
                             {isPersonal
                                 ? (appointment.title || getPersonalCategoryLabel(appointment.personalCategory))
-                                : (patient?.fullName || "Unknown Patient")}
+                                : (fullName || patient?.fullName || "Unknown Patient")}
                         </h3>
                         <p className="text-sm text-[var(--color-text-secondary)] mt-1">
                             <Clock className="w-4 h-4 inline mr-1" />
@@ -381,6 +395,21 @@ export function AppointmentDetailModal({
                         </>
                     ) : (
                         <>
+                            {/* Full Name */}
+                            <div>
+                                <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">
+                                    <User className="w-4 h-4" />
+                                    Full Name
+                                </label>
+                                <input
+                                    type="text"
+                                    value={fullName}
+                                    onChange={(e) => setFullName(e.target.value)}
+                                    placeholder="e.g., Smith, Robert"
+                                    className="w-full input-google"
+                                />
+                            </div>
+
                             {/* Nicknames */}
                             <div>
                                 <label className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-secondary)] mb-2">

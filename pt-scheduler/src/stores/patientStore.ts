@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import type { Patient, PatientStatus } from "../types";
-import { patientDB, syncQueueDB } from "../db/operations";
+import { appointmentDB, patientDB, syncQueueDB } from "../db/operations";
 import { useSyncStore } from "./syncStore";
+import { enqueueAppointmentSync } from "./appointmentStore";
 
 interface PatientState {
     patients: Patient[];
@@ -42,6 +43,24 @@ async function enqueuePatientSync(
         data: { entityId },
     });
     await useSyncStore.getState().refreshPendingCount();
+}
+
+/**
+ * A Google Calendar event's title is the patient's name and its location is
+ * their address, but nothing re-pushes those when the patient record changes —
+ * only appointment-entity queue items write to the calendar. So fan out an
+ * update for the patient's already-synced appointments and let the queue's
+ * existing handler re-read the fresh patient at push time.
+ */
+async function enqueueCalendarRefreshForPatient(patientId: string): Promise<void> {
+    const affected = await appointmentDB.byPatient(patientId);
+    for (const appointment of affected) {
+        // No calendarEventId means it isn't on the calendar yet; its own
+        // pending "create" will pick up the new values.
+        if (appointment.calendarEventId && appointment.status !== "cancelled") {
+            await enqueueAppointmentSync("update", appointment.id);
+        }
+    }
 }
 
 export const usePatientStore = create<PatientState & PatientActions>((set, get) => ({
@@ -110,6 +129,16 @@ export const usePatientStore = create<PatientState & PatientActions>((set, get) 
     update: async (id, changes) => {
         set({ error: null });
         try {
+            const existing = await patientDB.get(id);
+            const nameChanged =
+                changes.fullName !== undefined &&
+                existing !== undefined &&
+                changes.fullName.trim() !== existing.fullName;
+            const addressChanged =
+                changes.address !== undefined &&
+                existing !== undefined &&
+                changes.address !== existing.address;
+
             // If address changed and no explicit new coords came along, null out
             // lat/lng so the next geocode pass re-resolves the new address.
             // Prevents stale coordinates from silently sticking to a new address.
@@ -126,6 +155,9 @@ export const usePatientStore = create<PatientState & PatientActions>((set, get) 
                         p.id === id ? updatedPatient : p
                     ),
                 }));
+            }
+            if (nameChanged || addressChanged) {
+                await enqueueCalendarRefreshForPatient(id);
             }
         } catch (err) {
             set({ error: err instanceof Error ? err.message : "Failed to update patient" });

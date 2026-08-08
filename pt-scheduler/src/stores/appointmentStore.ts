@@ -49,7 +49,7 @@ function hasCalendarSyncConfigured(): boolean {
     return Boolean(calendarId.trim());
 }
 
-async function enqueueAppointmentSync(
+export async function enqueueAppointmentSync(
     type: "create" | "update" | "delete",
     entityId: string,
     calendarEventId?: string
