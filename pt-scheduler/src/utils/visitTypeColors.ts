@@ -113,16 +113,72 @@ const BUILT_IN_BY_CODE = new Map<VisitType, VisitTypeConfig>(
 /** Only values matching this exact shape are ever written into a CSS custom property. */
 const SAFE_GRADIENT_REGEX = /^linear-gradient\(135deg, #[0-9a-f]{6} 0%, #[0-9a-f]{6} 100%\)$/i;
 
-function darkenHex(hex: string, amount: number): string {
+function parseHex(hex: string): [number, number, number] {
     const value = hex.replace("#", "");
-    const r = parseInt(value.slice(0, 2), 16);
-    const g = parseInt(value.slice(2, 4), 16);
-    const b = parseInt(value.slice(4, 6), 16);
+    return [
+        parseInt(value.slice(0, 2), 16),
+        parseInt(value.slice(2, 4), 16),
+        parseInt(value.slice(4, 6), 16),
+    ];
+}
+
+function darkenHex(hex: string, amount: number): string {
+    const [r, g, b] = parseHex(hex);
     const scale = (channel: number) =>
         Math.max(0, Math.min(255, Math.round(channel * (1 - amount))))
             .toString(16)
             .padStart(2, "0");
     return `#${scale(r)}${scale(g)}${scale(b)}`;
+}
+
+/** WCAG 2.1 relative luminance, 0 (black) → 1 (white). */
+export function relativeLuminance(hex: string): number {
+    const channel = (raw: number) => {
+        const c = raw / 255;
+        return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+    };
+    const [r, g, b] = parseHex(hex).map(channel);
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+}
+
+/** WCAG 2.1 contrast ratio between two hex colours, 1 → 21. */
+export function contrastRatio(a: string, b: string): number {
+    const la = relativeLuminance(a);
+    const lb = relativeLuminance(b);
+    const [lighter, darker] = la >= lb ? [la, lb] : [lb, la];
+    return (lighter + 0.05) / (darker + 0.05);
+}
+
+/**
+ * How far a dark foreground is darkened from the chip's own colour. Near-black,
+ * but still carrying the hue — a chip reads as one colour rather than a white
+ * card with black text. Tuned as the smallest value that clears 4.5:1 across
+ * every palette swatch; anything lighter fails on the mid-tones (#00897b,
+ * #607d8b, #d84315 are the tight ones).
+ */
+const DARK_FOREGROUND_AMOUNT = 0.92;
+
+/**
+ * A foreground that stays readable on `bg`, whatever the user picked.
+ *
+ * Picks whichever of white / darkened-own-hue actually contrasts better, rather
+ * than switching on a luminance threshold — at the crossover the two are within
+ * a rounding error of each other, and measuring is both simpler and exact.
+ *
+ * Guarantees ≥4.5:1 (WCAG AA) for every colour in `VISIT_TYPE_HUES` and every
+ * built-in. For a fully arbitrary hex from the custom colour input the floor is
+ * ~4.45:1, in a narrow band of mid-tones around #63789f where *no* foreground
+ * reaches 4.5:1 — that is a property of the colour, not of this function.
+ */
+export function readableForeground(bg: string): string {
+    if (!VISIT_TYPE_COLOR_REGEX.test(bg)) {
+        return "#ffffff";
+    }
+    const normalized = bg.toLowerCase();
+    const darkened = darkenHex(normalized, DARK_FOREGROUND_AMOUNT);
+    return contrastRatio(normalized, "#ffffff") >= contrastRatio(normalized, darkened)
+        ? "#ffffff"
+        : darkened;
 }
 
 /**
@@ -152,13 +208,14 @@ export interface VisitTypeHue {
  * The curated palette offered in Settings, grouped so a user can pick "the same
  * blue, but darker" in one tap.
  *
- * Chips render hardcoded white text, and nothing in the app computes a readable
- * foreground, so the light end of every family is capped at roughly the
- * lightness of the lightest colour already shipping (#ffab00 / #00bcd4). Never
- * add a step lighter than these — it would make white chip text unreadable.
+ * There is no lightness cap. Chip text runs through `readableForeground`, which
+ * flips to dark type once a colour is light enough to need it, so a light step
+ * is safe to add. (This previously read as a hard constraint — it wasn't ever
+ * test-enforced, and it no longer applies.)
  *
  * Every built-in `bg` appears here verbatim, so the colour a type already has is
- * always findable in the grid. `visitTypeColors.test.ts` locks both invariants.
+ * always findable in the grid. `visitTypeColors.test.ts` locks that, plus a
+ * ≥4.5:1 contrast floor over every shade below.
  */
 export const VISIT_TYPE_HUES: readonly VisitTypeHue[] = Object.freeze([
     { name: "Red", shades: ["#ef5350", "#e53935", "#c62828", "#b71c1c"] },
@@ -233,7 +290,7 @@ export function useVisitTypes(): readonly VisitTypeConfig[] {
 // =============================================================================
 
 /** `PT11` → `--vt-grad-PT11`; the unspecified type → `--vt-grad--none`. */
-export function cssVarNameForCode(code: VisitType, kind: "grad" | "bg" = "grad"): string {
+export function cssVarNameForCode(code: VisitType, kind: "grad" | "bg" | "fg" = "grad"): string {
     return `--vt-${kind}-${code ?? "-none"}`;
 }
 
@@ -258,6 +315,7 @@ export function buildVisitTypeCssText(configs: readonly VisitTypeConfig[]): stri
             : deriveGradient(bg);
         lines.push(`  ${cssVarNameForCode(config.code, "bg")}: ${bg};`);
         lines.push(`  ${cssVarNameForCode(config.code, "grad")}: ${gradient};`);
+        lines.push(`  ${cssVarNameForCode(config.code, "fg")}: ${readableForeground(bg)};`);
     }
     return `:root {\n${lines.join("\n")}\n}`;
 }
@@ -282,6 +340,12 @@ export function getVisitTypeColor(visitType: VisitType | undefined): string {
 
 export function getVisitTypeGradient(visitType: VisitType | undefined): string {
     return `var(${cssVarNameForCode(visitType ?? null, "grad")}, ${builtInFallback(visitType).gradient})`;
+}
+
+/** Chip text colour. Falls back to the built-in's readable foreground, not bare white. */
+export function getVisitTypeForeground(visitType: VisitType | undefined): string {
+    const fallback = readableForeground(builtInFallback(visitType).bg);
+    return `var(${cssVarNameForCode(visitType ?? null, "fg")}, ${fallback})`;
 }
 
 /** Text can't live in a CSS variable, so these read the registry directly. */

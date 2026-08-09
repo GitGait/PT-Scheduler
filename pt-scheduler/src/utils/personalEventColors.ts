@@ -1,4 +1,5 @@
 import type { Appointment } from "../types";
+import { readableForeground } from "./visitTypeColors";
 
 /** Sentinel patientId for personal (non-patient) events */
 export const PERSONAL_PATIENT_ID = "__personal__";
@@ -81,6 +82,15 @@ export function isPersonalEvent(appointment: Appointment): boolean {
 export function getPersonalCategoryGradient(category?: string): string {
     if (!category) return defaultCategory.gradient;
     return categoryMap.get(category)?.gradient ?? defaultCategory.gradient;
+}
+
+/**
+ * Chip text colour. A literal hex, not a `var()` — personal categories are a
+ * fixed table rather than user-editable, so they never reach the `--vt-*`
+ * custom properties that visit types use.
+ */
+export function getPersonalCategoryForeground(category?: string): string {
+    return readableForeground(getPersonalCategoryConfig(category).bg);
 }
 
 export function getPersonalCategoryLabel(category?: string): string {

@@ -9,7 +9,7 @@ export function UndoDeleteToast({ visible, onUndo }: UndoDeleteToastProps) {
         <div
             role="status"
             aria-live="polite"
-            className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 bg-gray-800 dark:bg-gray-700 text-white pl-4 pr-2 py-2 rounded shadow-lg text-sm"
+            className="fixed bottom-40 sm:bottom-24 left-1/2 -translate-x-1/2 z-50 flex items-center gap-4 bg-gray-800 dark:bg-gray-700 text-white pl-4 pr-2 py-2 rounded shadow-lg text-sm"
         >
             <span>Appointment deleted</span>
             <button

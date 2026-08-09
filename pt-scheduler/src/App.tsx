@@ -4,6 +4,7 @@ import { ErrorBoundary } from "./components/ui/ErrorBoundary";
 import { VisitTypeStyleProvider } from "./components/VisitTypeStyleProvider";
 import { Sidebar } from "./components/ui/Sidebar";
 import { TopNav } from "./components/ui/TopNav";
+import { BottomNav } from "./components/ui/BottomNav";
 import { useSync } from "./hooks/useSync";
 import { useAutoDischarge } from "./hooks/useAutoDischarge";
 import { useGoogleAuth } from "./hooks/useGoogleAuth";
@@ -42,7 +43,9 @@ function AppContent() {
             onDateSelect={(date) => setSelectedDate(date)}
           />
         )}
-        <main className={`flex-1 min-h-0 min-w-0 overflow-auto ${showSidebar && sidebarOpen ? '' : ''}`}>
+        {/* main is the app's only scroll container, so BottomNav clearance belongs here
+            rather than on each page — SchedulePage has no padding of its own. */}
+        <main className="flex-1 min-h-0 min-w-0 overflow-auto pb-bottom-nav">
           <Routes>
             <Route path="/" element={<SchedulePage />} />
             <Route path="/patients" element={<PatientsPage />} />
@@ -53,6 +56,7 @@ function AppContent() {
           </Routes>
         </main>
       </div>
+      <BottomNav />
     </div>
   );
 }

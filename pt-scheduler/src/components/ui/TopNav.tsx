@@ -6,8 +6,6 @@ import {
   Users,
   Camera,
   Settings,
-  HelpCircle,
-  Search,
   Loader2,
   CheckCircle2,
   AlertCircle,
@@ -128,11 +126,14 @@ export function TopNav({ onMenuClick, showMenuButton = true }: TopNavProps) {
       </div>
 
       {/* Center navigation */}
-      <nav className="flex-1 flex items-center justify-center gap-1">
+      {/* Below sm the BottomNav owns navigation; this collapses to keep the header uncluttered. */}
+      <nav className="hidden sm:flex flex-1 items-center justify-center gap-1">
         {navItems.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
+            end={to === "/"}
+            aria-label={label}
             className={({ isActive }) =>
               `flex items-center gap-2 px-4 h-10 rounded-full text-sm font-medium transition-colors ${
                 isActive
@@ -141,14 +142,15 @@ export function TopNav({ onMenuClick, showMenuButton = true }: TopNavProps) {
               }`
             }
           >
-            <Icon className="w-5 h-5" />
+            <Icon className="w-5 h-5" aria-hidden="true" />
+            {/* Label is hidden between sm and md, so the link carries its own name. */}
             <span className="hidden md:inline">{label}</span>
           </NavLink>
         ))}
       </nav>
 
-      {/* Right section */}
-      <div className="flex items-center gap-1">
+      {/* Right section — ml-auto holds it right when the center nav is hidden below sm */}
+      <div className="flex items-center gap-1 ml-auto">
         {/* Google Sign-in Status Indicator */}
         <button
           onClick={handleSignInClick}
@@ -226,18 +228,6 @@ export function TopNav({ onMenuClick, showMenuButton = true }: TopNavProps) {
           aria-label="Sync now"
         >
           <RefreshCw className={`w-5 h-5 text-[var(--color-text-secondary)] ${isSyncing || syncCooldown ? "animate-spin" : ""}`} />
-        </button>
-        <button
-          className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-hover)] transition-colors"
-          aria-label="Search"
-        >
-          <Search className="w-5 h-5 text-[var(--color-text-secondary)]" />
-        </button>
-        <button
-          className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-[var(--color-surface-hover)] transition-colors"
-          aria-label="Help"
-        >
-          <HelpCircle className="w-5 h-5 text-[var(--color-text-secondary)]" />
         </button>
       </div>
     </header>

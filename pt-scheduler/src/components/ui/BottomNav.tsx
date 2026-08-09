@@ -10,12 +10,13 @@ const navItems: { to: string; label: string; icon: LucideIcon }[] = [
 
 export function BottomNav() {
     return (
-        <nav className="fixed bottom-0 left-0 right-0 bg-[var(--color-surface)] border-t border-[var(--color-border)] safe-area-pb">
+        <nav className="sm:hidden fixed bottom-0 left-0 right-0 z-40 bg-[var(--color-surface)] border-t border-[var(--color-border)] safe-area-pb">
             <div className="flex justify-around items-center h-16">
                 {navItems.map(({ to, label, icon: Icon }) => (
                     <NavLink
                         key={to}
                         to={to}
+                        end={to === "/"}
                         className={({ isActive }) =>
                             `flex flex-col items-center justify-center w-full h-full transition-colors ${isActive
                                 ? "text-[var(--color-primary)]"
