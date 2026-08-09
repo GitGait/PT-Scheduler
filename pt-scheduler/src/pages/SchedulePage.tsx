@@ -26,7 +26,7 @@ import { useLocationData } from "../hooks/useLocationData";
 import { useWeekActions } from "../hooks/useWeekActions";
 import { usePendingDelete } from "../hooks/usePendingDelete";
 import type { Appointment } from "../types";
-import { getVisitTypeGradient, getVisitTypeForeground, readableForeground } from "../utils/visitTypeColors";
+import { getVisitTypeGradient } from "../utils/visitTypeColors";
 import { formatPatientDisplayName } from "../utils/patientName";
 import { AppointmentChipNotes } from "../components/appointments/AppointmentChipNotes";
 import {
@@ -38,7 +38,6 @@ import {
     PERSONAL_PATIENT_ID,
     isPersonalEvent,
     getPersonalCategoryGradient,
-    getPersonalCategoryForeground,
     getPersonalCategoryLabel,
 } from "../utils/personalEventColors";
 import {
@@ -1875,9 +1874,6 @@ export function SchedulePage() {
                                                 const chipGradient = isPersonal
                                                     ? getPersonalCategoryGradient(appointment.personalCategory)
                                                     : getVisitTypeGradient(visitType);
-                                                const chipForeground = isPersonal
-                                                    ? getPersonalCategoryForeground(appointment.personalCategory)
-                                                    : getVisitTypeForeground(visitType);
                                                 const chipName = isPersonal
                                                     ? (appointment.title || getPersonalCategoryLabel(appointment.personalCategory))
                                                     : getPatientName(appointment.patientId);
@@ -1909,7 +1905,7 @@ export function SchedulePage() {
                                                         onClick={(event) =>
                                                             handleAppointmentChipClick(event, appointment.id)
                                                         }
-                                                        className={`pointer-events-auto absolute rounded-md overflow-hidden text-xs cursor-grab active:cursor-grabbing group appointment-chip ${
+                                                        className={`pointer-events-auto absolute rounded-md overflow-hidden text-white text-xs cursor-grab active:cursor-grabbing group appointment-chip ${
                                                             isActiveMove || isActiveResize
                                                                 ? 'ring-2 ring-[var(--color-primary)] ring-offset-1 shadow-lg !transform-none'
                                                                 : ''
@@ -1921,7 +1917,6 @@ export function SchedulePage() {
                                                             left: leftStyle,
                                                             width: widthStyle,
                                                             background: chipGradient,
-                                                            color: chipForeground,
                                                             touchAction: 'auto',
                                                             opacity: draggingAppointmentId === appointment.id ? 0.4 : undefined,
                                                         }}
@@ -2087,14 +2082,13 @@ export function SchedulePage() {
                                                 return (
                                                     <div
                                                         key={`ext-${event.id}`}
-                                                        className="absolute rounded overflow-hidden text-xs opacity-80"
+                                                        className="absolute rounded overflow-hidden text-white text-xs opacity-80"
                                                         style={{
                                                             top: topPx,
                                                             height: heightPx,
                                                             right: "2px",
                                                             width: "calc(40% - 2px)",
                                                             backgroundColor: bgColor,
-                                                            color: readableForeground(bgColor),
                                                             borderLeft: `3px solid ${bgColor}`,
                                                             filter: "brightness(0.9)",
                                                         }}

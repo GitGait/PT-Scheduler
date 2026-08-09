@@ -13,9 +13,7 @@ import {
     VISIT_TYPE_HUES,
     findVisitTypeHue,
     contrastRatio,
-    readableForeground,
     relativeLuminance,
-    getVisitTypeForeground,
     type VisitTypeConfig,
 } from "./visitTypeColors";
 import { VISIT_TYPE_COLOR_REGEX } from "./visitTypeCodes";
@@ -109,62 +107,32 @@ describe("VISIT_TYPE_HUES", () => {
             expect(allShades).toContain(config.bg.toLowerCase());
         }
     });
-});
 
-describe("readableForeground", () => {
-    const AA_NORMAL = 4.5;
-
-    it("clears WCAG AA over every swatch in the palette", () => {
+    it("never gets lighter than the current ceiling, which white text depends on", () => {
+        // Chips render white text, so a swatch lighter than today's lightest
+        // (#ffab00, already only 1.9:1) would be worse than anything shipping.
+        // The palette comment has always claimed this was enforced — now it is.
+        const ceiling = relativeLuminance("#ffab00");
         for (const hue of VISIT_TYPE_HUES) {
             for (const shade of hue.shades) {
-                const ratio = contrastRatio(shade, readableForeground(shade));
                 expect(
-                    ratio,
-                    `${hue.name} ${shade} → ${readableForeground(shade)} = ${ratio.toFixed(2)}:1`
-                ).toBeGreaterThanOrEqual(AA_NORMAL);
+                    relativeLuminance(shade),
+                    `${hue.name} ${shade} is lighter than the #ffab00 ceiling`
+                ).toBeLessThanOrEqual(ceiling);
             }
         }
     });
 
-    it("clears WCAG AA over every built-in and the default", () => {
+    it("keeps every built-in within that same ceiling", () => {
+        const ceiling = relativeLuminance("#ffab00");
         for (const config of [...BUILT_IN_VISIT_TYPE_CONFIGS, DEFAULT_VISIT_TYPE_CONFIG]) {
-            const ratio = contrastRatio(config.bg, readableForeground(config.bg));
-            expect(ratio, `${config.code} ${config.bg}`).toBeGreaterThanOrEqual(AA_NORMAL);
-        }
-    });
-
-    it("stays near AA even for arbitrary hexes the custom picker allows", () => {
-        // The colour input accepts any hex, so the palette is not the boundary.
-        // #63789f is the global worst case: a mid-tone where no foreground at
-        // all reaches 4.5:1, so the achievable floor is ~4.45 rather than AA.
-        const ARBITRARY_FLOOR = 4.45;
-        for (const hex of [
-            "#ffffff",
-            "#000000",
-            "#fefefe",
-            "#808080",
-            "#ffff00",
-            "#123456",
-            "#63789f",
-        ]) {
-            expect(contrastRatio(hex, readableForeground(hex)), hex).toBeGreaterThanOrEqual(
-                ARBITRARY_FLOOR
+            expect(relativeLuminance(config.bg), config.code ?? "default").toBeLessThanOrEqual(
+                ceiling
             );
         }
     });
-
-    it("flips to dark text on light backgrounds and white on dark ones", () => {
-        expect(readableForeground("#ffab00")).not.toBe("#ffffff");
-        expect(readableForeground("#26c6da")).not.toBe("#ffffff");
-        expect(readableForeground("#1a237e")).toBe("#ffffff");
-        expect(readableForeground("#b71c1c")).toBe("#ffffff");
-    });
-
-    it("falls back to white for a malformed colour rather than throwing", () => {
-        expect(readableForeground("var(--color-event-green)")).toBe("#ffffff");
-        expect(readableForeground("not-a-colour")).toBe("#ffffff");
-    });
 });
+
 
 describe("relativeLuminance / contrastRatio", () => {
     it("anchors at the WCAG reference values", () => {
@@ -180,23 +148,11 @@ describe("relativeLuminance / contrastRatio", () => {
         );
     });
 
-    it("documents the failure this fix exists to correct", () => {
-        // White chip text over Amber was 1.90:1 before readableForeground.
+    it("records what white chip text actually costs at the light end", () => {
+        // Chips render white text by preference. Amber is the worst case in the
+        // palette; this is documented rather than fixed, and is why the
+        // lightness cap above exists.
         expect(contrastRatio("#ffab00", "#ffffff")).toBeLessThan(2);
-    });
-});
-
-describe("getVisitTypeForeground", () => {
-    it("returns a var() with the built-in's readable foreground as fallback", () => {
-        expect(getVisitTypeForeground("PT11")).toBe(
-            `var(--vt-fg-PT11, ${readableForeground(PT11.bg)})`
-        );
-    });
-
-    it("falls back to the default config's foreground for an unknown code", () => {
-        expect(getVisitTypeForeground(undefined)).toBe(
-            `var(--vt-fg--none, ${readableForeground(DEFAULT_VISIT_TYPE_CONFIG.bg)})`
-        );
     });
 });
 
@@ -217,23 +173,6 @@ describe("buildVisitTypeCssText", () => {
         const css = getVisitTypeCssText();
         expect(css).toContain("--vt-grad-PT11: linear-gradient(135deg, #039be5 0%, #0288d1 100%);");
         expect(css).toContain("--vt-bg-PT11: #039be5;");
-        expect(css).toContain(`--vt-fg-PT11: ${readableForeground("#039be5")};`);
-    });
-
-    it("emits a readable foreground var for every registered code", () => {
-        const css = buildVisitTypeCssText([...BUILT_IN_VISIT_TYPE_CONFIGS]);
-        for (const config of BUILT_IN_VISIT_TYPE_CONFIGS) {
-            expect(css).toContain(
-                `--vt-fg-${config.code}: ${readableForeground(config.bg)};`
-            );
-        }
-    });
-
-    it("only ever writes a plain hex into the foreground var", () => {
-        const css = buildVisitTypeCssText([...BUILT_IN_VISIT_TYPE_CONFIGS]);
-        for (const line of css.split("\n").filter((l) => l.includes("--vt-fg-"))) {
-            expect(line.trim()).toMatch(/^--vt-fg-[A-Za-z0-9-]+: #[0-9a-f]{6};$/);
-        }
     });
 
     it("keeps a built-in's curated gradient rather than deriving one", () => {
@@ -266,8 +205,6 @@ describe("buildVisitTypeCssText", () => {
         const css = buildVisitTypeCssText([bad, PT11]);
         expect(css).not.toContain("PT26");
         expect(css).toContain("--vt-bg-PT11");
-        // Including the foreground — a partial entry would be worse than none.
-        expect(css).not.toContain("--vt-fg-PT26");
     });
 
     it("refuses to pass an unsafe gradient string through to CSS", () => {

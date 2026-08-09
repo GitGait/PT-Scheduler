@@ -84,7 +84,16 @@ The source comment reads: *"nothing in the app computes a readable foreground, s
 **Impact:** Appointment chips carry patient name, visit type, and address. At 1.9:1 that text is illegible for low-vision users and washed out for everyone in sunlight — a real condition for a home-health clinician reading a phone in a car.
 
 **Fix:** Compute foreground per chip — WCAG relative luminance, pick `#ffffff` or a dark tint of the chip hue at the ~0.36 luminance threshold. That single change also lifts the palette cap, unlocking the lighter shades the comment currently forbids.
-**Command:** `/harden`
+
+> **RESOLVED — WON'T FIX (2026-08-08).** This was implemented in `7d16aeb`, reviewed in the running app, and **reverted by preference** in the following commit. Dark text on light chips was not liked.
+>
+> The decision was made against measurements: of the eight built-in visit types, six were already acceptable with white (4.23–7.04:1) and only the two oranges genuinely fail — **PT18 `#fb8c00` at 2.37:1** and **PT06 `#ff6d00` at 2.82:1**. Amber `#ffab00` remains the palette's worst case at 1.90:1 if selected.
+>
+> A middle option — white everywhere except swatches below 3:1, which would have kept white on 6 of 8 types and flipped only the two oranges — was offered and declined in favour of a full revert.
+>
+> What was kept: the palette now has a **test-enforced lightness ceiling** (no swatch lighter than `#ffab00`), which the code comment had always claimed existed but never enforced. That prevents the palette drifting further into unreadable territory.
+>
+> If chip legibility becomes a problem in the field, the "white except below 3:1" variant is the cheapest path back — `relativeLuminance` and `contrastRatio` remain in `visitTypeColors.ts`.
 
 ---
 
@@ -329,7 +338,7 @@ The Schedule page — where an empty day is the most common and most teachable e
 
 ## Positive Findings
 
-- **`visitTypeColors.ts` is exemplary.** Documented invariants, reasoning captured in comments, locked by tests, an external store with `useSyncExternalStore` so chips repaint without prop-drilling. The palette cap is wrong (C2) but it's *deliberately* wrong and says so — that's how constraints should be recorded.
+- **`visitTypeColors.ts` is exemplary.** Documented invariants, reasoning captured in comments, locked by tests, an external store with `useSyncExternalStore` so chips repaint without prop-drilling. The palette cap is a real constraint (C2), deliberately chosen and documented — and it is now test-enforced rather than prose-only.
 - **Restrained visual language.** No gradient text, no glass, no neon. The team resisted every fashionable tell.
 - **`--color-*` token block is complete and correctly duplicated** across `media` and `data-theme` — 22 tokens, no gaps. The bugs are in the code that skipped this pattern, not the pattern.
 - **`AppointmentActionSheet`** is a textbook accessible sheet: `role`, `aria-modal`, Escape, focus. Use it as the reference for H6.
@@ -347,7 +356,7 @@ The Schedule page — where an empty day is the most common and most teachable e
 3. Fix `dayNoteColors` to read effective theme via the store **(H2)**
 
 ### 2. Short-term — accessibility floor
-4. Compute readable chip foreground; lift the palette cap **(C2)**
+4. ~~Compute readable chip foreground; lift the palette cap~~ **(C2 — won't fix, see above; palette ceiling now test-enforced instead)**
 5. Add the global `prefers-reduced-motion` block; delete `App.css` **(C4, L1, M9)**
 6. `aria-label` on TopNav links; `role="dialog"` + Escape on the two bare modals **(H4, H6)**
 7. Remove or implement Search and Help **(H3)**
@@ -373,7 +382,7 @@ The Schedule page — where an empty day is the most common and most teachable e
 | Command | Addresses | Findings |
 |---|---|---|
 | `/normalize` | Theme wiring, tokens, type scale | C1, C3, H1, H2, M1, M7 |
-| `/harden` | Contrast, motion, dialogs, focus, i18n | C2, C4, H4, H6, H7, M2, M3, M8 |
+| `/harden` | Motion, dialogs, focus, i18n | C4, H4, H6, H7, M2, M3, M8 |
 | `/optimize` | Font loading, blur, layout transitions | H8, M5, M6 |
 | `/adapt` | Mobile nav, touch targets | H5, M4 |
 | `/simplify` | Dead code, no-op buttons | H3, L1, L2, L6 |

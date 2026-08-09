@@ -150,38 +150,6 @@ export function contrastRatio(a: string, b: string): number {
 }
 
 /**
- * How far a dark foreground is darkened from the chip's own colour. Near-black,
- * but still carrying the hue — a chip reads as one colour rather than a white
- * card with black text. Tuned as the smallest value that clears 4.5:1 across
- * every palette swatch; anything lighter fails on the mid-tones (#00897b,
- * #607d8b, #d84315 are the tight ones).
- */
-const DARK_FOREGROUND_AMOUNT = 0.92;
-
-/**
- * A foreground that stays readable on `bg`, whatever the user picked.
- *
- * Picks whichever of white / darkened-own-hue actually contrasts better, rather
- * than switching on a luminance threshold — at the crossover the two are within
- * a rounding error of each other, and measuring is both simpler and exact.
- *
- * Guarantees ≥4.5:1 (WCAG AA) for every colour in `VISIT_TYPE_HUES` and every
- * built-in. For a fully arbitrary hex from the custom colour input the floor is
- * ~4.45:1, in a narrow band of mid-tones around #63789f where *no* foreground
- * reaches 4.5:1 — that is a property of the colour, not of this function.
- */
-export function readableForeground(bg: string): string {
-    if (!VISIT_TYPE_COLOR_REGEX.test(bg)) {
-        return "#ffffff";
-    }
-    const normalized = bg.toLowerCase();
-    const darkened = darkenHex(normalized, DARK_FOREGROUND_AMOUNT);
-    return contrastRatio(normalized, "#ffffff") >= contrastRatio(normalized, darkened)
-        ? "#ffffff"
-        : darkened;
-}
-
-/**
  * Derive a two-stop gradient from a user-chosen background colour. Built-ins
  * whose `bg` is untouched keep their hand-picked gradient pair instead.
  */
@@ -208,14 +176,14 @@ export interface VisitTypeHue {
  * The curated palette offered in Settings, grouped so a user can pick "the same
  * blue, but darker" in one tap.
  *
- * There is no lightness cap. Chip text runs through `readableForeground`, which
- * flips to dark type once a colour is light enough to need it, so a light step
- * is safe to add. (This previously read as a hard constraint — it wasn't ever
- * test-enforced, and it no longer applies.)
+ * Chips render white text by preference — a computed foreground was tried and
+ * rejected on looks — so the palette itself carries the legibility constraint:
+ * no swatch may be lighter than #ffab00, the current ceiling and already only
+ * 1.9:1 against white. Anything lighter would be worse than everything shipping.
  *
  * Every built-in `bg` appears here verbatim, so the colour a type already has is
- * always findable in the grid. `visitTypeColors.test.ts` locks that, plus a
- * ≥4.5:1 contrast floor over every shade below.
+ * always findable in the grid. `visitTypeColors.test.ts` locks both invariants —
+ * the ceiling one by luminance, which is new; it was prose-only before.
  */
 export const VISIT_TYPE_HUES: readonly VisitTypeHue[] = Object.freeze([
     { name: "Red", shades: ["#ef5350", "#e53935", "#c62828", "#b71c1c"] },
@@ -290,7 +258,7 @@ export function useVisitTypes(): readonly VisitTypeConfig[] {
 // =============================================================================
 
 /** `PT11` → `--vt-grad-PT11`; the unspecified type → `--vt-grad--none`. */
-export function cssVarNameForCode(code: VisitType, kind: "grad" | "bg" | "fg" = "grad"): string {
+export function cssVarNameForCode(code: VisitType, kind: "grad" | "bg" = "grad"): string {
     return `--vt-${kind}-${code ?? "-none"}`;
 }
 
@@ -315,7 +283,6 @@ export function buildVisitTypeCssText(configs: readonly VisitTypeConfig[]): stri
             : deriveGradient(bg);
         lines.push(`  ${cssVarNameForCode(config.code, "bg")}: ${bg};`);
         lines.push(`  ${cssVarNameForCode(config.code, "grad")}: ${gradient};`);
-        lines.push(`  ${cssVarNameForCode(config.code, "fg")}: ${readableForeground(bg)};`);
     }
     return `:root {\n${lines.join("\n")}\n}`;
 }
@@ -340,12 +307,6 @@ export function getVisitTypeColor(visitType: VisitType | undefined): string {
 
 export function getVisitTypeGradient(visitType: VisitType | undefined): string {
     return `var(${cssVarNameForCode(visitType ?? null, "grad")}, ${builtInFallback(visitType).gradient})`;
-}
-
-/** Chip text colour. Falls back to the built-in's readable foreground, not bare white. */
-export function getVisitTypeForeground(visitType: VisitType | undefined): string {
-    const fallback = readableForeground(builtInFallback(visitType).bg);
-    return `var(${cssVarNameForCode(visitType ?? null, "fg")}, ${fallback})`;
 }
 
 /** Text can't live in a CSS variable, so these read the registry directly. */

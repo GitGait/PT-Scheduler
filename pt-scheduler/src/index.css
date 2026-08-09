@@ -229,8 +229,7 @@ button:not(.btn-sm), a:not(.btn-sm), input[type="checkbox"], input[type="radio"]
 /* Enhanced appointment chip with gradient and depth */
 /* Note: background is set inline based on visit type */
 .appointment-chip {
-  /* Follows the computed chip foreground, so it stays visible on light chips too. */
-  border-left: 3px solid color-mix(in srgb, currentColor 40%, transparent);
+  border-left: 3px solid rgba(255, 255, 255, 0.4);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12), 0 1px 2px rgba(0, 0, 0, 0.08);
   transition: transform var(--duration-fast) cubic-bezier(0.4, 0, 0.2, 1),
               box-shadow var(--duration-fast) cubic-bezier(0.4, 0, 0.2, 1);
@@ -244,7 +243,7 @@ button:not(.btn-sm), a:not(.btn-sm), input[type="checkbox"], input[type="radio"]
   position: absolute;
   inset: 0;
   background: radial-gradient(circle at var(--ripple-x, 50%) var(--ripple-y, 50%),
-              color-mix(in srgb, currentColor 40%, transparent) 0%, transparent 60%);
+              var(--color-ripple) 0%, transparent 60%);
   opacity: 0;
   transform: scale(0);
   transition: opacity var(--duration-normal), transform var(--duration-slow);
@@ -255,7 +254,7 @@ button:not(.btn-sm), a:not(.btn-sm), input[type="checkbox"], input[type="radio"]
   box-shadow:
     0 6px 16px rgba(0, 0, 0, 0.2),
     0 2px 6px rgba(0, 0, 0, 0.1),
-    0 0 0 1px color-mix(in srgb, currentColor 10%, transparent) inset;
+    0 0 0 1px rgba(255, 255, 255, 0.1) inset;
   transform: scale(1.02) translateY(-2px);
 }
 
