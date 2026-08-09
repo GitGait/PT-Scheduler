@@ -6,6 +6,7 @@ import { processScreenshotFile } from "../api/ocr";
 import { geocodeAddress } from "../api/geocode";
 import { matchPatient, type MatchCandidate, type MatchTier } from "../utils/matching";
 import { usePatientStore, useAppointmentStore, useScheduleStore } from "../stores";
+import { runWithoutUndo } from "../stores/undoStore";
 import type { BuiltInVisitTypeCode, ExtractedAppointment, Patient, VisitType } from "../types";
 import {
     isPlausibleVisitTypeCode,
@@ -446,7 +447,18 @@ export function ScanPage() {
         setIsImporting(true);
         setError(null);
 
+        const importedAppointments: Array<{
+            appointmentId: string;
+            patientId: string;
+            date: string;
+            startTime: string;
+            duration: number;
+        }> = [];
+
         try {
+            // A bulk import is one intent, not N undoable gestures — suppress
+            // recording for the whole write pass rather than stacking 40 entries.
+            const optimization = await runWithoutUndo(async () => {
             // Auto-reactivate any matched patient that is currently non-active
             // (e.g. a returning patient picked up from the discharged list).
             const reactivatedIds = new Set<string>();
@@ -460,13 +472,6 @@ export function ScanPage() {
                 }
             }
 
-            const importedAppointments: Array<{
-                appointmentId: string;
-                patientId: string;
-                date: string;
-                startTime: string;
-                duration: number;
-            }> = [];
             const importedMap = new Map<string, string>();
 
             for (const result of regularResults) {
@@ -557,7 +562,9 @@ export function ScanPage() {
                 }
             }
 
-            const optimization = await optimizeImportedAppointments(importedAppointments);
+                return await optimizeImportedAppointments(importedAppointments);
+            });
+
             if (optimization.optimizedDays > 0) {
                 const messageParts = [
                     `Auto-optimized ${optimization.optimizedDays} day${

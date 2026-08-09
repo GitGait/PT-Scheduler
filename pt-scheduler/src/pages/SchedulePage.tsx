@@ -14,7 +14,7 @@ import { fetchCalendarEvents } from "../api/calendar";
 import { isSignedIn } from "../api/auth";
 import { syncPatientToSheetByStatus } from "../api/sheets";
 import { ScheduleGridSkeleton } from "../components/ui/Skeleton";
-import { UndoDeleteToast } from "../components/ui/UndoDeleteToast";
+import { UndoSurface } from "../components/ui/UndoDeleteToast";
 import { AppointmentDetailModal } from "../components/AppointmentDetailModal";
 import { AppointmentActionSheet } from "../components/AppointmentActionSheet";
 import { DayNoteModal } from "../components/DayNoteModal";
@@ -24,9 +24,11 @@ import { AddAppointmentModal } from "../components/AddAppointmentModal";
 import { DayMapModal } from "../components/DayMapModal";
 import { useLocationData } from "../hooks/useLocationData";
 import { useWeekActions } from "../hooks/useWeekActions";
-import { usePendingDelete } from "../hooks/usePendingDelete";
+import { deleteAppointmentWithSync } from "../stores/undoApply";
+import { beginUndoBatch, endUndoBatch, abortUndoBatch } from "../stores/undoStore";
 import type { Appointment } from "../types";
 import { getVisitTypeGradient } from "../utils/visitTypeColors";
+import { markLocalMutation, isInMutationCooldown } from "../utils/mutationCooldown";
 import { formatPatientDisplayName } from "../utils/patientName";
 import { AppointmentChipNotes } from "../components/appointments/AppointmentChipNotes";
 import {
@@ -48,7 +50,6 @@ import {
     X,
     MapPin,
     Navigation,
-    Clock,
     Car,
     Home,
     Building2,
@@ -137,7 +138,6 @@ export function SchedulePage() {
     const dragCommittedRef = useRef(false);
     const dragPreviewRef = useRef<{ date: string; startTime: string } | null>(null);
     const draggingAppointmentIdRef = useRef<string | null>(null);
-    const mutationCooldownRef = useRef(0);
     const [touchDragGhost, setTouchDragGhost] = useState<{ x: number; y: number; name: string; duration: number } | null>(null);
 
     const [detailAppointmentId, setDetailAppointmentId] = useState<string | null>(null);
@@ -165,7 +165,6 @@ export function SchedulePage() {
         useAppointmentStore();
     const { notes: dayNotes, loadByRange: loadDayNotes, create: createDayNote, update: updateDayNote, delete: deleteDayNote, moveNote } =
         useDayNoteStore();
-    const { pendingId: pendingDeleteId, queueDelete: queuePendingDelete, undo: undoPendingDelete } = usePendingDelete();
 
     const weekDates = useMemo(() => getWeekDates(selectedDate), [selectedDate]);
     const weekStart = weekDates[0];
@@ -206,7 +205,7 @@ export function SchedulePage() {
                 touchDragRef.current?.activated ||
                 draggingAppointmentIdRef.current ||
                 resizeSessionRef.current ||
-                Date.now() - mutationCooldownRef.current < 3000
+                isInMutationCooldown(3000)
             ) {
                 return;
             }
@@ -269,9 +268,9 @@ export function SchedulePage() {
 
     const selectedDayAppointments = useMemo(() => {
         return appointments
-            .filter((apt) => apt.date === selectedDate && apt.status !== "on-hold" && apt.id !== pendingDeleteId)
+            .filter((apt) => apt.date === selectedDate && apt.status !== "on-hold")
             .sort((a, b) => a.startTime.localeCompare(b.startTime));
-    }, [appointments, selectedDate, pendingDeleteId]);
+    }, [appointments, selectedDate]);
 
     const selectedMoveAppointment = useMemo(
         () => appointments.find((apt) => apt.id === moveAppointmentId),
@@ -301,7 +300,6 @@ export function SchedulePage() {
 
         for (const appointment of appointments) {
             if (appointment.status === "on-hold") continue;
-            if (appointment.id === pendingDeleteId) continue;
             if (grouped[appointment.date]) {
                 grouped[appointment.date].push(appointment);
             }
@@ -312,7 +310,7 @@ export function SchedulePage() {
         }
 
         return grouped;
-    }, [appointments, weekDates, pendingDeleteId]);
+    }, [appointments, weekDates]);
 
     // Group day notes by date
     const notesByDay = useMemo(() => {
@@ -383,14 +381,12 @@ export function SchedulePage() {
     }, []);
 
     const {
-        lastClearedWeekSnapshot,
         weekActionInProgress,
         weekActionMessage,
         weekActionError,
         autoArrangeInProgressByDay,
         autoArrangeError,
         handleClearWeek,
-        handleUndoClearWeek,
         handleAutoArrangeDay,
     } = useWeekActions(
         weekDates,
@@ -815,7 +811,7 @@ export function SchedulePage() {
             }, 400);
 
             // Set cooldown BEFORE starting async work
-            mutationCooldownRef.current = Date.now();
+            markLocalMutation();
 
             // Keep touchDragRef.current alive through the async move so
             // handleAppointmentsSynced guard stays active during the operation.
@@ -997,24 +993,34 @@ export function SchedulePage() {
         });
     };
 
-    const handlePatientChipNote = (
+    const handlePatientChipNote = async (
         appointment: Appointment,
         notes: string[],
         color?: string
     ) => {
-        if (appointment.patientId) {
-            void updatePatient(appointment.patientId, {
-                chipNotes: notes.length > 0 ? notes : undefined,
+        // Writes to two stores, so batch them into a single undo entry —
+        // awaited, because recording happens inside the store calls and the
+        // batch must still be open when they land.
+        beginUndoBatch("multi", "Note updated");
+        try {
+            if (appointment.patientId) {
+                await updatePatient(appointment.patientId, {
+                    chipNotes: notes.length > 0 ? notes : undefined,
+                    chipNote: undefined,
+                    chipNoteColor: notes.length > 0 ? color : undefined,
+                });
+            }
+            // Clear appointment-level notes so patient-level takes over
+            await update(appointment.id, {
+                chipNotes: undefined,
                 chipNote: undefined,
-                chipNoteColor: notes.length > 0 ? color : undefined,
+                chipNoteColor: undefined,
             });
+            endUndoBatch();
+        } catch (err) {
+            abortUndoBatch();
+            throw err;
         }
-        // Clear appointment-level notes so patient-level takes over
-        void update(appointment.id, {
-            chipNotes: undefined,
-            chipNote: undefined,
-            chipNoteColor: undefined,
-        });
     };
 
     const handleDeleteAppointment = async (appointment: Appointment) => {
@@ -1048,8 +1054,9 @@ export function SchedulePage() {
             return next;
         });
 
-        mutationCooldownRef.current = Date.now();
-        queuePendingDelete(appointment);
+        // Deletes immediately now — undo re-creates rather than cancelling a
+        // deferred commit. deleteAppointmentWithSync stamps the cooldown itself.
+        void deleteAppointmentWithSync(appointment.id);
     };
 
     // Watch for restore-from-hold requests from the Sidebar (via schedule store)
@@ -1554,16 +1561,6 @@ export function SchedulePage() {
                         <X className="w-3.5 h-3.5" />
                         {weekActionInProgress ? "Working..." : "Clear Week"}
                     </button>
-                    {lastClearedWeekSnapshot && (
-                        <button
-                            onClick={() => void handleUndoClearWeek()}
-                            disabled={weekActionInProgress}
-                            className="hidden sm:flex items-center gap-1.5 px-3 h-8 bg-[var(--color-primary-light)] border border-[var(--color-primary)] rounded-full text-xs font-medium text-[var(--color-primary)] hover:opacity-80 active:opacity-70 transition-all disabled:opacity-50 shadow-sm"
-                        >
-                            <Clock className="w-3.5 h-3.5" />
-                            Undo
-                        </button>
-                    )}
                     <button
                         onClick={() => setViewDropdownOpen(!viewDropdownOpen)}
                         className="flex items-center gap-0.5 px-2 h-7 bg-[var(--color-surface-hover)] border border-[var(--color-border)] rounded-md text-xs font-medium text-[var(--color-text-primary)] hover:bg-[var(--color-border)] active:bg-[var(--color-border)] transition-all"
@@ -2295,7 +2292,7 @@ export function SchedulePage() {
                 </div>
             )}
 
-            <UndoDeleteToast visible={!!pendingDeleteId} onUndo={undoPendingDelete} />
+            <UndoSurface />
 
 
             {/* Maps Choice Menu */}
@@ -2426,13 +2423,7 @@ export function SchedulePage() {
                                 triggerSync();
                                 return;
                             }
-                            const target = appointments.find((a) => a.id === appointmentId);
-                            if (target) {
-                                queuePendingDelete(target);
-                            } else {
-                                await deleteAppointment(appointmentId);
-                                triggerSync();
-                            }
+                            await deleteAppointmentWithSync(appointmentId);
                         }}
                         onSyncToSheet={async (updatedPatient) => {
                             // Get spreadsheet ID from sync store

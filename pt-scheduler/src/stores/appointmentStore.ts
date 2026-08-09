@@ -5,6 +5,7 @@ import { useSyncStore } from "./syncStore";
 import { deleteCalendarEvent } from "../api/calendar";
 import { isSignedIn } from "../api/auth";
 import { db } from "../db/schema";
+import { recordUndo, inferUpdateReason, undoValuesEqual, type AppointmentPatch, type AppointmentSeed } from "./undoStore";
 
 // IDs of appointments currently being deleted — prevents loadByRange from
 // resurrecting them before the DB write completes.
@@ -23,17 +24,26 @@ interface AppointmentState {
     error: string | null;
 }
 
+/**
+ * Passed by the undo applier (and bulk importers) to keep a write out of the
+ * undo history. Defaults to recording, so a new gesture is undoable by default
+ * rather than by remembering to opt in.
+ */
+export interface MutationOptions {
+    record?: boolean;
+}
+
 interface AppointmentActions {
     loadByDate: (date: string) => Promise<void>;
     loadByRange: (startDate: string, endDate: string) => Promise<void>;
     loadByPatient: (patientId: string) => Promise<void>;
     loadOnHold: () => Promise<void>;
     setSelectedDate: (date: string) => void;
-    create: (appt: Omit<Appointment, "id" | "createdAt" | "updatedAt">) => Promise<string>;
-    update: (id: string, changes: Partial<Omit<Appointment, "id" | "createdAt">>) => Promise<void>;
-    delete: (id: string) => Promise<void>;
+    create: (appt: Omit<Appointment, "id" | "createdAt" | "updatedAt">, opts?: MutationOptions) => Promise<string>;
+    update: (id: string, changes: Partial<Omit<Appointment, "id" | "createdAt">>, opts?: MutationOptions) => Promise<void>;
+    delete: (id: string, opts?: MutationOptions) => Promise<void>;
     markComplete: (id: string) => Promise<void>;
-    putOnHold: (id: string) => Promise<void>;
+    putOnHold: (id: string, opts?: MutationOptions) => Promise<void>;
     restoreFromHold: (id: string) => Promise<Appointment | undefined>;
     clearError: () => void;
 }
@@ -163,7 +173,7 @@ export const useAppointmentStore = create<AppointmentState & AppointmentActions>
         set({ selectedDate: date });
     },
 
-    create: async (appt) => {
+    create: async (appt, opts) => {
         set({ loading: true, error: null });
         try {
             const id = await appointmentDB.create(appt);
@@ -187,6 +197,10 @@ export const useAppointmentStore = create<AppointmentState & AppointmentActions>
             set((state) => ({
                 appointments: [...state.appointments, appointmentToStore],
             }));
+
+            if (opts?.record !== false) {
+                recordUndo({ kind: "create", appointmentId: id });
+            }
             return id;
         } catch (err) {
             set({
@@ -198,7 +212,7 @@ export const useAppointmentStore = create<AppointmentState & AppointmentActions>
         }
     },
 
-    update: async (id, changes) => {
+    update: async (id, changes, opts) => {
         set({ error: null });
         mutatingIds.add(id);
         const shouldSync = hasCalendarSyncConfigured();
@@ -222,6 +236,37 @@ export const useAppointmentStore = create<AppointmentState & AppointmentActions>
                 ...changes,
                 ...(shouldSync ? { syncStatus: "pending" as const } : {}),
             });
+
+            // Record only once the DB write has resolved — update() swallows its
+            // errors rather than throwing, so recording earlier would leave an
+            // entry describing a change that got rolled back.
+            if (opts?.record !== false && previous) {
+                const changedKeys = Object.keys(changes) as (keyof AppointmentPatch)[];
+                const before: AppointmentPatch = {};
+                const after: AppointmentPatch = {};
+                let differs = false;
+
+                for (const key of changedKeys) {
+                    const prevValue = previous[key as keyof Appointment];
+                    const nextValue = changes[key];
+                    if (!undoValuesEqual(prevValue, nextValue)) differs = true;
+                    Object.assign(before, { [key]: prevValue });
+                    Object.assign(after, { [key]: nextValue });
+                }
+
+                // No-op suppression: keeps Auto-Arrange (which has no change
+                // detection of its own) from filling a batch with empty entries.
+                if (differs) {
+                    recordUndo({
+                        kind: "update",
+                        reason: inferUpdateReason(changedKeys as string[]),
+                        appointmentId: id,
+                        before,
+                        after,
+                    });
+                }
+            }
+
             await enqueueAppointmentSync("update", id);
         } catch (err) {
             // Immediately remove from mutatingIds so loadByRange won't
@@ -240,7 +285,7 @@ export const useAppointmentStore = create<AppointmentState & AppointmentActions>
         }
     },
 
-    delete: async (id) => {
+    delete: async (id, opts) => {
         set({ error: null });
         // Mark as deleting so loadByRange won't resurrect from DB
         deletingIds.add(id);
@@ -256,6 +301,29 @@ export const useAppointmentStore = create<AppointmentState & AppointmentActions>
 
             // Delete from local database
             await appointmentDB.delete(id);
+
+            if (opts?.record !== false && appointment) {
+                // calendarEventId is deliberately excluded from the seed: undo
+                // re-creates a fresh Google event rather than reviving a
+                // destroyed one. Kept alongside for diagnostics only.
+                const {
+                    id: _id,
+                    createdAt: _createdAt,
+                    updatedAt: _updatedAt,
+                    calendarEventId,
+                    ...seed
+                } = appointment;
+                void _id;
+                void _createdAt;
+                void _updatedAt;
+
+                recordUndo({
+                    kind: "delete",
+                    appointmentId: id,
+                    snapshot: seed as AppointmentSeed,
+                    calendarEventId,
+                });
+            }
 
             // Delete calendar event mapping
             await db.calendarEvents.where("appointmentId").equals(id).delete();
@@ -298,11 +366,21 @@ export const useAppointmentStore = create<AppointmentState & AppointmentActions>
         }
     },
 
-    putOnHold: async (id: string) => {
+    putOnHold: async (id: string, opts) => {
         // Capture appointment BEFORE async update which may filter it from state
         const appointmentBefore = get().appointments.find((a) => a.id === id);
         const { update } = get();
-        await update(id, { status: "on-hold" as AppointmentStatus });
+        // Suppress the inner update's own entry so a hold produces exactly one.
+        await update(id, { status: "on-hold" as AppointmentStatus }, { record: false });
+
+        if (opts?.record !== false && appointmentBefore && appointmentBefore.status !== "on-hold") {
+            recordUndo({
+                kind: "hold",
+                appointmentId: id,
+                previousStatus: appointmentBefore.status,
+            });
+        }
+
         // Move from appointments to onHoldAppointments
         const appointment = appointmentBefore ?? get().appointments.find((a) => a.id === id);
         if (appointment) {

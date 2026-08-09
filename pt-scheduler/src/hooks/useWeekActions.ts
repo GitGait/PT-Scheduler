@@ -5,42 +5,20 @@ import { db } from "../db/schema";
 import type { Appointment } from "../types";
 import { getHomeBase, orderByFarthestFromHome } from "../utils/scheduling";
 import { isPersonalEvent } from "../utils/personalEventColors";
+import { beginUndoBatch, endUndoBatch, abortUndoBatch } from "../stores/undoStore";
 
 const REQUEST_SYNC_EVENT = "pt-scheduler:request-sync";
 const triggerSync = () => {
     window.dispatchEvent(new Event(REQUEST_SYNC_EVENT));
 };
 
-interface ClearedWeekAppointmentSnapshot {
-    patientId: string;
-    date: string;
-    startTime: string;
-    duration: number;
-    status: Appointment["status"];
-    visitType: Appointment["visitType"];
-    notes?: string;
-    chipNote?: string;
-    chipNotes?: string[];
-    chipNoteColor?: string;
-    personalCategory?: string;
-    title?: string;
-}
-
-interface ClearedWeekSnapshot {
-    weekStart: string;
-    weekEnd: string;
-    appointments: ClearedWeekAppointmentSnapshot[];
-}
-
 interface WeekActionsResult {
-    lastClearedWeekSnapshot: ClearedWeekSnapshot | null;
     weekActionInProgress: boolean;
     weekActionMessage: string | null;
     weekActionError: string | null;
     autoArrangeInProgressByDay: Record<string, boolean>;
     autoArrangeError: string | null;
     handleClearWeek: () => Promise<void>;
-    handleUndoClearWeek: () => Promise<void>;
     handleAutoArrangeDay: (date: string) => Promise<void>;
 }
 
@@ -51,10 +29,9 @@ export function useWeekActions(
     resolvePatientCoordinatesForRouting: (id: string) => Promise<{ lat: number; lng: number } | null>,
     resetInteractionState: () => void,
 ): WeekActionsResult {
-    const { create, update, delete: deleteAppointment, loadByRange } = useAppointmentStore();
+    const { update, delete: deleteAppointment, loadByRange } = useAppointmentStore();
     const { setSelectedDate } = useScheduleStore();
 
-    const [lastClearedWeekSnapshot, setLastClearedWeekSnapshot] = useState<ClearedWeekSnapshot | null>(null);
     const [weekActionInProgress, setWeekActionInProgress] = useState(false);
     const [weekActionMessage, setWeekActionMessage] = useState<string | null>(null);
     const [weekActionError, setWeekActionError] = useState<string | null>(null);
@@ -121,6 +98,11 @@ export function useWeekActions(
                 ...withoutCoordinates,
             ];
 
+            // One undo entry for the whole day, not one per appointment. The
+            // store's no-op suppression keeps an already-optimal day from
+            // producing an entry at all.
+            beginUndoBatch("auto-arrange", "Day auto-arranged");
+
             // Start at the optimized route start time
             let nextStartMinutes = OPTIMIZE_START_MINUTES;
             for (const appointment of orderedAppointments) {
@@ -139,11 +121,14 @@ export function useWeekActions(
                 nextStartMinutes = snappedMinutes + appointment.duration;
             }
 
+            endUndoBatch();
+
             // Reload appointments to ensure UI reflects the changes
             await loadByRange(weekStart, weekEnd);
             setSelectedDate(date);
             triggerSync();
         } catch (err) {
+            abortUndoBatch();
             setAutoArrangeError(
                 err instanceof Error
                     ? err.message
@@ -188,26 +173,12 @@ export function useWeekActions(
         resetInteractionState();
 
         try {
-            const snapshot: ClearedWeekSnapshot = {
-                weekStart,
-                weekEnd,
-                appointments: weekAppointments.map((appointment) => ({
-                    patientId: appointment.patientId,
-                    date: appointment.date,
-                    startTime: appointment.startTime,
-                    duration: appointment.duration,
-                    status: appointment.status,
-                    visitType: appointment.visitType,
-                    notes: appointment.notes,
-                    chipNote: appointment.chipNote,
-                    chipNotes: appointment.chipNotes,
-                    chipNoteColor: appointment.chipNoteColor,
-                    personalCategory: appointment.personalCategory,
-                    title: appointment.title,
-                })),
-            };
-
-            setLastClearedWeekSnapshot(snapshot);
+            // The retry loop can issue up to 2N deletes; the batch dedupes by
+            // target id keeping the first snapshot, which is the original state.
+            beginUndoBatch(
+                "clear-week",
+                `Cleared ${weekAppointments.length} appointment${weekAppointments.length === 1 ? "" : "s"}`
+            );
 
             let remainingAppointments = weekAppointments;
             for (let attempt = 0; attempt < 2 && remainingAppointments.length > 0; attempt += 1) {
@@ -220,6 +191,8 @@ export function useWeekActions(
                     .between(weekStart, weekEnd, true, true)
                     .toArray();
             }
+
+            endUndoBatch();
 
             await loadByRange(weekStart, weekEnd);
             triggerSync();
@@ -235,6 +208,7 @@ export function useWeekActions(
                 setTimeout(() => setWeekActionMessage(null), 5000);
             }
         } catch (err) {
+            abortUndoBatch();
             setWeekActionError(
                 err instanceof Error ? err.message : "Failed to clear appointments for this week."
             );
@@ -243,73 +217,13 @@ export function useWeekActions(
         }
     };
 
-    const handleUndoClearWeek = async () => {
-        if (!lastClearedWeekSnapshot || lastClearedWeekSnapshot.appointments.length === 0) {
-            setWeekActionError(null);
-            setWeekActionMessage("There is no cleared week to restore.");
-            setTimeout(() => setWeekActionMessage(null), 5000);
-            return;
-        }
-
-        const count = lastClearedWeekSnapshot.appointments.length;
-        const confirmed = window.confirm(
-            `Restore ${count} appointment${count === 1 ? "" : "s"} back to ${lastClearedWeekSnapshot.weekStart} to ${lastClearedWeekSnapshot.weekEnd}?`
-        );
-        if (!confirmed) {
-            return;
-        }
-
-        setWeekActionInProgress(true);
-        setWeekActionError(null);
-        setWeekActionMessage(null);
-
-        try {
-            const orderedAppointments = [...lastClearedWeekSnapshot.appointments].sort((a, b) =>
-                a.date === b.date ? a.startTime.localeCompare(b.startTime) : a.date.localeCompare(b.date)
-            );
-
-            for (const appointment of orderedAppointments) {
-                await create({
-                    patientId: appointment.patientId,
-                    date: appointment.date,
-                    startTime: appointment.startTime,
-                    duration: appointment.duration,
-                    status: appointment.status,
-                    syncStatus: "local",
-                    visitType: appointment.visitType,
-                    notes: appointment.notes,
-                    chipNote: appointment.chipNote,
-                    chipNotes: appointment.chipNotes,
-                    chipNoteColor: appointment.chipNoteColor,
-                    personalCategory: appointment.personalCategory,
-                    title: appointment.title,
-                });
-            }
-
-            await loadByRange(lastClearedWeekSnapshot.weekStart, lastClearedWeekSnapshot.weekEnd);
-
-            setWeekActionMessage(`Restored ${count} appointment${count === 1 ? "" : "s"} to the week.`);
-            setTimeout(() => setWeekActionMessage(null), 5000);
-            setLastClearedWeekSnapshot(null);
-            triggerSync();
-        } catch (err) {
-            setWeekActionError(
-                err instanceof Error ? err.message : "Failed to restore the cleared week."
-            );
-        } finally {
-            setWeekActionInProgress(false);
-        }
-    };
-
     return {
-        lastClearedWeekSnapshot,
         weekActionInProgress,
         weekActionMessage,
         weekActionError,
         autoArrangeInProgressByDay,
         autoArrangeError,
         handleClearWeek,
-        handleUndoClearWeek,
         handleAutoArrangeDay,
     };
 }

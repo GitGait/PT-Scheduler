@@ -14,6 +14,7 @@ import {
 import { ChipNoteEditor } from "./appointments/ChipNoteEditor";
 import { useChipNoteEditor } from "./appointments/useChipNoteEditor";
 import { firstMeaningfulNoteLine } from "../utils/chipNoteText";
+import { beginUndoBatch, endUndoBatch, abortUndoBatch } from "../stores/undoStore";
 
 interface AppointmentDetailModalProps {
     appointment: Appointment;
@@ -186,25 +187,38 @@ export function AppointmentDetailModal({
                 const categoryChanged = personalCategory !== (appointment.personalCategory || "other");
 
                 if (titleChanged || addressChanged || categoryChanged) {
-                    await onSaveAppointment(appointment.id, {
-                        title: personalTitle.trim(),
-                        address: personalAddress.trim() || undefined,
-                        personalCategory,
-                    });
+                    // Fan out across recurring siblings as ONE undo entry, so
+                    // reverting a recurring edit doesn't take N taps. Siblings
+                    // are fetched first because the batch label carries a count.
+                    const siblings =
+                        addressChanged && applyAddressToAll
+                            ? await appointmentDB.findRecurringSiblings(appointment)
+                            : [];
+                    const batched = siblings.length > 0;
+                    if (batched) {
+                        beginUndoBatch(
+                            "recurring-edit",
+                            `Edited ${siblings.length + 1} recurring events`
+                        );
+                    }
 
-                    // Update all recurring siblings if checkbox is checked
-                    if (addressChanged && applyAddressToAll) {
-                        const siblings = await appointmentDB.findRecurringSiblings(appointment);
-                        try {
-                            for (const sibling of siblings) {
-                                await onSaveAppointment(sibling.id, {
-                                    address: personalAddress.trim() || undefined,
-                                });
-                            }
-                        } catch (err) {
-                            setError(err instanceof Error ? err.message : "Failed to update some occurrences");
-                            return; // Keep modal open so user sees the error
+                    try {
+                        await onSaveAppointment(appointment.id, {
+                            title: personalTitle.trim(),
+                            address: personalAddress.trim() || undefined,
+                            personalCategory,
+                        });
+
+                        for (const sibling of siblings) {
+                            await onSaveAppointment(sibling.id, {
+                                address: personalAddress.trim() || undefined,
+                            });
                         }
+                        if (batched) endUndoBatch();
+                    } catch (err) {
+                        if (batched) abortUndoBatch();
+                        setError(err instanceof Error ? err.message : "Failed to update some occurrences");
+                        return; // Keep modal open so user sees the error
                     }
 
                     setSuccessMessage("Changes saved successfully!");
@@ -651,14 +665,21 @@ export function AppointmentDetailModal({
                                         }
                                         setIsSaving(true);
                                         setError(null);
+                                        const siblings = await appointmentDB.findRecurringSiblings(appointment);
+                                        // One entry for the whole series.
+                                        beginUndoBatch(
+                                            "recurring-edit",
+                                            `Deleted ${siblings.length + 1} recurring events`
+                                        );
                                         try {
-                                            const siblings = await appointmentDB.findRecurringSiblings(appointment);
                                             for (const sibling of siblings) {
                                                 await onDeleteAppointment(sibling.id, { immediate: true });
                                             }
                                             await onDeleteAppointment(appointment.id, { immediate: true });
+                                            endUndoBatch();
                                             onClose();
                                         } catch (err) {
+                                            abortUndoBatch();
                                             setError(err instanceof Error ? err.message : "Failed to delete events");
                                         } finally {
                                             setIsSaving(false);

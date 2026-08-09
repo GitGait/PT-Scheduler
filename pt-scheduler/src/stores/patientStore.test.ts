@@ -27,6 +27,7 @@ vi.mock("../db/operations", async (importOriginal) => {
 
 import { usePatientStore } from "./patientStore";
 import { syncQueueDB } from "../db/operations";
+import { useUndoStore, __resetUndoModuleState, type UndoPatientEntry } from "./undoStore";
 import type { Appointment } from "../types";
 
 const basePatient = {
@@ -77,6 +78,68 @@ describe("usePatientStore.update — lat/lng auto-clear", () => {
         expect(saved?.lat).toBe(41);
         expect(saved?.lng).toBe(-75);
         expect(saved?.address).toBe("789 Pine Rd");
+    });
+});
+
+describe("usePatientStore.update — undo recording", () => {
+    beforeEach(async () => {
+        await db.patients.clear();
+        vi.clearAllMocks();
+        useUndoStore.getState().clearHistory();
+        __resetUndoModuleState();
+        usePatientStore.setState({ patients: [], loading: false, error: null, searchQuery: "" });
+    });
+
+    it("captures lat/lng in `before` when an address edit nulls them", async () => {
+        const id = await patientDB.add({ ...basePatient, lat: 40, lng: -74 });
+
+        await usePatientStore.getState().update(id, { address: "456 Oak Ave" });
+
+        const entries = useUndoStore.getState().entries;
+        expect(entries).toHaveLength(1);
+
+        const entry = entries[0] as UndoPatientEntry;
+        expect(entry.kind).toBe("patient");
+        expect(entry.patientId).toBe(id);
+        // Keyed off finalChanges, so the geocode is restorable — not just the address.
+        expect(entry.before).toEqual({ address: "123 Main St", lat: 40, lng: -74 });
+        expect(entry.after).toEqual({ address: "456 Oak Ave", lat: undefined, lng: undefined });
+    });
+
+    it("records only the touched keys for an ordinary edit", async () => {
+        const id = await patientDB.add({ ...basePatient, notes: "old" });
+
+        await usePatientStore.getState().update(id, { notes: "new" });
+
+        const entry = useUndoStore.getState().entries[0] as UndoPatientEntry;
+        expect(entry.before).toEqual({ notes: "old" });
+        expect(entry.after).toEqual({ notes: "new" });
+    });
+
+    it("records nothing for a no-op edit", async () => {
+        const id = await patientDB.add(basePatient);
+
+        await usePatientStore.getState().update(id, { fullName: basePatient.fullName });
+
+        expect(useUndoStore.getState().entries).toHaveLength(0);
+    });
+
+    it("records nothing when record: false", async () => {
+        const id = await patientDB.add(basePatient);
+
+        await usePatientStore.getState().update(id, { notes: "x" }, { record: false });
+
+        expect(useUndoStore.getState().entries).toHaveLength(0);
+    });
+
+    it("records nothing when the update rethrows", async () => {
+        const spy = vi.spyOn(patientDB, "update").mockRejectedValueOnce(new Error("db down"));
+        const id = await patientDB.add(basePatient);
+
+        await expect(usePatientStore.getState().update(id, { notes: "x" })).rejects.toThrow("db down");
+
+        expect(useUndoStore.getState().entries).toHaveLength(0);
+        spy.mockRestore();
     });
 });
 

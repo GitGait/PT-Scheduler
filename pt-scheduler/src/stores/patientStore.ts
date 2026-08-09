@@ -2,7 +2,8 @@ import { create } from "zustand";
 import type { Patient, PatientStatus } from "../types";
 import { appointmentDB, patientDB, syncQueueDB } from "../db/operations";
 import { useSyncStore } from "./syncStore";
-import { enqueueAppointmentSync } from "./appointmentStore";
+import { enqueueAppointmentSync, type MutationOptions } from "./appointmentStore";
+import { recordUndo, undoValuesEqual, type PatientPatch } from "./undoStore";
 
 interface PatientState {
     patients: Patient[];
@@ -16,7 +17,7 @@ interface PatientActions {
     search: (query: string) => Promise<void>;
     getById: (id: string) => Patient | undefined;
     add: (patient: Omit<Patient, "id" | "createdAt" | "updatedAt">) => Promise<string>;
-    update: (id: string, changes: Partial<Omit<Patient, "id" | "createdAt">>) => Promise<void>;
+    update: (id: string, changes: Partial<Omit<Patient, "id" | "createdAt">>, opts?: MutationOptions) => Promise<void>;
     discharge: (id: string) => Promise<void>;
     markForOtherPt: (id: string) => Promise<void>;
     reactivate: (id: string) => Promise<void>;
@@ -126,7 +127,7 @@ export const usePatientStore = create<PatientState & PatientActions>((set, get) 
         }
     },
 
-    update: async (id, changes) => {
+    update: async (id, changes, opts) => {
         set({ error: null });
         try {
             const existing = await patientDB.get(id);
@@ -147,6 +148,28 @@ export const usePatientStore = create<PatientState & PatientActions>((set, get) 
                     ? { ...changes, lat: undefined, lng: undefined }
                     : changes;
             await patientDB.update(id, finalChanges);
+
+            // Key `before` off finalChanges, not changes: an address edit also
+            // nulls lat/lng above, and undoing it must restore the geocode too.
+            // patientDB.update rethrows, so recording here can't outlive a failure.
+            if (opts?.record !== false && existing) {
+                const before: PatientPatch = {};
+                const after: PatientPatch = {};
+                let differs = false;
+
+                for (const key of Object.keys(finalChanges) as (keyof PatientPatch)[]) {
+                    const prevValue = existing[key as keyof Patient];
+                    const nextValue = finalChanges[key];
+                    if (!undoValuesEqual(prevValue, nextValue)) differs = true;
+                    Object.assign(before, { [key]: prevValue });
+                    Object.assign(after, { [key]: nextValue });
+                }
+
+                if (differs) {
+                    recordUndo({ kind: "patient", patientId: id, before, after });
+                }
+            }
+
             await enqueuePatientSync("update", id);
             const updatedPatient = await patientDB.get(id);
             if (updatedPatient) {
