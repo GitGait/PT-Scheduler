@@ -2419,6 +2419,11 @@ export function SchedulePage() {
                         onPatientChipNote={(notes, color) => handlePatientChipNote(detailAppointment, notes, color)}
                         onDeleteAppointment={async (appointmentId, options) => {
                             if (options?.immediate) {
+                                // Used by the recurring "Delete All" loop, which
+                                // batches its own undo entry — so this must not
+                                // route through deleteAppointmentWithSync, but it
+                                // still needs the cooldown that one stamps.
+                                markLocalMutation();
                                 await deleteAppointment(appointmentId);
                                 triggerSync();
                                 return;

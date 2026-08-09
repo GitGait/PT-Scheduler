@@ -665,21 +665,27 @@ export function AppointmentDetailModal({
                                         }
                                         setIsSaving(true);
                                         setError(null);
-                                        const siblings = await appointmentDB.findRecurringSiblings(appointment);
-                                        // One entry for the whole series.
-                                        beginUndoBatch(
-                                            "recurring-edit",
-                                            `Deleted ${siblings.length + 1} recurring events`
-                                        );
+                                        // Kept inside the try: the sibling lookup can
+                                        // throw, and this handler has no outer catch.
+                                        let batchOpen = false;
                                         try {
+                                            const siblings = await appointmentDB.findRecurringSiblings(appointment);
+                                            // One entry for the whole series.
+                                            beginUndoBatch(
+                                                "recurring-edit",
+                                                `Deleted ${siblings.length + 1} recurring events`
+                                            );
+                                            batchOpen = true;
+
                                             for (const sibling of siblings) {
                                                 await onDeleteAppointment(sibling.id, { immediate: true });
                                             }
                                             await onDeleteAppointment(appointment.id, { immediate: true });
                                             endUndoBatch();
+                                            batchOpen = false;
                                             onClose();
                                         } catch (err) {
-                                            abortUndoBatch();
+                                            if (batchOpen) abortUndoBatch();
                                             setError(err instanceof Error ? err.message : "Failed to delete events");
                                         } finally {
                                             setIsSaving(false);

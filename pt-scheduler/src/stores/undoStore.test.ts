@@ -13,6 +13,7 @@ import {
     __resetUndoModuleState,
     type UndoBatchEntry,
     type UndoUpdateEntry,
+    type UndoPatientEntry,
 } from "./undoStore";
 
 function updateInput(appointmentId: string, startTime = "09:00") {
@@ -120,19 +121,19 @@ describe("undoStore", () => {
             expect((batch.children[0] as UndoUpdateEntry).before.startTime).toBe("08:00");
         });
 
-        it("dedupes patient entries by patientId, not appointmentId", () => {
+        it("dedupes patients and appointments in separate namespaces", () => {
             beginUndoBatch("multi", "Note updated");
             recordUndo({ kind: "patient", patientId: "p1", before: { chipNote: "old" }, after: { chipNote: "new" } });
             recordUndo({ kind: "patient", patientId: "p1", before: { chipNote: "mid" }, after: { chipNote: "new" } });
+            // Same raw id, different table — must NOT be swallowed by the patient entry.
             recordUndo(updateInput("p1"));
             endUndoBatch();
 
             const batch = useUndoStore.getState().entries[0] as UndoBatchEntry;
-            // p1-the-patient and p1-the-appointment are different targets in principle,
-            // but share a key here — the appointment entry is a distinct kind and the
-            // dedupe is by raw target id, so it is collapsed. Assert the observed rule.
-            expect(batch.children).toHaveLength(1);
-            expect(batch.children[0].kind).toBe("patient");
+            expect(batch.children).toHaveLength(2);
+            expect(batch.children.map((c) => c.kind)).toEqual(["patient", "update"]);
+            // The repeated patient write still collapsed to its first snapshot.
+            expect((batch.children[0] as UndoPatientEntry).before.chipNote).toBe("old");
         });
 
         it("pushes nothing for an empty batch", () => {

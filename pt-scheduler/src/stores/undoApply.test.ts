@@ -221,6 +221,29 @@ describe("applyNextUndo", () => {
         expect(getDeletedAppointmentIds().has(restored[0].id)).toBe(false);
     });
 
+    it("survives a range reload after undo when calendar sync IS configured", async () => {
+        // With a calendar configured, create() flips the row to "pending" rather
+        // than leaving it "local". loadByRange's merge preserves both, but this
+        // is the path a real user with a live calendar actually takes, so assert
+        // the restored chip is not dropped by the very next reload.
+        mockSyncState.calendarId = "cal-1";
+
+        const id = await seedAppointment({ calendarEventId: "gcal-1" } as Partial<Appointment>);
+        await useAppointmentStore.getState().delete(id);
+        await applyNextUndo();
+
+        const restored = currentAppointments();
+        expect(restored).toHaveLength(1);
+        expect(["local", "pending"]).toContain(restored[0].syncStatus);
+
+        await useAppointmentStore.getState().loadByRange("2026-08-01", "2026-08-31");
+
+        const afterReload = currentAppointments();
+        expect(afterReload).toHaveLength(1);
+        expect(afterReload[0].id).toBe(restored[0].id);
+        expect(afterReload[0].startTime).toBe("09:00");
+    });
+
     it("undoes a hold by returning the appointment with its previous status", async () => {
         const id = await seedAppointment();
 

@@ -209,9 +209,13 @@ export function beginUndoBatch(source: UndoBatchSource, label: string): void {
     openBatch = { source, label, children: [], depth: 1 };
 }
 
-/** The id a primitive entry acts on — used to dedupe repeated writes to one row. */
+/**
+ * The row a primitive entry acts on — used to dedupe repeated writes to one row.
+ * Namespaced by table so a patient and an appointment can never collide, which
+ * matters for "multi" batches that touch both.
+ */
 function targetIdOf(entry: UndoPrimitiveEntry): string {
-    return entry.kind === "patient" ? entry.patientId : entry.appointmentId;
+    return entry.kind === "patient" ? `patient:${entry.patientId}` : `appointment:${entry.appointmentId}`;
 }
 
 export function endUndoBatch(): void {
