@@ -2,9 +2,12 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 
 vi.mock("../../hooks/useUndoStack", () => ({ useUndoStack: vi.fn() }));
+vi.mock("../../stores/undoApply", () => ({ applyNextUndo: vi.fn() }));
 
 import { useUndoStack } from "../../hooks/useUndoStack";
-import { UndoSurface } from "./UndoDeleteToast";
+import { applyNextUndo } from "../../stores/undoApply";
+import { useUndoStore, recordUndo, __resetUndoModuleState } from "../../stores/undoStore";
+import { UndoSurface, UndoPill } from "./UndoDeleteToast";
 
 const undo = vi.fn();
 
@@ -75,5 +78,82 @@ describe("UndoSurface", () => {
 
         fireEvent.click(screen.getByRole("button", { name: "Undo (2 available)" }));
         expect(undo).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe("UndoPill (mobile header control)", () => {
+    function push(appointmentId: string) {
+        recordUndo({
+            kind: "update",
+            reason: "move",
+            appointmentId,
+            before: { startTime: "09:00" },
+            after: { startTime: "10:00" },
+        });
+    }
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+        useUndoStore.getState().clearHistory();
+        __resetUndoModuleState();
+        vi.mocked(applyNextUndo).mockResolvedValue({ status: "empty" });
+    });
+
+    afterEach(cleanup);
+
+    it("renders nothing when there is no history", () => {
+        const { container } = render(<UndoPill />);
+        expect(container).toBeEmptyDOMElement();
+    });
+
+    it("shows the undo count with a labelled button", () => {
+        push("a");
+        push("b");
+        push("c");
+        render(<UndoPill />);
+
+        expect(screen.getByRole("button", { name: "Undo (3 available)" })).toBeInTheDocument();
+        expect(screen.getByText("3")).toBeInTheDocument();
+    });
+
+    it("applies an undo when tapped", () => {
+        push("a");
+        render(<UndoPill />);
+
+        fireEvent.click(screen.getByRole("button", { name: "Undo (1 available)" }));
+        expect(applyNextUndo).toHaveBeenCalledTimes(1);
+    });
+
+    it("applies once for a rapid double-tap", async () => {
+        let release: (() => void) | undefined;
+        const gate = new Promise<void>((resolve) => {
+            release = resolve;
+        });
+        vi.mocked(applyNextUndo).mockImplementation(async () => {
+            await gate;
+            return { status: "empty" };
+        });
+
+        push("a");
+        push("b");
+        render(<UndoPill />);
+
+        const button = screen.getByRole("button", { name: "Undo (2 available)" });
+        fireEvent.click(button);
+        fireEvent.click(button);
+        release?.();
+
+        expect(applyNextUndo).toHaveBeenCalledTimes(1);
+    });
+
+    it("announces the newest label in a visually hidden live region", () => {
+        push("a");
+        render(<UndoPill />);
+
+        // The mobile pill shows no text, so this is the only announcement path.
+        const status = screen.getByRole("status");
+        expect(status).toHaveTextContent("Appointment moved");
+        expect(status).toHaveClass("sr-only");
+        expect(status).toHaveAttribute("aria-live", "polite");
     });
 });

@@ -14,6 +14,7 @@ import {
 import { isSignedIn, signIn, tryRestoreSignIn, AUTH_STATE_CHANGED_EVENT } from "../../api/auth";
 import { REQUEST_SYNC_EVENT } from "../../hooks/useSync";
 import { useSyncStore } from "../../stores";
+import { UndoPill } from "./UndoDeleteToast";
 
 interface TopNavProps {
   onMenuClick: () => void;
@@ -151,6 +152,9 @@ export function TopNav({ onMenuClick, showMenuButton = true }: TopNavProps) {
 
       {/* Right section — ml-auto holds it right when the center nav is hidden below sm */}
       <div className="flex items-center gap-1 ml-auto">
+        {/* First child on purpose: ml-auto anchors this cluster right, so the
+            pill grows it leftward and the sign-in/sync buttons never shift. */}
+        <UndoPill />
         {/* Google Sign-in Status Indicator */}
         <button
           onClick={handleSignInClick}

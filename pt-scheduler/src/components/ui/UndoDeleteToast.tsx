@@ -1,7 +1,56 @@
+import { useCallback, useRef } from "react";
 import { RotateCcw } from "lucide-react";
 import { useUndoStack } from "../../hooks/useUndoStack";
+import { useUndoStore } from "../../stores/undoStore";
+import { applyNextUndo } from "../../stores/undoApply";
 
-const POSITION = "fixed bottom-40 sm:bottom-24 left-1/2 -translate-x-1/2 z-50";
+// Desktop only. On mobile the bottom-center toast covered a wide strip of the
+// calendar grid above the BottomNav, so UndoPill takes over below `sm`.
+const POSITION = "hidden sm:flex fixed bottom-24 left-1/2 -translate-x-1/2 z-50";
+
+/**
+ * The mobile undo control: a compact icon+count pill that lives in the header
+ * beside the sync button, so it blocks none of the schedule.
+ *
+ * Its own component rather than inline hooks in TopNav — the store subscription
+ * stays confined here instead of re-rendering the whole header on every push.
+ * It deliberately skips `useUndoStack`: there is no toast to time out, just a
+ * depth to show and an action to run.
+ */
+export function UndoPill() {
+    const depth = useUndoStore((s) => s.entries.length);
+    const topLabel = useUndoStore((s) => (s.entries.length > 0 ? s.entries[s.entries.length - 1].label : ""));
+    const applyingRef = useRef(false);
+
+    const undo = useCallback(() => {
+        if (applyingRef.current) return;
+        applyingRef.current = true;
+        void applyNextUndo().finally(() => {
+            applyingRef.current = false;
+        });
+    }, []);
+
+    if (depth === 0) return null;
+
+    return (
+        <>
+            {/* The mobile pill shows no message text, so this carries the
+                announcement that the hidden desktop toast would have made. */}
+            <span className="sr-only" role="status" aria-live="polite">
+                {topLabel}
+            </span>
+            <button
+                type="button"
+                onClick={undo}
+                aria-label={`Undo (${depth} available)`}
+                className="sm:hidden flex items-center gap-1.5 px-3 h-9 rounded-full text-xs font-medium border shadow-sm transition-all bg-[var(--color-surface)] border-[var(--color-border)] text-[var(--color-text-primary)] hover:bg-[var(--color-surface-hover)] hover:border-[var(--color-primary)] hover:text-[var(--color-primary)]"
+            >
+                <RotateCcw className="w-3.5 h-3.5" aria-hidden="true" />
+                <span className="font-semibold tabular-nums">{depth}</span>
+            </button>
+        </>
+    );
+}
 
 /**
  * The single undo surface: an expanded toast that collapses to a compact pill
