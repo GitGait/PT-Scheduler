@@ -229,6 +229,18 @@ describe("AppointmentChipNotes", () => {
             expect(screen.getAllByText(/dog barks a lot/i)).toHaveLength(1);
         });
 
+        it("does not let a duplicated line burn one of the chip's rows", () => {
+            renderNotes(
+                makePatient({ notes: "one\ntwo\nthree", chipNotes: ["one"] }),
+                makeAppointment(),
+                TALL
+            );
+            // TALL fits 2 profile rows; "one" is already a quick note, so the
+            // rows go to "two" and "three" rather than being spent on it.
+            expect(screen.getByText("two")).toBeDefined();
+            expect(screen.getByText("three")).toBeDefined();
+        });
+
         it("puts the full profile note in the tooltip, not just the first line", () => {
             const { container } = renderNotes(
                 makePatient({ notes: "Gate code 4412\nDog barks a lot" })

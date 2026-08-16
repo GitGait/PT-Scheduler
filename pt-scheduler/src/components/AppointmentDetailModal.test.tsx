@@ -141,10 +141,28 @@ describe("AppointmentDetailModal — patient profile note", () => {
 });
 
 describe("AppointmentDetailModal — chip preview caption", () => {
-    it("names the first line that is not import boilerplate", () => {
+    it("names the line that is not import boilerplate", () => {
         renderModal({ patient: makePatient({ notes: "Email: a@b.com\nGate code 4412" }) });
 
         expect(screen.getByText('Chip shows: "Gate code 4412"')).toBeDefined();
+    });
+
+    it("lists every line of a multi-line note and warns they need a longer visit", () => {
+        renderModal({ patient: makePatient({ notes: "Gate code 4412\nDog in the yard" }) });
+
+        expect(
+            screen.getByText(
+                'Chip shows: "Gate code 4412 / Dog in the yard" — later lines only on longer appointments.'
+            )
+        ).toBeDefined();
+    });
+
+    it("caps the preview at three lines, matching the chip", () => {
+        renderModal({ patient: makePatient({ notes: "one\ntwo\nthree\nfour" }) });
+
+        const caption = screen.getByText(/^Chip shows:/);
+        expect(caption.textContent).toContain('"one / two / three"');
+        expect(caption.textContent).not.toContain("four");
     });
 
     it("updates live as the note is typed", () => {

@@ -56,7 +56,9 @@ function visibleProfileNoteLines(
 
     const quickNotes = new Set(displayNotes.map((note) => note.trim().toLowerCase()));
 
-    return meaningfulNoteLines(patient?.notes, MAX_PROFILE_NOTE_LINES)
+    // Drop duplicates before capping, so a line the quick notes already cover
+    // doesn't burn one of the chip's rows.
+    return meaningfulNoteLines(patient?.notes, Infinity)
         .filter((line) => !quickNotes.has(line.toLowerCase()))
         .slice(0, allowed);
 }
