@@ -1,7 +1,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import type { Appointment, Patient } from "../../types";
-import { AppointmentChipNotes, chipProfileNoteExtraReservePx } from "./AppointmentChipNotes";
+import { AppointmentChipNotes, chipNoteStackReservePx } from "./AppointmentChipNotes";
 
 const TALL = 94; // 30-min chip — room for 2 profile-note rows
 const TALLER = 142; // 45-min chip — room for 3
@@ -156,31 +156,233 @@ describe("AppointmentChipNotes", () => {
         });
     });
 
-    describe("chipProfileNoteExtraReservePx", () => {
+    describe("chipNoteStackReservePx", () => {
         it("reserves nothing for a single-line note", () => {
             expect(
-                chipProfileNoteExtraReservePx(makeAppointment(), makePatient({ notes: "Gate code 4412" }), TALL)
+                chipNoteStackReservePx(makeAppointment(), makePatient({ notes: "Gate code 4412" }), TALL)
             ).toBe(0);
         });
 
         it("reserves one row for a second visible line", () => {
             expect(
-                chipProfileNoteExtraReservePx(
+                chipNoteStackReservePx(
                     makeAppointment(),
                     makePatient({ notes: "Gate code 4412\nDog barks a lot" }),
                     TALL
                 )
-            ).toBe(17);
+            ).toBe(18);
         });
 
         it("reserves nothing when the chip is too short to banner the note", () => {
             expect(
-                chipProfileNoteExtraReservePx(
+                chipNoteStackReservePx(
                     makeAppointment(),
                     makePatient({ notes: "Gate code 4412\nDog barks a lot" }),
                     SHORT
                 )
             ).toBe(0);
+        });
+
+        it("counts quick notes in the reserve", () => {
+            expect(
+                chipNoteStackReservePx(
+                    makeAppointment({ chipNotes: ["a"] }),
+                    makePatient({ notes: "Gate code 4412" }),
+                    TALL
+                )
+            ).toBe(18);
+        });
+
+        it("counts the whole stack", () => {
+            expect(
+                chipNoteStackReservePx(
+                    makeAppointment({ chipNotes: ["a"] }),
+                    makePatient({ notes: "Gate code 4412\nDog barks a lot" }),
+                    TALL
+                )
+            ).toBe(36);
+        });
+
+        it("caps at what the chip can carry", () => {
+            const result = chipNoteStackReservePx(
+                makeAppointment({ chipNotes: ["a", "b", "c", "d"] }),
+                makePatient({ notes: "" }),
+                TALL
+            );
+            expect(result).toBe(36);
+            expect(12 + result).toBeLessThanOrEqual(TALL - 20);
+        });
+
+        it("reserves nothing when only one banner fits", () => {
+            expect(
+                chipNoteStackReservePx(
+                    makeAppointment({ chipNotes: ["a", "b", "c", "d"] }),
+                    makePatient({ notes: "" }),
+                    SHORT
+                )
+            ).toBe(0);
+        });
+
+        it("six-row stack on a 60-min chip", () => {
+            expect(
+                chipNoteStackReservePx(
+                    makeAppointment({ chipNotes: ["a", "b", "c"] }),
+                    makePatient({ notes: "one\ntwo\nthree" }),
+                    190
+                )
+            ).toBe(90);
+        });
+    });
+
+    describe("banner row budget", () => {
+        it("drops a profile line when quick notes take the chip's rows", () => {
+            renderNotes(
+                makePatient({ notes: "Gate code 4412\nDog barks a lot", chipNotes: ["a", "b"] }),
+                makeAppointment({ chipNotes: ["a", "b"] }),
+                TALL
+            );
+            expect(screen.getByText("Gate code 4412")).toBeDefined();
+            expect(screen.queryByText("Dog barks a lot")).toBeNull();
+        });
+
+        it("keeps a 30-min chip's second profile line with only one quick note", () => {
+            renderNotes(
+                makePatient({ notes: "Gate code 4412\nDog barks a lot", chipNotes: ["a"] }),
+                makeAppointment({ chipNotes: ["a"] }),
+                TALL
+            );
+            expect(screen.getByText("Gate code 4412")).toBeDefined();
+            expect(screen.getByText("Dog barks a lot")).toBeDefined();
+        });
+
+        it("no profile lines when quick notes fill the budget", () => {
+            renderNotes(
+                makePatient({ notes: "Gate code 4412\nDog barks a lot", chipNotes: ["a", "b", "c"] }),
+                makeAppointment({ chipNotes: ["a", "b", "c"] }),
+                TALL
+            );
+            expect(screen.queryByText("Gate code 4412")).toBeNull();
+            expect(screen.queryByText("Dog barks a lot")).toBeNull();
+            expect(screen.getByText("a")).toBeDefined();
+            expect(screen.getByText("b")).toBeDefined();
+            expect(screen.getByText("c")).toBeDefined();
+        });
+
+        it("still shows the profile line on a 76px chip with one quick note", () => {
+            renderNotes(
+                makePatient({ notes: "Gate code 4412", chipNotes: ["a"] }),
+                makeAppointment({ chipNotes: ["a"] }),
+                MEDIUM
+            );
+            expect(screen.getByText("Gate code 4412")).toBeDefined();
+        });
+
+        it("never renders more rows than the chip can hold", () => {
+            const { container } = renderNotes(
+                makePatient({ chipNotes: ["a", "b", "c", "d", "e", "f"] }),
+                makeAppointment({ chipNotes: ["a", "b", "c", "d", "e", "f"] }),
+                TALL
+            );
+            expect(container.firstElementChild?.children.length).toBe(3);
+        });
+
+        it("always shows one quick note on a 15-min chip, even with four", () => {
+            const { container } = renderNotes(
+                makePatient({ chipNotes: ["a", "b", "c", "d"] }),
+                makeAppointment({ chipNotes: ["a", "b", "c", "d"] }),
+                SHORT
+            );
+            expect(container.firstElementChild?.children.length).toBe(1);
+            expect(screen.getByText("a")).toBeDefined();
+        });
+
+        it("drops profile lines before quick notes", () => {
+            renderNotes(
+                makePatient({ notes: "Gate code 4412", chipNotes: ["a", "b"] }),
+                makeAppointment({ chipNotes: ["a", "b"] }),
+                SHORT
+            );
+            expect(screen.getByText("a")).toBeDefined();
+            expect(screen.queryByText("b")).toBeNull();
+            expect(screen.queryByText("Gate code 4412")).toBeNull();
+        });
+
+        it("property: the banner stack never overflows the chip (or floors at one row)", () => {
+            const heights = [SHORT, MEDIUM, TALL, TALLER, 190];
+            const counts = [0, 1, 2, 3, 4, 6];
+            for (const h of heights) {
+                for (const n of counts) {
+                    const chipNotes = Array.from({ length: n }, (_, i) => `note${i}`);
+                    const { container } = renderNotes(
+                        makePatient({ chipNotes }),
+                        makeAppointment({ chipNotes }),
+                        h
+                    );
+                    const rows = container.firstElementChild?.children.length ?? 0;
+                    expect(rows * 18 <= h || rows === 1).toBe(true);
+                    cleanup();
+                }
+            }
+        });
+    });
+
+    describe("overflow counter", () => {
+        it("shows +3 on the only banner of a 15-min chip with 4 quick notes", () => {
+            renderNotes(
+                makePatient({ chipNotes: ["a", "b", "c", "d"] }),
+                makeAppointment({ chipNotes: ["a", "b", "c", "d"] }),
+                SHORT
+            );
+            expect(screen.getByText("+3")).toBeDefined();
+        });
+
+        it("no counter when every quick note fits", () => {
+            renderNotes(
+                makePatient({ chipNotes: ["a"] }),
+                makeAppointment({ chipNotes: ["a"] }),
+                TALL
+            );
+            expect(screen.queryByText(/^\+\d+$/)).toBeNull();
+        });
+
+        it("the counter sits on the last visible quick note, not the profile lines", () => {
+            const { container } = renderNotes(
+                makePatient({ chipNotes: ["a", "b", "c", "d"] }),
+                makeAppointment({ chipNotes: ["a", "b", "c", "d"] }),
+                SHORT
+            );
+            const lastBanner = container.firstElementChild?.children[
+                (container.firstElementChild?.children.length ?? 1) - 1
+            ];
+            expect(lastBanner?.textContent).toContain("a");
+            expect(lastBanner?.textContent).toContain("+3");
+        });
+    });
+
+    describe("tooltip", () => {
+        it("keeps the profile note in the tooltip when no profile line fits", () => {
+            const { container } = renderNotes(
+                makePatient({ notes: "Gate code 4412", chipNotes: ["a", "b", "c"] }),
+                makeAppointment({ chipNotes: ["a", "b", "c"] }),
+                TALL
+            );
+            expect(container.firstElementChild?.getAttribute("title")).toContain("Gate code 4412");
+        });
+
+        it("lists quick notes the chip had no room to render", () => {
+            const { container } = renderNotes(
+                makePatient({ chipNotes: ["a", "b", "c"] }),
+                makeAppointment({ chipNotes: ["a", "b", "c"] }),
+                SHORT
+            );
+            expect(container.firstElementChild?.getAttribute("title")).toBe("a\nb\nc");
+        });
+
+        it("keeps boilerplate out of the tooltip", () => {
+            const { container } = renderNotes(
+                makePatient({ notes: "Created from scan import\nGate code 4412\nEmail: a@b.com" })
+            );
+            expect(container.firstElementChild?.getAttribute("title")).toBe("Gate code 4412");
         });
     });
 
@@ -190,7 +392,9 @@ describe("AppointmentChipNotes", () => {
                 makePatient({
                     notes: "Gate code 4412\nDog barks a lot",
                     chipNotes: ["Call first", "Bring TheraBand"],
-                })
+                }),
+                makeAppointment(),
+                TALLER
             );
             const banners = Array.from(container.firstElementChild?.children ?? []).map(
                 (el) => el.textContent
@@ -273,12 +477,15 @@ describe("AppointmentChipNotes", () => {
                 makePatient({ chipNotes: ["Patient level"], chipNoteColor: "green" }),
                 makeAppointment({ chipNotes: ["Appt level"], chipNoteColor: "red" })
             );
-            expect(screen.getByText("Appt level").className).toContain("bg-red-400");
+            // The note text lives in a truncating span; the color is on the banner row.
+            expect(screen.getByText("Appt level").closest("div")?.className).toContain("bg-red-400");
         });
 
         it("uses the patient color when patient notes are the fallback", () => {
             renderNotes(makePatient({ chipNotes: ["Patient level"], chipNoteColor: "blue" }));
-            expect(screen.getByText("Patient level").className).toContain("bg-blue-400");
+            expect(screen.getByText("Patient level").closest("div")?.className).toContain(
+                "bg-blue-400"
+            );
         });
 
         it("keeps banners non-interactive so drag and resize pass through", () => {

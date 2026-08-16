@@ -30,7 +30,7 @@ import type { Appointment } from "../types";
 import { getVisitTypeGradient } from "../utils/visitTypeColors";
 import { markLocalMutation, isInMutationCooldown } from "../utils/mutationCooldown";
 import { formatPatientDisplayName } from "../utils/patientName";
-import { AppointmentChipNotes, chipProfileNoteExtraReservePx } from "../components/appointments/AppointmentChipNotes";
+import { AppointmentChipNotes, chipNoteStackReservePx } from "../components/appointments/AppointmentChipNotes";
 import {
     ChipAlternateContactRows,
     ChipPhoneRows,
@@ -1881,7 +1881,7 @@ export function SchedulePage() {
                                                 const showMilesRow = !isPersonal && heightPx >= 46;
                                                 const showAddressRow = !isPersonal && heightPx >= 72;
                                                 const chipPhones = chipPhoneTooltip(patient);
-                                                const noteReservePx = chipProfileNoteExtraReservePx(appointment, patient, heightPx);
+                                                const noteReservePx = chipNoteStackReservePx(appointment, patient, heightPx);
 
                                                 return (
                                                     <div
