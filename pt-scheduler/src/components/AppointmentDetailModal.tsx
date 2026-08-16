@@ -13,7 +13,7 @@ import {
 } from "../utils/personalEventColors";
 import { ChipNoteEditor } from "./appointments/ChipNoteEditor";
 import { useChipNoteEditor } from "./appointments/useChipNoteEditor";
-import { firstMeaningfulNoteLine } from "../utils/chipNoteText";
+import { firstMeaningfulNoteLine, meaningfulNoteLines } from "../utils/chipNoteText";
 import { beginUndoBatch, endUndoBatch, abortUndoBatch } from "../stores/undoStore";
 
 interface AppointmentDetailModalProps {
@@ -62,9 +62,9 @@ export function AppointmentDetailModal({
     const isPersonal = isPersonalEvent(appointment);
     const initializedRef = useRef(false);
 
-    // The chip banner shows only the first line of the profile note that isn't
-    // import boilerplate, so echo back which one that is while the user types.
-    const chipPreview = firstMeaningfulNoteLine(patientNotes);
+    // The chip banners the note's lines that aren't import boilerplate, as many
+    // as the chip's height allows, so echo those back while the user types.
+    const chipPreviewLines = meaningfulNoteLines(patientNotes);
 
     // The old "Appointment Notes" box wrote Appointment.notes, which mirrors the
     // Google Calendar description and is never rendered. Seed the chip-note
@@ -577,8 +577,12 @@ export function AppointmentDetailModal({
                                 className="w-full input-google resize-none"
                             />
                             <p className="mt-1 text-xs text-[var(--color-text-tertiary)]">
-                                {chipPreview
-                                    ? `Chip shows: "${chipPreview}"`
+                                {chipPreviewLines.length > 0
+                                    ? `Chip shows: "${chipPreviewLines.join(' / ')}"${
+                                        chipPreviewLines.length > 1
+                                            ? " — later lines only on longer appointments."
+                                            : ""
+                                    }`
                                     : "Nothing from this note will show on the chip."}
                             </p>
                         </div>

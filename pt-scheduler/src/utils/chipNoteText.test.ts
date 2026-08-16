@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { firstMeaningfulNoteLine } from "./chipNoteText";
+import { firstMeaningfulNoteLine, meaningfulNoteLines } from "./chipNoteText";
 
 describe("firstMeaningfulNoteLine", () => {
     it("returns the only line", () => {
@@ -58,5 +58,41 @@ describe("firstMeaningfulNoteLine", () => {
         it("decodes the entities it handles", () => {
             expect(firstMeaningfulNoteLine("Ring&nbsp;bell &amp; wait")).toBe("Ring bell & wait");
         });
+    });
+});
+
+describe("meaningfulNoteLines", () => {
+    it("returns every line in order, trimmed", () => {
+        expect(meaningfulNoteLines("\n  Gate code 4412  \nDog barks")).toEqual([
+            "Gate code 4412",
+            "Dog barks",
+        ]);
+    });
+
+    it("returns empty array for undefined or blank input", () => {
+        expect(meaningfulNoteLines(undefined)).toEqual([]);
+        expect(meaningfulNoteLines("   \n  ")).toEqual([]);
+    });
+
+    it("skips boilerplate in the middle of the note", () => {
+        expect(meaningfulNoteLines("Visit Type: PT11\nGate code 4412\nEmail: a@b.com")).toEqual([
+            "Gate code 4412",
+        ]);
+    });
+
+    it("caps at MAX_PROFILE_NOTE_LINES by default", () => {
+        expect(meaningfulNoteLines("one\ntwo\nthree\nfour")).toEqual(["one", "two", "three"]);
+    });
+
+    it("respects an explicit max", () => {
+        expect(meaningfulNoteLines("one\ntwo\nthree", 2)).toEqual(["one", "two"]);
+        expect(meaningfulNoteLines("one\ntwo", 0)).toEqual([]);
+    });
+
+    it("splits on <br> tags", () => {
+        expect(meaningfulNoteLines("<br>Gate code 4412<br>Dog barks")).toEqual([
+            "Gate code 4412",
+            "Dog barks",
+        ]);
     });
 });

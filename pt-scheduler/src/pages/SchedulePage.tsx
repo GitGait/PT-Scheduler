@@ -30,7 +30,7 @@ import type { Appointment } from "../types";
 import { getVisitTypeGradient } from "../utils/visitTypeColors";
 import { markLocalMutation, isInMutationCooldown } from "../utils/mutationCooldown";
 import { formatPatientDisplayName } from "../utils/patientName";
-import { AppointmentChipNotes } from "../components/appointments/AppointmentChipNotes";
+import { AppointmentChipNotes, chipProfileNoteExtraReservePx } from "../components/appointments/AppointmentChipNotes";
 import {
     ChipAlternateContactRows,
     ChipPhoneRows,
@@ -1881,6 +1881,7 @@ export function SchedulePage() {
                                                 const showMilesRow = !isPersonal && heightPx >= 46;
                                                 const showAddressRow = !isPersonal && heightPx >= 72;
                                                 const chipPhones = chipPhoneTooltip(patient);
+                                                const noteReservePx = chipProfileNoteExtraReservePx(appointment, patient, heightPx);
 
                                                 return (
                                                     <div
@@ -1933,7 +1934,9 @@ export function SchedulePage() {
                                                                 flexDirection: 'column',
                                                                 alignItems: 'flex-start',
                                                                 gap: isDayView ? '4px' : '2px',
-                                                                padding: isDayView ? '8px 4px 14px 4px' : '4px 0 12px 0',
+                                                                padding: isDayView
+                                                                    ? `8px 4px ${14 + noteReservePx}px 4px`
+                                                                    : `4px 0 ${12 + noteReservePx}px 0`,
                                                             }}
                                                         >
                                                             <div className={`font-semibold truncate leading-[1.2] w-full overflow-hidden drop-shadow-sm ${

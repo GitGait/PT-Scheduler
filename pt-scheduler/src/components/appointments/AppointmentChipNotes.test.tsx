@@ -1,9 +1,11 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import type { Appointment, Patient } from "../../types";
-import { AppointmentChipNotes } from "./AppointmentChipNotes";
+import { AppointmentChipNotes, chipProfileNoteExtraReservePx } from "./AppointmentChipNotes";
 
-const TALL = 94; // 30-min chip
+const TALL = 94; // 30-min chip — room for 2 profile-note rows
+const TALLER = 142; // 45-min chip — room for 3
+const MEDIUM = 76; // between the 1-row and 2-row thresholds
 const SHORT = 46; // 15-min chip (the floor)
 
 function makePatient(overrides: Partial<Patient> = {}): Patient {
@@ -54,10 +56,10 @@ describe("AppointmentChipNotes", () => {
             expect(screen.getByText("Gate code 4412")).toBeDefined();
         });
 
-        it("shows only the first non-blank line of a multi-line note", () => {
+        it("shows both lines of a two-line note on a 30-min chip", () => {
             renderNotes(makePatient({ notes: "\n  Gate code 4412  \nDog barks a lot" }));
             expect(screen.getByText("Gate code 4412")).toBeDefined();
-            expect(screen.queryByText("Dog barks a lot")).toBeNull();
+            expect(screen.getByText("Dog barks a lot")).toBeDefined();
         });
 
         it("renders nothing when the note is empty", () => {
@@ -111,17 +113,94 @@ describe("AppointmentChipNotes", () => {
             );
             expect(screen.getByText("Call first")).toBeDefined();
         });
+
+        it("hides a two-line note entirely on a 15-min chip", () => {
+            const { container } = renderNotes(
+                makePatient({ notes: "Gate code 4412\nDog barks a lot" }),
+                makeAppointment(),
+                SHORT
+            );
+            expect(container).toBeEmptyDOMElement();
+        });
+
+        it("shows only the first line when the chip is below the two-row threshold", () => {
+            renderNotes(
+                makePatient({ notes: "Gate code 4412\nDog barks a lot" }),
+                makeAppointment(),
+                MEDIUM
+            );
+            expect(screen.getByText("Gate code 4412")).toBeDefined();
+            expect(screen.queryByText("Dog barks a lot")).toBeNull();
+        });
+
+        it("shows two of three lines on a 30-min chip and all three on a 45-min chip", () => {
+            const patient = makePatient({ notes: "Gate code 4412\nDog barks a lot\nUse side door" });
+
+            renderNotes(patient, makeAppointment(), TALL);
+            expect(screen.getByText("Dog barks a lot")).toBeDefined();
+            expect(screen.queryByText("Use side door")).toBeNull();
+
+            cleanup();
+            renderNotes(patient, makeAppointment(), TALLER);
+            expect(screen.getByText("Use side door")).toBeDefined();
+        });
+
+        it("never shows more than three lines", () => {
+            renderNotes(
+                makePatient({ notes: "one\ntwo\nthree\nfour" }),
+                makeAppointment(),
+                TALLER
+            );
+            expect(screen.getByText("three")).toBeDefined();
+            expect(screen.queryByText("four")).toBeNull();
+        });
+    });
+
+    describe("chipProfileNoteExtraReservePx", () => {
+        it("reserves nothing for a single-line note", () => {
+            expect(
+                chipProfileNoteExtraReservePx(makeAppointment(), makePatient({ notes: "Gate code 4412" }), TALL)
+            ).toBe(0);
+        });
+
+        it("reserves one row for a second visible line", () => {
+            expect(
+                chipProfileNoteExtraReservePx(
+                    makeAppointment(),
+                    makePatient({ notes: "Gate code 4412\nDog barks a lot" }),
+                    TALL
+                )
+            ).toBe(17);
+        });
+
+        it("reserves nothing when the chip is too short to banner the note", () => {
+            expect(
+                chipProfileNoteExtraReservePx(
+                    makeAppointment(),
+                    makePatient({ notes: "Gate code 4412\nDog barks a lot" }),
+                    SHORT
+                )
+            ).toBe(0);
+        });
     });
 
     describe("stacking with quick notes", () => {
-        it("renders quick notes first and the profile note last", () => {
+        it("renders quick notes first and the profile note lines last, in order", () => {
             const { container } = renderNotes(
-                makePatient({ notes: "Gate code 4412", chipNotes: ["Call first", "Bring TheraBand"] })
+                makePatient({
+                    notes: "Gate code 4412\nDog barks a lot",
+                    chipNotes: ["Call first", "Bring TheraBand"],
+                })
             );
             const banners = Array.from(container.firstElementChild?.children ?? []).map(
                 (el) => el.textContent
             );
-            expect(banners).toEqual(["Call first", "Bring TheraBand", "Gate code 4412"]);
+            expect(banners).toEqual([
+                "Call first",
+                "Bring TheraBand",
+                "Gate code 4412",
+                "Dog barks a lot",
+            ]);
         });
 
         it("keeps the profile note when appointment chip notes replace patient ones", () => {
@@ -137,6 +216,17 @@ describe("AppointmentChipNotes", () => {
         it("does not duplicate a profile note that matches a quick note", () => {
             renderNotes(makePatient({ notes: "Gate code 4412", chipNotes: ["gate code 4412"] }));
             expect(screen.getAllByText(/gate code 4412/i)).toHaveLength(1);
+        });
+
+        it("drops only the profile line that duplicates a quick note", () => {
+            renderNotes(
+                makePatient({
+                    notes: "Gate code 4412\nDog barks a lot",
+                    chipNotes: ["dog barks a lot"],
+                })
+            );
+            expect(screen.getByText("Gate code 4412")).toBeDefined();
+            expect(screen.getAllByText(/dog barks a lot/i)).toHaveLength(1);
         });
 
         it("puts the full profile note in the tooltip, not just the first line", () => {

@@ -29,18 +29,36 @@ function stripHtml(line: string): string {
 }
 
 /**
- * First line of a note worth showing, with boilerplate and calendar-description
- * junk skipped. Returns "" when nothing survives.
+ * Hard ceiling on how many profile-note lines a chip will ever banner, no matter
+ * how tall the chip is. Shared by the chip renderer and the modal's live preview.
  */
-export function firstMeaningfulNoteLine(notes?: string): string {
-    const lines = (notes ?? "").replace(/<br\s*\/?>/gi, "\n").split("\n");
+export const MAX_PROFILE_NOTE_LINES = 3;
 
-    for (const raw of lines) {
+/**
+ * Every line of a note worth showing, in order, with boilerplate and
+ * calendar-description junk skipped. Returns [] when nothing survives.
+ */
+export function meaningfulNoteLines(notes?: string, max = MAX_PROFILE_NOTE_LINES): string[] {
+    if (max <= 0) return [];
+
+    const rawLines = (notes ?? "").replace(/<br\s*\/?>/gi, "\n").split("\n");
+    const kept: string[] = [];
+
+    for (const raw of rawLines) {
         const line = stripHtml(raw);
         if (!line) continue;
         if (BOILERPLATE_NOTE_PATTERNS.some((pattern) => pattern.test(line))) continue;
-        return line;
+        kept.push(line);
+        if (kept.length === max) break;
     }
 
-    return "";
+    return kept;
+}
+
+/**
+ * First line of a note worth showing. Still used where exactly one line is
+ * wanted (seeding the quick-note editor).
+ */
+export function firstMeaningfulNoteLine(notes?: string): string {
+    return meaningfulNoteLines(notes, 1)[0] ?? "";
 }
