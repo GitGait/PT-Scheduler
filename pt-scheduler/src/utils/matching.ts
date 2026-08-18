@@ -50,12 +50,12 @@ export interface MatchResult {
 // Helper functions
 // ---------------------------------------------------------------------------
 
-function normalize(value: string): string {
+export function normalizeNameForMatch(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
 }
 
 function tokenSet(value: string): Set<string> {
-  return new Set(normalize(value).split(" "));
+  return new Set(normalizeNameForMatch(value).split(" "));
 }
 
 function expandAliases(tokens: Set<string>): Set<string> {

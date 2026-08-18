@@ -4,7 +4,7 @@ import { Button } from "../components/ui/Button";
 import { Card } from "../components/ui/Card";
 import { processScreenshotFile } from "../api/ocr";
 import { geocodeAddress } from "../api/geocode";
-import { matchPatient, type MatchCandidate, type MatchTier } from "../utils/matching";
+import { matchPatient, normalizeNameForMatch, type MatchCandidate, type MatchTier } from "../utils/matching";
 import { usePatientStore, useAppointmentStore, useScheduleStore } from "../stores";
 import { runWithoutUndo } from "../stores/undoStore";
 import type { BuiltInVisitTypeCode, ExtractedAppointment, Patient, VisitType } from "../types";
@@ -473,21 +473,31 @@ export function ScanPage() {
             }
 
             const importedMap = new Map<string, string>();
+            // One person scanned across several visits is still one profile.
+            // Scoped to this import run only — matching against patients that
+            // already exist is matchPatient's job, not this map's.
+            const createdPatientIdsByName = new Map<string, string>();
 
             for (const result of regularResults) {
                 let patientId = result.matchedPatientId;
 
                 // If no matched patient, create a new one from the OCR name
                 if (!patientId) {
-                    patientId = await addPatient({
-                        fullName: result.rawName,
-                        nicknames: [],
-                        phoneNumbers: [],
-                        alternateContacts: [],
-                        address: "",
-                        status: "active",
-                        notes: "Created from scan import",
-                    });
+                    const nameKey = normalizeNameForMatch(result.rawName);
+                    patientId = createdPatientIdsByName.get(nameKey);
+
+                    if (!patientId) {
+                        patientId = await addPatient({
+                            fullName: result.rawName,
+                            nicknames: [],
+                            phoneNumbers: [],
+                            alternateContacts: [],
+                            address: "",
+                            status: "active",
+                            notes: "Created from scan import",
+                        });
+                        createdPatientIdsByName.set(nameKey, patientId);
+                    }
                 }
 
                 const normalizedImport = parseVisitTypeAndName({
